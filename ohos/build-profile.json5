@@ -1,0 +1,41 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "storePassword": "0000001CA42FB526B467F72EB3D82594127CFCB2A764E5FA02E50E78F597B4A2A93581215AC331EA792AD7D7",
+          "certpath": "C:/Users/huzheng/Downloads/aloeplayer.cer",
+          "keyAlias": "aloeplayer",
+          "keyPassword": "0000001CC1D354F1523FC0258DD10E2C3DF2A7BC1605E3B530CA29B89A3BBC8E6354F49F60B76B97B74466E1",
+          "profile": "C:/Users/huzheng/Downloads/aloeplayerRelease.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:/Users/huzheng/aloeplayer.p12"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "5.0.0(12)",
+        "runtimeOS": "HarmonyOS"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

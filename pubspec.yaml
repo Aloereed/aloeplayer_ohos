@@ -1,0 +1,73 @@
+dependencies:
+  cupertino_icons: ^1.0.6
+  flutter:
+    sdk: flutter
+  path: null
+  provider: 6.1.2
+  simple_gesture_detector: ^0.2.1
+dependency_overrides:
+  audio_service:
+    git:
+      path: audio_service
+      url: https://gitee.com/openharmony-sig/fluttertpc_audio_service.git
+  audio_session:
+    git:
+      url: https://gitee.com/openharmony-sig/flutter_audio_session.git
+  file_selector:
+    git:
+      path: packages/file_selector/file_selector
+      url: https://gitee.com/openharmony-sig/flutter_packages.git
+  fluttertoast:
+    git: https://gitee.com/openharmony-sig/flutter_fluttertoast.git
+  image_picker:
+    git:
+      path: packages/image_picker/image_picker
+      url: https://gitee.com/openharmony-sig/flutter_packages.git
+  just_audio:
+    git:
+      path: just_audio
+      url: https://gitee.com/openharmony-sig/fluttertpc_just_audio.git
+  just_audio_ohos:
+    git:
+      path: just_audio/ohos
+      url: https://gitee.com/openharmony-sig/fluttertpc_just_audio.git
+  media_info:
+    git:
+      url: https://gitee.com/openharmony-sig/fluttertpc_media_info.git
+  path_provider:
+    git:
+      path: packages/path_provider/path_provider
+      url: https://gitee.com/openharmony-sig/flutter_packages.git
+  shared_preferences:
+    git:
+      path: packages/shared_preferences/shared_preferences
+      url: https://gitee.com/openharmony-sig/flutter_packages.git
+  url_launcher:
+    git:
+      path: packages/url_launcher/url_launcher
+      url: https://gitee.com/openharmony-sig/flutter_packages.git
+  video_player:
+    git:
+      path: packages/video_player/video_player
+      url: https://gitee.com/openharmony-sig/flutter_packages.git
+  video_thumbnail:
+    git:
+      url: https://gitee.com/openharmony-sig/fluttertpc_video_thumbnail.git
+  wakelock:
+    git:
+      path: wakelock
+      url: https://gitee.com/openharmony-sig/flutter_wakelock.git
+description: A new Flutter project.
+dev_dependencies:
+  flutter_lints: ^3.0.0
+  flutter_test:
+    sdk: flutter
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+flutter:
+  assets:
+  - Assets/
+  uses-material-design: true
+name: aloeplayer
+publish_to: none
+version: 0.9.0

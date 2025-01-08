@@ -1,0 +1,31 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "dmzj",
+  "version": "1.0.0",
+  "description": "Please describe the basic information.",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:./har/flutter.har"
+  },
+  "devDependencies": {
+    "@ohos/hypium": "1.0.6"
+  },
+  "overrides": {
+    "@ohos/flutter_ohos": "file:./har/flutter.har",
+    "file_selector_ohos": "file:./har/file_selector_ohos.har",
+    "image_picker_ohos": "file:./har/image_picker_ohos.har",
+    "path_provider_ohos": "file:./har/path_provider_ohos.har",
+    "video_player_ohos": "file:./har/video_player_ohos.har",
+    "media_info": "file:./har/media_info.har",
+    "@ohos/flutter_module": "file:./entry",
+    "fluttertoast": "file:./har/fluttertoast.har",
+    "wakelock": "file:./har/wakelock.har",
+    "shared_preferences_ohos": "file:./har/shared_preferences_ohos.har",
+    "url_launcher_ohos": "file:./har/url_launcher_ohos.har",
+    "audio_session": "file:./har/audio_session.har",
+    "audio_service_ohos": "file:./har/audio_service_ohos.har",
+    "just_audio_ohos": "file:./har/just_audio_ohos.har"
+  }
+}
