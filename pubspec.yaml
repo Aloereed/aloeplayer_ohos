@@ -8,7 +8,6 @@ dependencies:
   simple_gesture_detector: ^0.2.1
   webdav_client: null
 dependency_overrides:
-  win32: 5.5.4
   audio_service:
     git:
       path: audio_service
@@ -16,6 +15,13 @@ dependency_overrides:
   audio_session:
     git:
       url: https://gitee.com/openharmony-sig/flutter_audio_session.git
+  file_picker:
+    git:
+      url: https://gitee.com/openharmony-sig/fluttertpc_file_picker.git
+  file_picker_ohos:
+    git:
+      path: ohos
+      url: https://gitee.com/openharmony-sig/fluttertpc_file_picker.git
   file_selector:
     git:
       path: packages/file_selector/file_selector
@@ -64,6 +70,7 @@ dependency_overrides:
     git:
       path: wakelock
       url: https://gitee.com/openharmony-sig/flutter_wakelock.git
+  win32: 5.5.4
 description: A new Flutter project.
 dev_dependencies:
   flutter_lints: ^3.0.0
@@ -77,4 +84,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 0.9.1+2
+version: 0.9.3+4

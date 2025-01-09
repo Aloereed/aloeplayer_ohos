@@ -1,6 +1,7 @@
 import { FlutterEngine, Log } from '@ohos/flutter_ohos';
 import AudioServicePlugin from 'audio_service_ohos';
 import AudioSessionPlugin from 'audio_session';
+import FilePickerPlugin from 'file_picker_ohos';
 import FileSelectorOhosPlugin from 'file_selector_ohos';
 import FluttertoastPlugin from 'fluttertoast';
 import ImagePickerPlugin from 'image_picker_ohos';
@@ -27,6 +28,7 @@ export class GeneratedPluginRegistrant {
     try {
       flutterEngine.getPlugins()?.add(new AudioServicePlugin());
       flutterEngine.getPlugins()?.add(new AudioSessionPlugin());
+      flutterEngine.getPlugins()?.add(new FilePickerPlugin());
       flutterEngine.getPlugins()?.add(new FileSelectorOhosPlugin());
       flutterEngine.getPlugins()?.add(new FluttertoastPlugin());
       flutterEngine.getPlugins()?.add(new ImagePickerPlugin());

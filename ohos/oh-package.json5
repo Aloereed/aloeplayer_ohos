@@ -27,6 +27,7 @@
     "audio_session": "file:./har/audio_session.har",
     "audio_service_ohos": "file:./har/audio_service_ohos.har",
     "just_audio_ohos": "file:./har/just_audio_ohos.har",
-    "share_plus": "file:./har/share_plus.har"
+    "share_plus": "file:./har/share_plus.har",
+    "file_picker_ohos": "file:./har/file_picker_ohos.har"
   }
 }

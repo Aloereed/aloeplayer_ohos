@@ -4,12 +4,13 @@ import 'package:provider/provider.dart';
 
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:file_selector/file_selector.dart';
+import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as path;
 import 'package:media_info/media_info.dart';
 import 'package:video_player/video_player.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class AudioLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
@@ -81,43 +82,104 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
     });
   }
 
-  // 使用file_selector选择音频文件
-  Future<void> _pickAudioWithFileSelector() async {
-    final typeGroup = XTypeGroup(
-        label: 'audios',
-        extensions: ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg']);
-    final XFile? file = await openFile(acceptedTypeGroups: [typeGroup]);
-    if (file != null) {
-      await _copyAudioFile(file);
+   // 使用file_picker选择音频文件
+  Future<void> _pickAudioWithFilePicker() async {
+    // 使用 FilePicker 选择多个视频文件
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg'], // 允许的视频文件扩展名
+      allowMultiple: true, // 支持多选
+    );
+
+    // 检查是否选择了文件
+    if (result != null) {
+      List<PlatformFile> files = result.files; // 获取所有选择的文件
+      for (PlatformFile platformFile in files) {
+        final XFile file = XFile(platformFile.path!);
+        await _copyAudioFile(file); // 处理每个文件
+      }
+    } else {
+      // 用户取消了选择
+      print('用户取消了文件选择');
     }
   }
 
   // 使用image_picker选择音频文件
 
-  Future<void> _copyAudioFile(XFile file) async {
+Future<void> _copyAudioFile(XFile file) async {
     final fileName = path.basename(file.path);
     final destinationPath = path.join(_audioDirPath, fileName);
     final destinationFile = File(destinationPath);
+    bool deleteIfError = true;
+    // 显示加载对话框
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 用户不能通过点击外部关闭对话框
+      builder: (BuildContext context) {
+        return AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text("正在复制..."),
+            ],
+          ),
+        );
+      },
+    );
 
     try {
-      // // 打开源文件的输入流
-      // final inputStream = File(file.path).openRead();
-      // // 打开目标文件的输出流
-      // final outputStream = destinationFile.openWrite();
+      // 检查destinationPath是否已存在
+      if (await destinationFile.exists()) {
+        deleteIfError = false;
+        throw FileSystemException(
+          "文件已存在",
+          destinationPath,
+        );
+      }
+      final inputStream = File(file.path).openRead();
+      final outputStream = destinationFile.openWrite();
 
-      // // 监听输入流，逐块写入输出流
-      // await inputStream.pipe(outputStream);
-      await File(file.path).copy(destinationPath);
+      await inputStream.pipe(outputStream);
       print("文件复制完成: $destinationPath");
+
+      // 关闭对话框
+      Navigator.of(context).pop();
+
+      // 显示复制成功的Toast
+      Fluttertoast.showToast(
+        msg: "文件复制成功",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+        timeInSecForIosWeb: 1,
+        backgroundColor: Colors.green,
+        textColor: Colors.white,
+        fontSize: 16.0,
+      );
     } catch (e) {
       print("文件复制失败: $e");
+
+      // 关闭对话框
+      Navigator.of(context).pop();
+
+      // 显示复制失败的Toast
+      Fluttertoast.showToast(
+        msg: "文件复制失败: $e",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+        timeInSecForIosWeb: 1,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+        fontSize: 16.0,
+      );
+
       // 如果复制失败，删除可能已创建的目标文件
-      if (await destinationFile.exists()) {
+      if (deleteIfError && await destinationFile.exists()) {
         await destinationFile.delete();
       }
-      rethrow; // 重新抛出异常
+      rethrow;
     } finally {
-      _loadAudioFiles(); // 刷新音频列表
+      _loadAudioFiles();
     }
   }
 
@@ -187,7 +249,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
         actions: [
           IconButton(
             icon: Icon(Icons.add),
-            onPressed: _pickAudioWithFileSelector,
+            onPressed: _pickAudioWithFilePicker,
           ),
           IconButton(
             icon: Icon(Icons.webhook),

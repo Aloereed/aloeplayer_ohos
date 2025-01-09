@@ -228,7 +228,7 @@ class _WebDAVDialogState extends State<WebDAVDialog> {
                       : Column(
                           children: [
                             // 显示当前路径
-                            Text('Current Path: $_currentPath'),
+                            Text('当前路径: $_currentPath'),
                             SizedBox(height: 8),
                             // 返回上一级按钮
                             if (_currentPath != '/')

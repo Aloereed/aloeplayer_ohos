@@ -164,6 +164,24 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "7.0.1"
+  file_picker:
+    dependency: "direct overridden"
+    description:
+      path: "."
+      ref: HEAD
+      resolved-ref: "49c94285da95fe93920da899562bfc4fa2080574"
+      url: "https://gitee.com/openharmony-sig/fluttertpc_file_picker.git"
+    source: git
+    version: "8.0.6"
+  file_picker_ohos:
+    dependency: "direct overridden"
+    description:
+      path: ohos
+      ref: HEAD
+      resolved-ref: "49c94285da95fe93920da899562bfc4fa2080574"
+      url: "https://gitee.com/openharmony-sig/fluttertpc_file_picker.git"
+    source: git
+    version: "1.0.1"
   file_selector:
     dependency: "direct overridden"
     description:

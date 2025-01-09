@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-09 12:27:49
+ * @LastEditTime: 2025-01-09 17:05:20
  * @Description: file content
  */
 /*
@@ -35,6 +35,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:file_picker_ohos/file_picker_ohos.dart';
 
 late MyAudioHandler audioHandler;
 void main() async {
@@ -292,6 +293,8 @@ class _PlayerTabState extends State<PlayerTab> {
   Timer? _volumeSliderTimer;
   Timer? _timer;
   bool _isLooping = false;
+  double _previousPlaybackSpeed = 1.0; // 用于存储长按之前的播放速率
+  double _swipeDistance = 0.0;
   Future<void> _setupAudioSession() async {
     final session = await AudioSession.instance;
 
@@ -418,7 +421,7 @@ class _PlayerTabState extends State<PlayerTab> {
         ..initialize().then((_) {
           setState(() {
             _totalDuration = _videoController!.value.duration;
-            _isAudio = _videoController!.value.size.width == 0; // 判断是否为音频文件
+            _isAudio = _videoController == null || _videoController!.value.size.width == 0; // 判断是否为音频文件
           });
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
@@ -437,7 +440,7 @@ class _PlayerTabState extends State<PlayerTab> {
         ..initialize().then((_) {
           setState(() {
             _totalDuration = _videoController!.value.duration;
-            _isAudio = _videoController!.value.size.width == 0; // 判断是否为音频文件
+            _isAudio = _videoController == null || _videoController!.value.size.width == 0; // 判断是否为音频文件
           });
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
@@ -449,23 +452,55 @@ class _PlayerTabState extends State<PlayerTab> {
     Wakelock.enable();
   }
 
+  // Future<void> _openFile() async {
+  //   final typeGroup = XTypeGroup(
+  //     label: 'media',
+  //     extensions: ['*'],
+  //   );
+  //   final typeVideoGroup = XTypeGroup(
+  //     label: 'media',
+  //     extensions: ['mp4', 'mkv', 'avi', 'mov', 'flv', 'wmv', 'webm'],
+  //   );
+  //   final typeAudioGroup = XTypeGroup(
+  //     label: 'media',
+  //     extensions: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg'],
+  //   );
+  //   final XFile? file = await openFile(
+  //       acceptedTypeGroups: [typeGroup, typeVideoGroup, typeAudioGroup]);
+  //   if (file != null) {
+  //     widget.getopenfile(file.path);
+  //   }
+  // }
+
   Future<void> _openFile() async {
-    final typeGroup = XTypeGroup(
-      label: 'media',
-      extensions: ['*'],
+    // 使用 FilePicker 选择文件
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: [
+        '*',
+        'mp4',
+        'mkv',
+        'avi',
+        'mov',
+        'flv',
+        'wmv',
+        'webm',
+        'mp3',
+        'wav',
+        'flac',
+        'aac',
+        'm4a',
+        'ogg'
+      ],
     );
-    final typeVideoGroup = XTypeGroup(
-      label: 'media',
-      extensions: ['mp4', 'mkv', 'avi', 'mov', 'flv', 'wmv', 'webm'],
-    );
-    final typeAudioGroup = XTypeGroup(
-      label: 'media',
-      extensions: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg'],
-    );
-    final XFile? file = await openFile(
-        acceptedTypeGroups: [typeGroup, typeVideoGroup, typeAudioGroup]);
-    if (file != null) {
-      widget.getopenfile(file.path);
+
+    // 检查是否选择了文件
+    if (result != null) {
+      PlatformFile file = result.files.first;
+      widget.getopenfile(file.path!);
+    } else {
+      // 用户取消了选择
+      print('用户取消了文件选择');
     }
   }
 
@@ -539,6 +574,17 @@ class _PlayerTabState extends State<PlayerTab> {
       final duration = _videoController!.value.duration;
       final newPosition = currentPosition + Duration(seconds: 10);
       _videoController!.seekTo(newPosition > duration ? duration : newPosition);
+    }
+  }
+
+  void _seekVideo(Duration duration) {
+    if (_videoController != null) {
+      final currentPosition = _videoController!.value.position;
+      final newPosition = currentPosition + duration;
+      _videoController!.seekTo(
+          (newPosition > duration ? duration : newPosition) < Duration.zero
+              ? Duration.zero
+              : newPosition);
     }
   }
 
@@ -642,23 +688,46 @@ class _PlayerTabState extends State<PlayerTab> {
           },
           onLongPress: () {
             if (!_isAudio) {
-              // use fluttertoast to show a message
+              // 记录当前的播放速率
+              _previousPlaybackSpeed = _playbackSpeed; // 假设有一个方法可以获取当前的播放速率
+
+              // 使用 fluttertoast 显示消息
+              // 背景半透明
               Fluttertoast.showToast(
-                  msg: '长按3倍速播放',
-                  toastLength: Toast.LENGTH_SHORT,
-                  gravity: ToastGravity.CENTER,
-                  timeInSecForIosWeb: 1,
-                  backgroundColor: Colors.red,
-                  textColor: Colors.white,
-                  fontSize: 16.0);
+                msg: '长按3倍速播放',
+                toastLength: Toast.LENGTH_SHORT,
+                gravity: ToastGravity.CENTER,
+                timeInSecForIosWeb: 1,
+                backgroundColor: Colors.grey,
+                textColor: Colors.white,
+                fontSize: 16.0,
+              );
 
               _setPlaybackSpeed(3.0); // 长按三倍速播放
             }
           },
           onLongPressEnd: (_) {
             if (!_isAudio) {
-              _setPlaybackSpeed(1.0); // 松开恢复原速
+              _setPlaybackSpeed(_previousPlaybackSpeed); // 松开恢复到长按之前的播放速率
             }
+          },
+          onHorizontalDragUpdate: (details) {
+            // 计算滑动的距离
+            _swipeDistance += details.delta.dx;
+
+            // 根据滑动距离计算快进或快退的时间
+            final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
+            final Duration seekDuration = Duration(
+                milliseconds: (_swipeDistance / sensitivity).round() * 1000);
+
+            if (seekDuration.inMilliseconds != 0) {
+              _seekVideo(seekDuration);
+              _swipeDistance = 0.0; // 重置滑动距离
+            }
+          },
+          onHorizontalDragEnd: (details) {
+            // 滑动结束时重置滑动距离
+            _swipeDistance = 0.0;
           },
           onDoubleTapDown: (details) {
             // Get the width of the screen
@@ -799,6 +868,42 @@ class _PlayerTabState extends State<PlayerTab> {
                               },
                             ),
                           ),
+                          // 音量按钮和悬浮音量控制条
+                          Stack(
+                            children: [
+                              GestureDetector(
+                                onLongPress: () {
+                                  // 如果音量不为0设置静音
+                                  if (_volume != 0) {
+                                    setState(() {
+                                      _lastVolume = _volume;
+                                      _volume = 0;
+                                      _videoController?.setVolume(_volume);
+                                    });
+                                  } else {
+                                    // 如果音量为0恢复上次音量
+                                    setState(() {
+                                      _volume = _lastVolume;
+                                      _videoController?.setVolume(_volume);
+                                    });
+                                  }
+                                },
+                                child: IconButton(
+                                  icon: Icon(
+                                    _volume == 0
+                                        ? Icons.volume_off
+                                        : Icons.volume_up,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _showVolumeSlider = !_showVolumeSlider;
+                                    });
+                                    _startVolumeSliderTimer();
+                                  },
+                                ),
+                              )
+                            ],
+                          ),
                         ],
                       ),
                       Row(
@@ -857,42 +962,7 @@ class _PlayerTabState extends State<PlayerTab> {
                               });
                             },
                           ),
-                          // 音量按钮和悬浮音量控制条
-                          Stack(
-                            children: [
-                              GestureDetector(
-                                onLongPress: () {
-                                  // 如果音量不为0设置静音
-                                  if (_volume != 0) {
-                                    setState(() {
-                                      _lastVolume = _volume;
-                                      _volume = 0;
-                                      _videoController?.setVolume(_volume);
-                                    });
-                                  } else {
-                                    // 如果音量为0恢复上次音量
-                                    setState(() {
-                                      _volume = _lastVolume;
-                                      _videoController?.setVolume(_volume);
-                                    });
-                                  }
-                                },
-                                child: IconButton(
-                                  icon: Icon(
-                                    _volume == 0
-                                        ? Icons.volume_off
-                                        : Icons.volume_up,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _showVolumeSlider = !_showVolumeSlider;
-                                    });
-                                    _startVolumeSliderTimer();
-                                  },
-                                ),
-                              )
-                            ],
-                          ),
+
                           // 静音切换按钮
                         ],
                       ),
@@ -999,7 +1069,7 @@ class SettingsTab extends StatelessWidget {
                 SizedBox(height: 8),
                 Text('AloePlayer'),
                 SizedBox(height: 4),
-                Text('版本号: 0.9.1。 本版本支持从WebDAV下载媒体到库和视频镜像。'),
+                Text('版本号: 0.9.2。 本版本修复大文件打开支持。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),
@@ -1023,7 +1093,7 @@ class SettingsTab extends StatelessWidget {
                 SizedBox(height: 8),
                 Text('1. 长按: 三倍速播放'),
                 SizedBox(height: 4),
-                Text('2. 双击播放界面左侧或右侧: 快退、快进10秒'),
+                Text('2. 双击播放界面左侧或右侧: 快退、快进10秒，或者使用左右滑动来快退、快进'),
                 SizedBox(height: 4),
                 Text('3. 上下滑动: 增减音量'),
                 SizedBox(height: 4),
