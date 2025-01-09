@@ -2,10 +2,13 @@ dependencies:
   cupertino_icons: ^1.0.6
   flutter:
     sdk: flutter
+  http: null
   path: null
   provider: 6.1.2
   simple_gesture_detector: ^0.2.1
+  webdav_client: null
 dependency_overrides:
+  win32: 5.5.4
   audio_service:
     git:
       path: audio_service
@@ -38,6 +41,10 @@ dependency_overrides:
     git:
       path: packages/path_provider/path_provider
       url: https://gitee.com/openharmony-sig/flutter_packages.git
+  share_plus:
+    git:
+      path: packages/share_plus/share_plus
+      url: https://gitee.com/openharmony-sig/flutter_plus_plugins.git
   shared_preferences:
     git:
       path: packages/shared_preferences/shared_preferences
@@ -70,4 +77,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 0.9.0
+version: 0.9.1+2

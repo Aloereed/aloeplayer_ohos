@@ -1,3 +1,4 @@
+import 'package:aloeplayer/webdav.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -53,6 +54,16 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
     }
   }
 
+  void _openWebDavFileManager(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return WebDAVDialog(
+            onLoadFiles: _loadAudioFiles, fileExts: ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg']);
+      },
+    );
+  }
+
   // 根据搜索内容过滤音频文件
   void _filterAudioFiles(String query) {
     setState(() {
@@ -89,14 +100,14 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
     final destinationFile = File(destinationPath);
 
     try {
-      // 打开源文件的输入流
-      final inputStream = File(file.path).openRead();
-      // 打开目标文件的输出流
-      final outputStream = destinationFile.openWrite();
+      // // 打开源文件的输入流
+      // final inputStream = File(file.path).openRead();
+      // // 打开目标文件的输出流
+      // final outputStream = destinationFile.openWrite();
 
-      // 监听输入流，逐块写入输出流
-      await inputStream.pipe(outputStream);
-
+      // // 监听输入流，逐块写入输出流
+      // await inputStream.pipe(outputStream);
+      await File(file.path).copy(destinationPath);
       print("文件复制完成: $destinationPath");
     } catch (e) {
       print("文件复制失败: $e");
@@ -177,6 +188,14 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
           IconButton(
             icon: Icon(Icons.add),
             onPressed: _pickAudioWithFileSelector,
+          ),
+          IconButton(
+            icon: Icon(Icons.webhook),
+            onPressed: () => _openWebDavFileManager(context),
+          ),
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _loadAudioFiles,
           ),
         ],
       ),

@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:path/path.dart' as path;
 import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:media_info/media_info.dart';
+import 'webdav.dart';
 
 class VideoLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
@@ -62,8 +63,10 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
         _filteredVideoFiles = _videoFiles; // 无搜索内容时显示全部
       } else {
         _filteredVideoFiles = _videoFiles
-            .where((file) =>
-                path.basename(file.path).toLowerCase().contains(query.toLowerCase()))
+            .where((file) => path
+                .basename(file.path)
+                .toLowerCase()
+                .contains(query.toLowerCase()))
             .toList(); // 过滤文件名包含搜索字符串的文件
       }
     });
@@ -78,6 +81,18 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
       await _copyVideoFile(file);
     }
   }
+
+  // 使用file_selector选择多个视频文件
+  // Future<void> _pickVideoWithFileSelector() async {
+  //   final typeGroup =
+  //       XTypeGroup(label: 'videos', extensions: ['mp4', 'mkv', 'avi','mov','ts']);
+  //   final List<XFile>? files = await openFiles(acceptedTypeGroups: [typeGroup]);
+  //   if (files != null && files.isNotEmpty) {
+  //     for (final file in files) {
+  //       await _copyVideoFile(file);
+  //     }
+  //   }
+  // }
 
   // 使用image_picker选择视频文件
   Future<void> _pickVideoWithImagePicker() async {
@@ -94,14 +109,14 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     final destinationFile = File(destinationPath);
 
     try {
-      // 打开源文件的输入流
-      final inputStream = File(file.path).openRead();
-      // 打开目标文件的输出流
-      final outputStream = destinationFile.openWrite();
+      // // 打开源文件的输入流
+      // final inputStream = File(file.path).openRead();
+      // // 打开目标文件的输出流
+      // final outputStream = destinationFile.openWrite();
 
-      // 监听输入流，逐块写入输出流
-      await inputStream.pipe(outputStream);
-
+      // // 监听输入流，逐块写入输出流
+      // await inputStream.pipe(outputStream);
+      await File(file.path).copy(destinationPath);
       print("文件复制完成: $destinationPath");
     } catch (e) {
       print("文件复制失败: $e");
@@ -161,6 +176,15 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     }
   }
 
+  void _openWebDavFileManager(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return WebDAVDialog(onLoadFiles: _loadVideoFiles, fileExts: ['mp4', 'mkv', 'avi']);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -192,6 +216,14 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
           IconButton(
             icon: Icon(Icons.video_library),
             onPressed: _pickVideoWithImagePicker,
+          ),
+          IconButton(
+            icon: Icon(Icons.webhook),
+            onPressed: () => _openWebDavFileManager(context),
+          ),
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _loadVideoFiles,
           ),
         ],
       ),

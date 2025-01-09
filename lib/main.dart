@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-08 16:02:59
+ * @LastEditTime: 2025-01-09 12:27:49
  * @Description: file content
  */
 /*
@@ -24,6 +24,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:simple_gesture_detector/simple_gesture_detector.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -285,6 +286,7 @@ class _PlayerTabState extends State<PlayerTab> {
   Duration _totalDuration = Duration.zero;
   double _playbackSpeed = 1.0;
   double _lastVolume = 1.0;
+  bool _isMirrored = false;
   bool _isAudio = true;
   bool _showVolumeSlider = false;
   Timer? _volumeSliderTimer;
@@ -540,6 +542,37 @@ class _PlayerTabState extends State<PlayerTab> {
     }
   }
 
+  Future<void> _shareFileOrText(BuildContext context) async {
+    try {
+      // 判断 openfile 是否是文件路径
+      if (widget.openfile.startsWith('file://')) {
+        // 如果是本地 URI，转换为文件路径
+        final filePath = Uri.decodeFull(
+            widget.openfile.replaceFirst(RegExp(r"file://(media|docs)"), ""));
+        final file = File(filePath);
+
+        if (await file.exists()) {
+          // 分享文件
+          await Share.shareXFiles([XFile(filePath)]);
+        } else {
+          // 文件不存在，分享文本 URI
+          await Share.share(widget.openfile);
+        }
+      } else if (await File(widget.openfile).exists()) {
+        // 如果是文件路径且文件存在，分享文件
+        await Share.shareXFiles([XFile(widget.openfile)]);
+      } else {
+        // 否则作为文本分享
+        await Share.share(widget.openfile);
+      }
+    } catch (e) {
+      // 处理异常
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('分享失败: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -550,6 +583,9 @@ class _PlayerTabState extends State<PlayerTab> {
                     ? Text('AloePlayer播放器')
                     : Text('当前文件：' + widget.openfile),
                 actions: [
+                  IconButton(
+                      onPressed: () => _shareFileOrText(context),
+                      icon: Icon(Icons.share)),
                   // 主题切换按钮
                   PopupMenuButton<ThemeMode>(
                     icon: Icon(Icons.brightness_medium), // 主题切换图标
@@ -711,7 +747,13 @@ class _PlayerTabState extends State<PlayerTab> {
                             child: SizedBox(
                               width: _videoController!.value.size.width,
                               height: _videoController!.value.size.height,
-                              child: VideoPlayer(_videoController!),
+                              child: Transform(
+                                alignment: Alignment.center,
+                                transform: Matrix4.identity()
+                                  ..scale(
+                                      _isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
+                                child: VideoPlayer(_videoController!),
+                              ),
                             ),
                           ),
                         ),
@@ -774,6 +816,16 @@ class _PlayerTabState extends State<PlayerTab> {
                             icon: Icon(
                                 _isPlaying ? Icons.pause : Icons.play_arrow),
                             onPressed: _togglePlayPause,
+                          ),
+                          IconButton(
+                            icon: Icon(_isMirrored
+                                ? Icons.flip
+                                : Icons.flip_camera_android),
+                            onPressed: () {
+                              setState(() {
+                                _isMirrored = !_isMirrored; // 切换镜像状态
+                              });
+                            },
                           ),
                           IconButton(
                             icon: Icon(widget.isFullScreen
@@ -947,7 +999,7 @@ class SettingsTab extends StatelessWidget {
                 SizedBox(height: 8),
                 Text('AloePlayer'),
                 SizedBox(height: 4),
-                Text('版本号: 0.9.0'),
+                Text('版本号: 0.9.1。 本版本支持从WebDAV下载媒体到库和视频镜像。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),
