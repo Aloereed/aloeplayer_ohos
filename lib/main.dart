@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-12 16:17:27
+ * @LastEditTime: 2025-01-12 20:58:48
  * @Description: file content
  */
 /*
@@ -1016,10 +1016,11 @@ class _PlayerTabState extends State<PlayerTab> {
     }
   }
 
-  void _seekVideo(Duration duration) {
+  void _seekVideo(Duration _duration) {
     if (_videoController != null) {
       final currentPosition = _videoController!.value.position;
-      final newPosition = currentPosition + duration;
+      final duration = _videoController!.value.duration;
+      final newPosition = currentPosition + _duration;
       _videoController!.seekTo(
           (newPosition > duration ? duration : newPosition) < Duration.zero
               ? Duration.zero

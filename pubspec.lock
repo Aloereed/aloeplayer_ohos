@@ -79,10 +79,9 @@ packages:
   chewie:
     dependency: "direct main"
     description:
-      name: chewie
-      sha256: "335df378c025588aef400c704bd71f0daea479d4cd57c471c88c056c1144e7cd"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
+      path: "chewie-1.8.5"
+      relative: true
+    source: path
     version: "1.8.5"
   clock:
     dependency: transitive
