@@ -1,5 +1,6 @@
 dependencies:
-  chewie: 1.8.5
+  chewie: 
+    path: ./chewie-1.8.5
   cupertino_icons: ^1.0.6
   flutter:
     sdk: flutter
