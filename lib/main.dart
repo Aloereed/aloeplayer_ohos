@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-12 20:58:48
+ * @LastEditTime: 2025-01-12 22:05:42
  * @Description: file content
  */
 /*
@@ -41,6 +41,8 @@ import 'package:just_audio/just_audio.dart';
 import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'settings.dart';
 import 'theme_provider.dart';
+import 'dart:typed_data';
+import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 
 late MyAudioHandler audioHandler;
 void main() async {
@@ -367,9 +369,11 @@ class PlayerTab extends StatefulWidget {
   _PlayerTabState createState() => _PlayerTabState();
 }
 
-class _PlayerTabState extends State<PlayerTab> {
+class _PlayerTabState extends State<PlayerTab>
+    with SingleTickerProviderStateMixin {
   VideoPlayerController? _videoController;
   double _volume = 1.0;
+  AnimationController? _animeController;
   bool _isPlaying = false;
   bool _showControls = true;
   Timer? _hideTimer;
@@ -388,6 +392,7 @@ class _PlayerTabState extends State<PlayerTab> {
   ChewieController? _chewieController;
   SubtitleController? _subtitleController;
   bool _isLandscape = false;
+  Uint8List? coverData;
   final SettingsService _settingsService = SettingsService();
   Future<void> _setupAudioSession() async {
     final session = await AudioSession.instance;
@@ -433,6 +438,10 @@ class _PlayerTabState extends State<PlayerTab> {
       _checkAndOpenUriFile();
     });
     _setupAudioSession();
+    _animeController = AnimationController(
+      vsync: this,
+      duration: Duration(seconds: 8),
+    )..repeat();
   }
 
   @override
@@ -596,9 +605,8 @@ class _PlayerTabState extends State<PlayerTab> {
             onTap: () {
               widget.toggleFullScreen();
             },
-            iconData: widget.isFullScreen
-                                ? Icons.fullscreen_exit
-                                : Icons.fullscreen,
+            iconData:
+                widget.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
             title: '切换全屏（启用手势）',
           ),
           OptionItem(
@@ -658,6 +666,7 @@ class _PlayerTabState extends State<PlayerTab> {
 
   Future<void> _openUri(String uri) async {
     // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
+    coverData = null;
     if (uri.startsWith('/Photo')) {
       uri = 'file://media' + uri;
     }
@@ -698,6 +707,8 @@ class _PlayerTabState extends State<PlayerTab> {
           _videoController?.addListener(_updatePlaybackState);
         })
         ..setLooping(_isLooping);
+      final metadata = readMetadata(File(uri), getImage: true);
+      coverData = metadata.pictures[0].bytes;
     }
     // await audioHandler.setLoopingSilence();
     // await audioHandler.play();
@@ -985,6 +996,7 @@ class _PlayerTabState extends State<PlayerTab> {
     _videoController?.dispose();
     _chewieController?.dispose();
     _volumeSliderTimer?.cancel();
+    _animeController?.dispose();
     _hideTimer?.cancel();
     _timer?.cancel();
     super.dispose();
@@ -1243,15 +1255,61 @@ class _PlayerTabState extends State<PlayerTab> {
                   children: [
                     // 当没有播放或 _isAudio 为 true 时显示 logo
                     Visibility(
-                      visible: _chewieController == null ||
+                      visible: (_chewieController == null ||
                           _videoController == null ||
                           !_videoController!.value.isInitialized ||
-                          _isAudio,
+                          _isAudio) && coverData != null,
+                      child: InkWell(
+                        onTap: _openFile, // 点击时执行 _openFile 方法
+                        child: AnimatedBuilder(
+                          animation: _animeController!,
+                          builder: (context, child) {
+                            return Transform.rotate(
+                              angle: _animeController!.value * 2 * 3.14159, // 360度旋转
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // 圆形图片
+                                  ClipOval(
+                                    child: Image.memory(
+                                      coverData!,
+                                      width: 256,
+                                      height: 256,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  // 光碟效果：叠加一个半透明的圆形渐变
+                                  Container(
+                                    width: 256,
+                                    height: 256,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: RadialGradient(
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.white.withOpacity(0.3),
+                                        ],
+                                        stops: [0.7, 1.0],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    Visibility(
+                      visible: (_chewieController == null ||
+                          _videoController == null ||
+                          !_videoController!.value.isInitialized ||
+                          _isAudio) && coverData == null,
                       child: InkWell(
                         onTap: _openFile, // 点击时执行 _openFile 方法
                         child: Image.asset('Assets/icon.png'),
                       ),
-                    ),
+                    )
                   ],
                 ),
               ),

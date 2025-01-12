@@ -12,6 +12,7 @@ import SharePlusOhosPlugin from 'share_plus';
 import SharedPreferencesPlugin from 'shared_preferences_ohos';
 import UrlLauncherPlugin from 'url_launcher_ohos';
 import VideoPlayerPlugin from 'video_player_ohos';
+import VideoThumbnailOhosPlugin from 'video_thumbnail_ohos';
 import WakelockPlugin from 'wakelock';
 
 /**
@@ -39,6 +40,7 @@ export class GeneratedPluginRegistrant {
       flutterEngine.getPlugins()?.add(new SharedPreferencesPlugin());
       flutterEngine.getPlugins()?.add(new UrlLauncherPlugin());
       flutterEngine.getPlugins()?.add(new VideoPlayerPlugin());
+      flutterEngine.getPlugins()?.add(new VideoThumbnailOhosPlugin());
       flutterEngine.getPlugins()?.add(new WakelockPlugin());
     } catch (e) {
       Log.e(

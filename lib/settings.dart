@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-12 15:33:30
+ * @LastEditTime: 2025-01-12 21:34:37
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
@@ -130,7 +130,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 SizedBox(height: 8),
                 Text('AloePlayer'),
                 SizedBox(height: 4),
-                Text('版本号: 0.9.4。 本版本添加SRT/ASS/LRC/VTT字幕支持、更加符合鸿蒙UI风格、继续尝试修复大文件问题。'),
+                Text('版本号: 0.9.5。 本版本修复库缩略图支持，添加SRT/ASS/LRC/VTT字幕支持、更加符合鸿蒙UI风格、继续尝试修复大文件问题。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),

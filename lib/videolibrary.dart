@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as path;
-import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:video_thumbnail_ohos/video_thumbnail_ohos.dart';
 import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'package:media_info/media_info.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -180,7 +178,6 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
         fontSize: 16.0,
       );
 
-
       // 如果复制失败，删除可能已创建的目标文件
       if (deleteIfError && await destinationFile.exists()) {
         await destinationFile.delete();
@@ -284,7 +281,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
 
   // 获取视频缩略图
   Future<Uint8List?> _getVideoThumbnail(File file) async {
-    final thumbnail = await VideoThumbnail.thumbnailData(
+    final thumbnail = await VideoThumbnailOhos.thumbnailData(
       video: file.path,
       imageFormat: ImageFormat.JPEG,
       maxWidth: 128, // 缩略图的最大宽度
@@ -302,7 +299,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     Map<String, dynamic> metadata = await mediaInfo.getMediaInfo(file.path);
 
     // 从元数据中提取视频时长
-    int durationInMilliseconds = metadata['duration'];
+    int durationInMilliseconds = metadata['durationMs'];
 
     // 将毫秒转换为 Duration 对象
     Duration duration = Duration(milliseconds: durationInMilliseconds);
@@ -426,7 +423,37 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                     ]),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Center(child: CircularProgressIndicator());
+                        return Card(
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child:Center(child: CircularProgressIndicator()),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      path.basename(file.path),
+                                      style: TextStyle(fontSize: 12),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      '时长: 正在加载...',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                    Text(
+                                      '大小: ${_getFileSize(file)}',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
                       }
                       final thumbnail = snapshot.data?[0] as Uint8List?;
                       final duration = snapshot.data?[1] as Duration?;

@@ -11,7 +11,8 @@ import 'package:path/path.dart' as path;
 import 'package:media_info/media_info.dart';
 import 'package:video_player/video_player.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-
+import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+import 'dart:typed_data';
 class AudioLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
   final Function(int) changeTab;
@@ -60,7 +61,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
       context: context,
       builder: (BuildContext context) {
         return WebDAVDialog(
-            onLoadFiles: _loadAudioFiles, fileExts: ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg']);
+            onLoadFiles: _loadAudioFiles,
+            fileExts: ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg']);
       },
     );
   }
@@ -82,12 +84,19 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
     });
   }
 
-   // 使用file_picker选择音频文件
+  // 使用file_picker选择音频文件
   Future<void> _pickAudioWithFilePicker() async {
     // 使用 FilePicker 选择多个视频文件
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg'], // 允许的视频文件扩展名
+      allowedExtensions: [
+        'mp3',
+        'wav',
+        'flac',
+        'aac',
+        'm4a',
+        'ogg'
+      ], // 允许的视频文件扩展名
       allowMultiple: true, // 支持多选
     );
 
@@ -106,7 +115,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
 
   // 使用image_picker选择音频文件
 
-Future<void> _copyAudioFile(XFile file) async {
+  Future<void> _copyAudioFile(XFile file) async {
     final fileName = path.basename(file.path);
     final destinationPath = path.join(_audioDirPath, fileName);
     final destinationFile = File(destinationPath);
@@ -191,7 +200,9 @@ Future<void> _copyAudioFile(XFile file) async {
 
   // 获取音频缩略图
   Future<Uint8List?> _getAudioThumbnail(File file) async {
-    return null;
+    final metadata = readMetadata(file, getImage: true);
+    return metadata.pictures[0].bytes;
+
   }
 
   // 获取音频时长
@@ -312,7 +323,37 @@ Future<void> _copyAudioFile(XFile file) async {
                     ]),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Center(child: CircularProgressIndicator());
+                        return Card(
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child:Center(child: CircularProgressIndicator()),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      path.basename(file.path),
+                                      style: TextStyle(fontSize: 12),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      '时长: 正在加载...',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                    Text(
+                                      '大小: ${_getFileSize(file)}',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
                       }
                       final thumbnail = snapshot.data?[0] as Uint8List?;
                       final duration = snapshot.data?[1] as Duration?;

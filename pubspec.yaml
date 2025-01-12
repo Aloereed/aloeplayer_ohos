@@ -11,7 +11,9 @@ dependencies:
   simple_gesture_detector: ^0.2.1
   webdav_client: null
   vivysub_utils: ^0.2.0
+  audio_metadata_reader: ^1.1.0
 dependency_overrides:
+  mime: ^2.0.0
   audio_service:
     git:
       path: audio_service
@@ -62,8 +64,9 @@ dependency_overrides:
     git:
       path: packages/video_player/video_player
       url: https://gitee.com/openharmony-sig/flutter_packages.git
-  video_thumbnail:
+  video_thumbnail_ohos:
     git:
+      path: ohos
       url: https://gitee.com/openharmony-sig/fluttertpc_video_thumbnail.git
   wakelock:
     git:
