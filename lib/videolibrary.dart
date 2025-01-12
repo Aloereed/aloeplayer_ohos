@@ -1,4 +1,4 @@
-import 'dart:nativewrappers/_internal/vm/lib/ffi_allocation_patch.dart';
+
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -149,7 +149,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
       final outputStream = destinationFile.openWrite();
 
       await inputStream.pipe(outputStream);
-      print("文件复制完成: $destinationPath");
+      print("文件复制完成: $destinationPath 从 ${file.path}");
 
       // 关闭对话框
       Navigator.of(context).pop();

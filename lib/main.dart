@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-09 17:05:20
+ * @LastEditTime: 2025-01-12 16:17:27
  * @Description: file content
  */
 /*
@@ -19,6 +19,7 @@ import 'package:wakelock/wakelock.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:chewie/chewie.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:path_provider/path_provider.dart';
@@ -28,14 +29,18 @@ import 'package:share_plus/share_plus.dart';
 import 'package:simple_gesture_detector/simple_gesture_detector.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_subtitle/flutter_subtitle.dart' hide Subtitle;
 import 'package:path/path.dart' as path;
 import 'videolibrary.dart';
 import 'audiolibrary.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:vivysub_utils/vivysub_utils.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:file_picker_ohos/file_picker_ohos.dart';
+import 'settings.dart';
+import 'theme_provider.dart';
 
 late MyAudioHandler audioHandler;
 void main() async {
@@ -66,43 +71,128 @@ class MyApp extends StatelessWidget {
     Wakelock.enable();
 
     // 自定义浅蓝色主题
+    // final lightTheme = ThemeData(
+    //   primarySwatch: Colors.blue, // 主色调为蓝色
+    //   primaryColor: Colors.lightBlue[200], // 浅蓝色
+    //   colorScheme: ColorScheme.light(
+    //     primary: Colors.lightBlue[200]!, // 主色调
+    //     secondary: Colors.blueAccent[100]!, // 次要色调
+    //     surface: Colors.white, // 背景色
+    //     background: Colors.lightBlue[50]!, // 背景色
+    //   ),
+    //   scaffoldBackgroundColor: Colors.lightBlue[50], // 页面背景色
+    //   appBarTheme: AppBarTheme(
+    //     color: Colors.lightBlue[200], // AppBar 背景色
+    //     elevation: 0, // 去掉阴影
+    //     iconTheme: IconThemeData(color: Colors.white), // AppBar 图标颜色
+    //     titleTextStyle: TextStyle(
+    //       color: Colors.white,
+    //       fontSize: 20,
+    //       fontWeight: FontWeight.bold,
+    //     ), // AppBar 文字样式
+    //   ),
+    //   textTheme: TextTheme(
+    //     bodyLarge: TextStyle(color: Colors.black87), // 正文文字颜色
+    //     bodyMedium: TextStyle(color: Colors.black87),
+    //     titleLarge:
+    //         TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+    //   ),
+    //   buttonTheme: ButtonThemeData(
+    //     buttonColor: Colors.lightBlue[200], // 按钮背景色
+    //     textTheme: ButtonTextTheme.primary, // 按钮文字颜色
+    //   ),
+    //   floatingActionButtonTheme: FloatingActionButtonThemeData(
+    //     backgroundColor: Colors.lightBlue[200], // FloatingActionButton 背景色
+    //   ),
+    // );
     final lightTheme = ThemeData(
-      primarySwatch: Colors.blue, // 主色调为蓝色
-      primaryColor: Colors.lightBlue[200], // 浅蓝色
+      primarySwatch: Colors.grey, // 主色调为灰色
+      primaryColor: const Color(0xFFF5F5F5), // 浅灰色，与背景保持一致
       colorScheme: ColorScheme.light(
-        primary: Colors.lightBlue[200]!, // 主色调
-        secondary: Colors.blueAccent[100]!, // 次要色调
-        surface: Colors.white, // 背景色
-        background: Colors.lightBlue[50]!, // 背景色
+        primary: const Color(0xFFF5F5F5), // 主色调
+        secondary: const Color(0xFFCCCCCC), // 次要色调为浅灰色
+        surface: Colors.white, // 卡片和控件的背景色
+        background: const Color(0xFFF2F3F5), // 页面背景色
       ),
-      scaffoldBackgroundColor: Colors.lightBlue[50], // 页面背景色
+      scaffoldBackgroundColor: const Color(0xFFF2F3F5), // 整体背景色
       appBarTheme: AppBarTheme(
-        color: Colors.lightBlue[200], // AppBar 背景色
+        color: const Color(0xFFF2F3F5), // AppBar 背景色
         elevation: 0, // 去掉阴影
-        iconTheme: IconThemeData(color: Colors.white), // AppBar 图标颜色
-        titleTextStyle: TextStyle(
-          color: Colors.white,
-          fontSize: 20,
+        iconTheme: const IconThemeData(color: Colors.black54), // AppBar 图标颜色
+        titleTextStyle: const TextStyle(
+          color: Colors.black87,
+          fontSize: 18,
           fontWeight: FontWeight.bold,
-        ), // AppBar 文字样式
+        ), // AppBar 标题样式
       ),
-      textTheme: TextTheme(
+      textTheme: const TextTheme(
         bodyLarge: TextStyle(color: Colors.black87), // 正文文字颜色
-        bodyMedium: TextStyle(color: Colors.black87),
-        titleLarge:
-            TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+        bodyMedium: TextStyle(color: Colors.black54), // 辅助文字颜色
+        titleLarge: TextStyle(
+            color: Colors.black87, fontWeight: FontWeight.bold), // 标题文字颜色
       ),
       buttonTheme: ButtonThemeData(
-        buttonColor: Colors.lightBlue[200], // 按钮背景色
+        buttonColor: const Color(0xFFCCCCCC), // 按钮背景色为浅灰色
         textTheme: ButtonTextTheme.primary, // 按钮文字颜色
       ),
-      floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: Colors.lightBlue[200], // FloatingActionButton 背景色
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: Color(0xFFCCCCCC), // FloatingActionButton 背景色为浅灰色
       ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Color(0xFFF2F3F5), // 底部导航栏背景色
+        selectedItemColor: Colors.lightBlue, // 选中项的颜色
+        unselectedItemColor: Color(0xFF919294), // 未选中项的颜色
+        elevation: 0, // 去掉分割线
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: MaterialStateProperty.all(Color(0xFFE7E8EA)), // 背景色
+          shape: MaterialStateProperty.all(
+            CircleBorder(), // 圆形
+          ),
+          iconColor: MaterialStateProperty.all(Colors.black), // 图标颜色
+        ),
+      ),
+      iconTheme: IconThemeData(color: Colors.black), // 默认图标颜色
     );
 
     // 自定义深色主题（可选）
-    final darkTheme = ThemeData.dark();
+    final darkTheme = ThemeData.dark().copyWith(
+      scaffoldBackgroundColor: Colors.black, // 背景颜色设置为纯黑
+      primaryColor: Colors.lightBlue, // 主要颜色设置为红色，用于高亮
+      textTheme: const TextTheme(
+        bodyLarge: TextStyle(color: Colors.white), // 文本颜色为白色或浅灰色
+        bodyMedium: TextStyle(color: Colors.grey), // 辅助文本颜色为灰色
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Colors.black, // 底部导航栏背景颜色为纯黑
+        selectedItemColor: Colors.lightBlue, // 选中项的颜色为红色
+        unselectedItemColor: Color(0xFF818181), // 未选中项的颜色为灰色
+        elevation: 0, // 去掉分割线
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.black, // AppBar 背景颜色为纯黑
+        iconTheme: IconThemeData(color: Colors.grey), // 图标为灰色
+        elevation: 0, // 去掉阴影
+        titleTextStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ), // 标题为白色
+      ),
+      iconTheme: const IconThemeData(
+        color: Colors.white, // 默认图标颜色为白色
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: MaterialStateProperty.all(Color(0xFF222222)), // 背景色
+          shape: MaterialStateProperty.all(
+            CircleBorder(), // 圆形
+          ),
+          iconColor: MaterialStateProperty.all(Colors.white), // 图标颜色
+        ),
+      ),
+    );
 
     return MaterialApp(
       theme: lightTheme, // 使用自定义的浅蓝色主题
@@ -203,8 +293,8 @@ class _HomeScreenState extends State<HomeScreen>
                   label: '设置',
                 ),
               ],
-              selectedItemColor: Theme.of(context).colorScheme.primary,
-              unselectedItemColor: Theme.of(context).colorScheme.onSurface,
+              // selectedItemColor: Theme.of(context).colorScheme.primary,
+              // unselectedItemColor: Theme.of(context).colorScheme.onSurface,
               type: BottomNavigationBarType.fixed,
             ),
     );
@@ -295,6 +385,10 @@ class _PlayerTabState extends State<PlayerTab> {
   bool _isLooping = false;
   double _previousPlaybackSpeed = 1.0; // 用于存储长按之前的播放速率
   double _swipeDistance = 0.0;
+  ChewieController? _chewieController;
+  SubtitleController? _subtitleController;
+  bool _isLandscape = false;
+  final SettingsService _settingsService = SettingsService();
   Future<void> _setupAudioSession() async {
     final session = await AudioSession.instance;
 
@@ -398,13 +492,13 @@ class _PlayerTabState extends State<PlayerTab> {
                 Navigator.of(context).pop();
                 _openUri(urlController.text); // 调用 _openUri 方法
               },
-              child: Text('确认'),
+              child: Text('确认', style: TextStyle(color: Colors.lightBlue)),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: Text('取消'),
+              child: Text('取消', style: TextStyle(color: Colors.lightBlue)),
             ),
           ],
         );
@@ -412,7 +506,161 @@ class _PlayerTabState extends State<PlayerTab> {
     );
   }
 
+  void _initializeChewieController() {
+    _chewieController = ChewieController(
+      videoPlayerController: _videoController!,
+      autoPlay: true,
+      looping: _isLooping,
+      showControls: _showControls,
+      allowFullScreen: true,
+      optionsTranslation: OptionsTranslation(
+        playbackSpeedButtonText: '播放速率',
+        subtitlesButtonText: '字幕',
+        cancelButtonText: '取消',
+      ),
+      subtitleBuilder: (context, subtitle) => FutureBuilder<double>(
+        future: _settingsService.getSubtitleFontSize(), // 异步获取字体大小
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            // 如果还在加载中，显示默认字体大小
+            return Container(
+              padding: const EdgeInsets.all(10.0),
+              child: Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18.0, // 默认字体大小
+                  shadows: [
+                    Shadow(
+                      color: Colors.black,
+                      blurRadius: 1.0,
+                      offset: Offset(1.0, 1.0),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else if (snapshot.hasError) {
+            // 如果出错，显示错误信息
+            return Container(
+              padding: const EdgeInsets.all(10.0),
+              child: Text(
+                '加载字体大小失败',
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontSize: 18,
+                ),
+              ),
+            );
+          } else {
+            // 获取到字体大小后，动态设置字体大小
+            final fontSize = snapshot.data ?? 18.0; // 如果获取失败，使用默认值
+            return Container(
+              padding: const EdgeInsets.all(10.0),
+              child: Text(
+                subtitle,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: fontSize.toDouble(), // 动态设置字体大小
+                  shadows: [
+                    const Shadow(
+                      color: Colors.black,
+                      blurRadius: 1.0,
+                      offset: Offset(1.0, 1.0),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+        },
+      ),
+      additionalOptions: (context) {
+        return <OptionItem>[
+          OptionItem(
+            onTap: _openFile,
+            iconData: Icons.open_in_browser,
+            title: '打开文件',
+          ),
+          OptionItem(
+            onTap: () => _showUrlDialog(context),
+            iconData: Icons.link,
+            title: '打开URL',
+          ),
+          OptionItem(
+            onTap: () => _openSRT(),
+            iconData: Icons.subtitles,
+            title: '选择字幕文件',
+          ),
+          OptionItem(
+            onTap: () {
+              widget.toggleFullScreen();
+            },
+            iconData: widget.isFullScreen
+                                ? Icons.fullscreen_exit
+                                : Icons.fullscreen,
+            title: '切换全屏（启用手势）',
+          ),
+          OptionItem(
+            onTap: () {
+              setState(() {
+                _showVolumeSlider = !_showVolumeSlider;
+              });
+              _startVolumeSliderTimer();
+            },
+            iconData: Icons.volume_up,
+            title: '视频音量调节',
+          ),
+          OptionItem(
+            onTap: () {
+              setState(() {
+                _isMirrored = !_isMirrored; // 切换镜像状态
+              });
+            },
+            iconData: _isMirrored ? Icons.flip : Icons.flip_camera_android,
+            title: _isMirrored ? '取消镜像' : '镜像',
+          ),
+          OptionItem(
+            onTap: () {
+              setState(() {
+                _isLooping = !_isLooping;
+                _videoController?.setLooping(_isLooping);
+              });
+            },
+            iconData: _isLooping ? Icons.repeat_one : Icons.repeat,
+            title: _isLooping ? '取消单曲循环' : '单曲循环',
+          ),
+          OptionItem(
+            onTap: () {
+              setState(() {
+                _isLandscape = !_isLandscape; // 切换横竖屏状态
+                // 这里可以添加代码来实际改变屏幕方向
+                SystemChrome.setPreferredOrientations(_isLandscape
+                    ? [
+                        DeviceOrientation.landscapeLeft,
+                        DeviceOrientation.landscapeRight
+                      ]
+                    : [
+                        DeviceOrientation.portraitUp,
+                        DeviceOrientation.portraitDown
+                      ]);
+              });
+            },
+            iconData: _isLandscape
+                ? Icons.screen_lock_landscape
+                : Icons.screen_lock_portrait,
+            title: '尝试切换横竖屏（导致旋转锁定）',
+          ),
+        ];
+      },
+    );
+  }
+
   Future<void> _openUri(String uri) async {
+    // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
+    if (uri.startsWith('/Photo')) {
+      uri = 'file://media' + uri;
+    }
     if (uri.contains(':')) {
       if (_videoController != null) {
         _videoController?.dispose();
@@ -421,8 +669,10 @@ class _PlayerTabState extends State<PlayerTab> {
         ..initialize().then((_) {
           setState(() {
             _totalDuration = _videoController!.value.duration;
-            _isAudio = _videoController == null || _videoController!.value.size.width == 0; // 判断是否为音频文件
+            _isAudio = _videoController == null ||
+                _videoController!.value.size.width == 0; // 判断是否为音频文件
           });
+          _initializeChewieController();
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
         })
@@ -440,8 +690,10 @@ class _PlayerTabState extends State<PlayerTab> {
         ..initialize().then((_) {
           setState(() {
             _totalDuration = _videoController!.value.duration;
-            _isAudio = _videoController == null || _videoController!.value.size.width == 0; // 判断是否为音频文件
+            _isAudio = _videoController == null ||
+                _videoController!.value.size.width == 0; // 判断是否为音频文件
           });
+          _initializeChewieController();
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
         })
@@ -504,6 +756,192 @@ class _PlayerTabState extends State<PlayerTab> {
     }
   }
 
+  static Future<List<Subtitle>> ass2srt(String content) async {
+    final assParser = AssParser(content: content); // 解析 ass
+
+    // 字幕
+    List<Subtitle> subtitles = [];
+    List<Section> sections = assParser.getSections();
+
+    int index = 0; // 用于生成字幕的索引
+
+    // 循环处理字幕数据
+    for (var section in sections) {
+      if (section.name != '[Events]') continue;
+
+      for (var entity in section.body.sublist(1)) {
+        final value = entity.value['value'];
+        if (value['Start'] == null || value['End'] == null) continue;
+
+        // 正则表达式 匹配时间
+        final regExp =
+            RegExp(r'(\d{1,2}):(\d{2}):(\d{2})\.(\d+)', caseSensitive: false);
+
+        // 开始时间
+        final startTimeMatch = regExp.allMatches(value['Start']).toList().first;
+        final startTimeHours = int.parse(startTimeMatch.group(1)!);
+        final startTimeMinutes = int.parse(startTimeMatch.group(2)!);
+        final startTimeSeconds = int.parse(startTimeMatch.group(3)!);
+        final startTimeMilliseconds =
+            int.parse(startTimeMatch.group(4)!.padRight(3, '0'));
+
+        // 结束时间
+        final endTimeMatch = regExp.allMatches(value['End']).toList().first;
+        final endTimeHours = int.parse(endTimeMatch.group(1)!);
+        final endTimeMinutes = int.parse(endTimeMatch.group(2)!);
+        final endTimeSeconds = int.parse(endTimeMatch.group(3)!);
+        final endTimeMilliseconds =
+            int.parse(endTimeMatch.group(4)!.padRight(3, '0'));
+
+        final startTime = Duration(
+          hours: startTimeHours,
+          minutes: startTimeMinutes,
+          seconds: startTimeSeconds,
+          milliseconds: startTimeMilliseconds,
+        );
+
+        final endTime = Duration(
+          hours: endTimeHours,
+          minutes: endTimeMinutes,
+          seconds: endTimeSeconds,
+          milliseconds: endTimeMilliseconds,
+        );
+
+        subtitles.add(
+          Subtitle(
+            index: index++, // 设置字幕的索引
+            start: startTime, // 设置开始时间
+            end: endTime, // 设置结束时间
+            text: value['Text']
+                .toString()
+                .replaceAll(RegExp(r'({.+?})'), '')
+                .replaceAll('\\N', '\n')
+                .trim(), // 设置字幕文本
+          ),
+        );
+      }
+    }
+
+    return subtitles;
+  }
+
+  List<Subtitle> parseLrcToSubtitles(String data) {
+    final result = <String, String>{};
+    final times = <String>[];
+    int count = 0;
+    const K = 1; // 伪K轴，即是否进行奇偶定位
+    final positions = [" ", " "]; // 奇偶位置
+    const translate = 0; // 是否保留中文翻译
+
+    final lines = data.split('\n');
+    for (var line in lines) {
+      final matchList = RegExp(r'\[\d*?:\d*?\.\d*?]').allMatches(line);
+      if (matchList.isNotEmpty) {
+        for (var match in matchList) {
+          final m = match.group(0)!;
+          final tmp = result[m];
+          if (tmp != null) {
+            if (tmp.isEmpty ||
+                line.substring(line.lastIndexOf(']') + 1) == "//") {
+              continue;
+            } else {
+              if (translate == 1) {
+                result[m] =
+                    "$tmp\n${line.substring(line.lastIndexOf(']') + 1)}";
+              }
+            }
+          } else {
+            final offset = K == 1 ? positions[count] : '';
+            count = count == 0 ? 1 : 0;
+            result[m] = "$offset${line.substring(line.indexOf(']') + 1)}";
+            times.add(m);
+          }
+        }
+      }
+    }
+
+    times.sort();
+
+    final subtitles = <Subtitle>[];
+    for (var i = 0; i < times.length; i++) {
+      final startTime = _parseTime(times[i]);
+      final endTime =
+          i < times.length - 1 ? _parseTime(times[i + 1]) : startTime;
+      final text = result[times[i]]!;
+
+      subtitles.add(Subtitle(
+        index: i + 1,
+        start: startTime,
+        end: endTime,
+        text: text,
+      ));
+    }
+
+    return subtitles;
+  }
+
+  Duration _parseTime(String time) {
+    final timeStr = time.substring(1, time.length - 1);
+    final parts = timeStr.split(':');
+    final minutes = int.parse(parts[0]);
+    final seconds = double.parse(parts[1]);
+    return Duration(
+        minutes: minutes,
+        seconds: seconds.toInt(),
+        milliseconds: ((seconds - seconds.toInt()) * 1000).toInt());
+  }
+
+  Future<void> _openSRT() async {
+    // 使用 FilePicker 选择文件
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['srt', 'ass', 'lrc', 'vtt'],
+    );
+
+    // 检查是否选择了文件
+    if (result != null) {
+      PlatformFile file = result.files.first;
+
+      // 读取文件内容
+      String fileContent = await File(file.path!).readAsString();
+
+      if (file.extension == 'ass') {
+        _chewieController!.setSubtitle(await ass2srt(fileContent));
+      } else if (file.extension == 'lrc') {
+        _chewieController!.setSubtitle(parseLrcToSubtitles(fileContent));
+      } else {
+        // 根据文件扩展名选择字幕格式
+        SubtitleFormat format = file.extension == 'srt'
+            ? SubtitleFormat.srt
+            : SubtitleFormat.webvtt;
+
+        // 解析字幕内容
+        _subtitleController =
+            SubtitleController.string(fileContent, format: format);
+
+        // 将解析后的字幕设置到 ChewieController 中
+        _chewieController!.setSubtitle(
+          _subtitleController!.subtitles
+              .map(
+                (e) => Subtitle(
+                  index: e.number,
+                  start: Duration(milliseconds: e.start),
+                  end: Duration(milliseconds: e.end),
+                  text: e.text,
+                ),
+              )
+              .toList(),
+        );
+      }
+
+      // 更新 UI
+      setState(() {});
+    } else {
+      // 用户取消了选择
+      print('用户取消了文件选择');
+    }
+  }
+
   void _updatePlaybackState() {
     if (_videoController != null) {
       setState(() {
@@ -545,6 +983,7 @@ class _PlayerTabState extends State<PlayerTab> {
   void dispose() {
     _videoController?.removeListener(_updatePlaybackState);
     _videoController?.dispose();
+    _chewieController?.dispose();
     _volumeSliderTimer?.cancel();
     _hideTimer?.cancel();
     _timer?.cancel();
@@ -629,6 +1068,14 @@ class _PlayerTabState extends State<PlayerTab> {
                     ? Text('AloePlayer播放器')
                     : Text('当前文件：' + widget.openfile),
                 actions: [
+                  IconButton(
+                    icon: Icon(Icons.open_in_browser),
+                    onPressed: _openFile,
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.link),
+                    onPressed: () => _showUrlDialog(context),
+                  ),
                   IconButton(
                       onPressed: () => _shareFileOrText(context),
                       icon: Icon(Icons.share)),
@@ -758,7 +1205,7 @@ class _PlayerTabState extends State<PlayerTab> {
             }
           },
           onVerticalDragUpdate: (details) {
-            if (!_isAudio) {
+            if (true) {
               // 计算滑动的距离
               double delta = details.primaryDelta ?? 0;
 
@@ -789,8 +1236,26 @@ class _PlayerTabState extends State<PlayerTab> {
           },
           child: Stack(
             children: [
-              if (_videoController != null &&
-                  _videoController!.value.isInitialized)
+              Center(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // 当没有播放或 _isAudio 为 true 时显示 logo
+                    Visibility(
+                      visible: _chewieController == null ||
+                          _videoController == null ||
+                          !_videoController!.value.isInitialized ||
+                          _isAudio,
+                      child: InkWell(
+                        onTap: _openFile, // 点击时执行 _openFile 方法
+                        child: Image.asset('Assets/icon.png'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if ((_videoController != null &&
+                  _videoController!.value.isInitialized))
                 GestureDetector(
                   // onLongPress: () {
                   //   if (!_isAudio) {
@@ -808,36 +1273,29 @@ class _PlayerTabState extends State<PlayerTab> {
                       children: [
                         // 视频播放器
                         Visibility(
-                          visible: _videoController != null &&
-                              _videoController!.value.isInitialized &&
-                              !_isAudio,
-                          child: FittedBox(
-                            fit: BoxFit.contain,
-                            child: SizedBox(
-                              width: _videoController!.value.size.width,
-                              height: _videoController!.value.size.height,
-                              child: Transform(
-                                alignment: Alignment.center,
-                                transform: Matrix4.identity()
-                                  ..scale(
-                                      _isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
-                                child: VideoPlayer(_videoController!),
-                              ),
-                            ),
-                          ),
-                        ),
-                        // 当没有播放或 _isAudio 为 true 时显示 logo
-                        Visibility(
-                          visible: _videoController == null ||
-                              !_videoController!.value.isInitialized ||
-                              _isAudio,
-                          child: Image.asset('Assets/icon.png'),
-                        ),
+                            visible: _chewieController != null &&
+                                _videoController != null &&
+                                _videoController!.value.isInitialized,
+                            // child: FittedBox(
+                            //   fit: BoxFit.contain,
+                            //   child: SizedBox(
+                            //     width: _videoController!.value.size.width,
+                            //     height: _videoController!.value.size.height,
+
+                            //     ),
+                            //   ),
+                            // ),
+                            child: Transform(
+                              alignment: Alignment.center,
+                              transform: Matrix4.identity()
+                                ..scale(_isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
+                              child: Chewie(controller: _chewieController!),
+                            )),
                       ],
                     ),
                   ),
                 ),
-              if (_showControls || _isAudio)
+              if (false && (_showControls || _isAudio))
                 Positioned(
                   bottom: 20,
                   left: 20,
@@ -1009,127 +1467,5 @@ class _PlayerTabState extends State<PlayerTab> {
             ],
           ),
         ));
-  }
-}
-
-class SettingsTab extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('设置'),
-      ),
-      body: ListView(
-        children: [
-          // 主题设置部分
-          Column(
-            children: [
-              RadioListTile<ThemeMode>(
-                title: const Text('亮色模式'),
-                value: ThemeMode.light,
-                groupValue: themeProvider.themeMode,
-                onChanged: (ThemeMode? value) {
-                  if (value != null) {
-                    themeProvider.setThemeMode(value);
-                  }
-                },
-              ),
-              RadioListTile<ThemeMode>(
-                title: const Text('暗色模式'),
-                value: ThemeMode.dark,
-                groupValue: themeProvider.themeMode,
-                onChanged: (ThemeMode? value) {
-                  if (value != null) {
-                    themeProvider.setThemeMode(value);
-                  }
-                },
-              ),
-              RadioListTile<ThemeMode>(
-                title: const Text('跟随系统'),
-                value: ThemeMode.system,
-                groupValue: themeProvider.themeMode,
-                onChanged: (ThemeMode? value) {
-                  if (value != null) {
-                    themeProvider.setThemeMode(value);
-                  }
-                },
-              ),
-            ],
-          ),
-          Divider(), // 分割线
-
-          // 关于此应用程序部分
-          ListTile(
-            title: Text('关于此应用程序'),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(height: 8),
-                Text('AloePlayer'),
-                SizedBox(height: 4),
-                Text('版本号: 0.9.2。 本版本修复大文件打开支持。'),
-                SizedBox(height: 4),
-                Text('尽享视听盛宴'),
-                SizedBox(height: 4),
-                GestureDetector(
-                  onTap: () async {
-                    await launchUrl(
-                      Uri.parse('https://ohos.aloereed.com'),
-                      mode: LaunchMode.externalApplication,
-                    );
-                  },
-                  child: Text(
-                    '官网: https://ohos.aloereed.com',
-                    style: TextStyle(
-                      color: Colors.blue,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 16),
-                Text('手势说明:'),
-                SizedBox(height: 8),
-                Text('1. 长按: 三倍速播放'),
-                SizedBox(height: 4),
-                Text('2. 双击播放界面左侧或右侧: 快退、快进10秒，或者使用左右滑动来快退、快进'),
-                SizedBox(height: 4),
-                Text('3. 上下滑动: 增减音量'),
-                SizedBox(height: 4),
-                Text('4. 添加媒体进入音频库或视频库需要时间。较大的文件不建议加入媒体库。如果长时间没反应可以再次尝试。'),
-                SizedBox(height: 4),
-                Text('5. 长按媒体控制的音量按钮可以切换静音。'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class ThemeProvider extends ChangeNotifier {
-  ThemeMode _themeMode = ThemeMode.system;
-
-  ThemeProvider() {
-    _loadThemeMode();
-  }
-
-  ThemeMode get themeMode => _themeMode;
-
-  Future<void> setThemeMode(ThemeMode mode) async {
-    _themeMode = mode;
-    notifyListeners();
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('themeMode', mode.index);
-  }
-
-  Future<void> _loadThemeMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final themeIndex = prefs.getInt('themeMode') ?? ThemeMode.system.index;
-    _themeMode = ThemeMode.values[themeIndex];
-    notifyListeners();
   }
 }
