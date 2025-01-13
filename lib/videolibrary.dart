@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -24,7 +25,9 @@ class VideoLibraryTab extends StatefulWidget {
 }
 
 class _VideoLibraryTabState extends State<VideoLibraryTab> {
-  final String _videoDirPath = '/data/storage/el2/base/Videos';
+  final String _videoDirPath =
+      '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Videos';
+  final String _videoDirPathOld = '/data/storage/el2/base/Videos';
   List<File> _videoFiles = [];
   List<File> _filteredVideoFiles = []; // 用于存储过滤后的视频文件
   String _searchQuery = ''; // 搜索框的内容
@@ -42,18 +45,30 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
+    final directoryOld = Directory(_videoDirPathOld);
+    if (!await directoryOld.exists()) {
+      await directoryOld.create(recursive: true);
+    }
   }
 
   // 加载视频文件
   Future<void> _loadVideoFiles() async {
     final directory = Directory(_videoDirPath);
+    List<File> files = [];
     if (await directory.exists()) {
-      final files = directory.listSync().whereType<File>().toList();
-      setState(() {
-        _videoFiles = files;
-        _filteredVideoFiles = files; // 初始化时显示所有文件
-      });
+      files = directory.listSync().whereType<File>().toList();
     }
+    final directoryOld = Directory(_videoDirPathOld);
+    List<File> filesOld = [];
+    if (await directoryOld.exists()) {
+      filesOld = directoryOld.listSync().whereType<File>().toList();
+    }
+    // 拼接新旧视频文件
+    final filesCap = [...files, ...filesOld];
+    setState(() {
+      _videoFiles = filesCap;
+      _filteredVideoFiles = filesCap; // 初始化时显示所有文件
+    });
   }
 
   // 根据搜索内容过滤视频文件
@@ -75,6 +90,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
 
   // 使用file_picker选择视频文件
   Future<void> _pickVideoWithFilePicker() async {
+    await _ensureVideoDirectoryExists();
     // 使用 FilePicker 选择多个视频文件
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -105,6 +121,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
 
   // 使用image_picker选择视频文件
   Future<void> _pickVideoWithImagePicker() async {
+    await _ensureVideoDirectoryExists();
     final picker = ImagePicker();
     final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
     if (file != null) {
@@ -391,25 +408,60 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                     widget.changeTab(0); // 切换到PlayerTab
                   },
                   onLongPress: () {
-                    showDialog(
+                    showModalBottomSheet(
                       context: context,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(15.0),
+                        ),
+                      ),
                       builder: (context) {
-                        return AlertDialog(
-                          title: Text('删除视频'),
-                          content: Text('确定要删除该视频吗？'),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
+                        return Wrap(
+                          children: [
+                            ListTile(
+                              leading:
+                                  Icon(Icons.share, color: Colors.blue), // 分享图标
+                              title: Text('分享'),
+                              onTap: () {
+                                Navigator.pop(context); // 关闭弹窗
+                                Share.shareXFiles([XFile(file.path)]); // 使用 SharePlus 分享
                               },
-                              child: Text('取消'),
                             ),
-                            TextButton(
-                              onPressed: () {
-                                _deleteVideoFile(file);
-                                Navigator.pop(context);
+                            ListTile(
+                              leading:
+                                  Icon(Icons.delete, color: Colors.red), // 删除图标
+                              title: Text('删除'),
+                              onTap: () {
+                                Navigator.pop(context); // 关闭弹窗
+                                showDialog(
+                                  context: context,
+                                  builder: (context) {
+                                    return AlertDialog(
+                                      title: Text('删除视频'),
+                                      content: Text('确定要删除该视频吗？'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.pop(context); // 关闭对话框
+                                          },
+                                          child: Text('取消',
+                                              style:
+                                                  TextStyle(color: Colors.red)),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            _deleteVideoFile(file); // 调用删除方法
+                                            Navigator.pop(context); // 关闭对话框
+                                          },
+                                          child: Text('删除',
+                                              style: TextStyle(
+                                                  color: Colors.blue)),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
                               },
-                              child: Text('删除'),
                             ),
                           ],
                         );
@@ -427,7 +479,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                           child: Column(
                             children: [
                               Expanded(
-                                child:Center(child: CircularProgressIndicator()),
+                                child:
+                                    Center(child: CircularProgressIndicator()),
                               ),
                               Padding(
                                 padding: EdgeInsets.all(8),

@@ -8,11 +8,13 @@ import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as path;
+import 'package:share_plus/share_plus.dart';
 import 'package:media_info/media_info.dart';
 import 'package:video_player/video_player.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'dart:typed_data';
+
 class AudioLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
   final Function(int) changeTab;
@@ -24,7 +26,9 @@ class AudioLibraryTab extends StatefulWidget {
 }
 
 class _AudioLibraryTabState extends State<AudioLibraryTab> {
-  final String _audioDirPath = '/data/storage/el2/base/Audios';
+  final String _audioDirPath =
+      '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Audios';
+  final String _audioDirPathOld = '/data/storage/el2/base/Audios';
   List<File> _audioFiles = [];
   List<File> _filteredAudioFiles = []; // 用于存储过滤后的音频文件
   String _searchQuery = ''; // 搜索框的内容
@@ -42,18 +46,30 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
+    final directoryOld = Directory(_audioDirPathOld);
+    if (!await directoryOld.exists()) {
+      await directoryOld.create(recursive: true);
+    }
   }
 
   // 加载音频文件
   Future<void> _loadAudioFiles() async {
     final directory = Directory(_audioDirPath);
+    List<File> files = [];
     if (await directory.exists()) {
-      final files = directory.listSync().whereType<File>().toList();
-      setState(() {
-        _audioFiles = files;
-        _filteredAudioFiles = files; // 初始化时显示所有文件
-      });
+      files = directory.listSync().whereType<File>().toList();
     }
+    final directoryOld = Directory(_audioDirPathOld);
+    List<File> filesOld = [];
+    if (await directoryOld.exists()) {
+      filesOld = directoryOld.listSync().whereType<File>().toList();
+    }
+    // 拼接新旧音频文件
+    final filesCap = [...files, ...filesOld];
+    setState(() {
+      _audioFiles = filesCap;
+      _filteredAudioFiles = filesCap; // 初始化时显示所有文件
+    });
   }
 
   void _openWebDavFileManager(BuildContext context) {
@@ -86,6 +102,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
 
   // 使用file_picker选择音频文件
   Future<void> _pickAudioWithFilePicker() async {
+    await _ensureAudioDirectoryExists();
     // 使用 FilePicker 选择多个视频文件
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -202,7 +219,6 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
   Future<Uint8List?> _getAudioThumbnail(File file) async {
     final metadata = readMetadata(file, getImage: true);
     return metadata.pictures[0].bytes;
-
   }
 
   // 获取音频时长
@@ -291,25 +307,61 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
                     widget.changeTab(0); // 切换到PlayerTab
                   },
                   onLongPress: () {
-                    showDialog(
+                    showModalBottomSheet(
                       context: context,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(15.0),
+                        ),
+                      ),
                       builder: (context) {
-                        return AlertDialog(
-                          title: Text('删除音频'),
-                          content: Text('确定要删除该音频吗？'),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
+                        return Wrap(
+                          children: [
+                            ListTile(
+                              leading:
+                                  Icon(Icons.share, color: Colors.blue), // 分享图标
+                              title: Text('分享'),
+                              onTap: () {
+                                Navigator.pop(context); // 关闭弹窗
+                                Share.shareXFiles(
+                                    [XFile(file.path)]); // 使用 SharePlus 分享
                               },
-                              child: Text('取消'),
                             ),
-                            TextButton(
-                              onPressed: () {
-                                _deleteAudioFile(file);
-                                Navigator.pop(context);
+                            ListTile(
+                              leading:
+                                  Icon(Icons.delete, color: Colors.red), // 删除图标
+                              title: Text('删除'),
+                              onTap: () {
+                                Navigator.pop(context); // 关闭弹窗
+                                showDialog(
+                                  context: context,
+                                  builder: (context) {
+                                    return AlertDialog(
+                                      title: Text('删除音频'),
+                                      content: Text('确定要删除该音频吗？'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.pop(context); // 关闭对话框
+                                          },
+                                          child: Text('取消',
+                                              style:
+                                                  TextStyle(color: Colors.red)),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            _deleteAudioFile(file); // 调用删除方法
+                                            Navigator.pop(context); // 关闭对话框
+                                          },
+                                          child: Text('删除',
+                                              style: TextStyle(
+                                                  color: Colors.blue)),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
                               },
-                              child: Text('删除'),
                             ),
                           ],
                         );
@@ -327,7 +379,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
                           child: Column(
                             children: [
                               Expanded(
-                                child:Center(child: CircularProgressIndicator()),
+                                child:
+                                    Center(child: CircularProgressIndicator()),
                               ),
                               Padding(
                                 padding: EdgeInsets.all(8),

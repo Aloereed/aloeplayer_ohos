@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-12 22:05:42
+ * @LastEditTime: 2025-01-13 17:22:10
  * @Description: file content
  */
 /*
@@ -13,6 +13,7 @@
  * @Description: file content
  * 
  */
+import 'package:aloeplayer/privacy_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
@@ -215,6 +216,12 @@ class _HomeScreenState extends State<HomeScreen>
   int _selectedIndex = 0;
   bool _isFullScreen = false;
   String _openfile = '';
+  bool _isPolicyAccepted = false;
+  @override
+  void initState() {
+    super.initState();
+    _checkPrivacyPolicyStatus();
+  }
 
   void _toggleFullScreen() {
     setState(() {
@@ -234,6 +241,62 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       _openfile = openfile;
     });
+  }
+
+  Future<void> _checkPrivacyPolicyStatus() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool? isAccepted = prefs.getBool('privacy_policy_accepted');
+
+    // 如果尚未接受隐私政策，显示对话框
+    if (isAccepted == null || !isAccepted) {
+      Future.delayed(Duration.zero, () {
+        _showPrivacyPolicyDialog();
+      });
+    } else {
+      setState(() {
+        _isPolicyAccepted = true;
+      });
+      // 创建实例
+      final _platform =
+          const MethodChannel('samples.flutter.dev/downloadplugin');
+// 调用方法 getBatteryLevel
+      final result =
+          await _platform.invokeMethod<String>('getDownloadPermission');
+    }
+  }
+
+  void _showPrivacyPolicyDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 禁止点击外部关闭对话框
+      builder: (BuildContext context) {
+        return PrivacyPolicyDialog(
+          onAccept: () async {
+            SharedPreferences prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('privacy_policy_accepted', true);
+            setState(() {
+              _isPolicyAccepted = true;
+            });
+            Navigator.of(context).pop(); // 关闭对话框
+            // 创建实例
+            final _platform =
+                const MethodChannel('samples.flutter.dev/downloadplugin');
+// 调用方法 getBatteryLevel
+            final result =
+                await _platform.invokeMethod<String>('getDownloadPermission');
+          },
+          onDecline: () {
+            // 用户拒绝，退出应用
+            Navigator.of(context).pop(); // 关闭对话框
+            Future.delayed(Duration(milliseconds: 200), () {
+              // 退出应用
+              // SystemNavigator.pop();
+              exit(0);
+            });
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -393,6 +456,8 @@ class _PlayerTabState extends State<PlayerTab>
   SubtitleController? _subtitleController;
   bool _isLandscape = false;
   Uint8List? coverData;
+  double _scale = 1.0; // 当前缩放比例
+  double _previousScale = 1.0; // 上一次缩放比例
   final SettingsService _settingsService = SettingsService();
   Future<void> _setupAudioSession() async {
     final session = await AudioSession.instance;
@@ -1146,6 +1211,31 @@ class _PlayerTabState extends State<PlayerTab>
               _resetHideTimer();
             });
           },
+          onScaleStart: (details) {
+            // 开始缩放手势时，记录当前缩放比例
+            _previousScale = _scale;
+          },
+          onScaleUpdate: (details) {
+            setState(() {
+              // 更新缩放比例
+              _scale = _previousScale * details.scale;
+
+              // 如果缩放比例超过一定的阈值，则执行全屏切换
+              if (_scale > 1.5) {
+                widget.toggleFullScreen();
+                _scale = 1.0; // 重置缩放比例
+                _previousScale = 1.0;
+              } else if (_scale < 0.5) {
+                widget.toggleFullScreen();
+                _scale = 1.0; // 重置缩放比例
+                _previousScale = 1.0;
+              }
+            });
+          },
+          onScaleEnd: (details) {
+            // 缩放结束，重置缩放比例
+            _previousScale = 1.0;
+          },
           onLongPress: () {
             if (!_isAudio) {
               // 记录当前的播放速率
@@ -1192,29 +1282,48 @@ class _PlayerTabState extends State<PlayerTab>
           onDoubleTapDown: (details) {
             // Get the width of the screen
             final double screenWidth = MediaQuery.of(context).size.width;
-            // Determine if the double tap is on the left or right half
-            if (details.globalPosition.dx < screenWidth / 2) {
-              // Left half of the screen: rewind 10 seconds
+
+            // Define a range for the middle part of the screen
+            final double middleRangeStart = screenWidth * 0.4;
+            final double middleRangeEnd = screenWidth * 0.6;
+
+            // Determine the position of the double tap
+            if (details.globalPosition.dx < middleRangeStart) {
+              // Left part of the screen: rewind 10 seconds
               Fluttertoast.showToast(
-                  msg: '快退10秒',
-                  toastLength: Toast.LENGTH_SHORT,
-                  gravity: ToastGravity.CENTER,
-                  timeInSecForIosWeb: 1,
-                  backgroundColor: Colors.red,
-                  textColor: Colors.white,
-                  fontSize: 16.0);
+                msg: '快退10秒',
+                toastLength: Toast.LENGTH_SHORT,
+                gravity: ToastGravity.CENTER,
+                timeInSecForIosWeb: 1,
+                backgroundColor: Colors.red,
+                textColor: Colors.white,
+                fontSize: 16.0,
+              );
               _rewind10Seconds();
-            } else {
-              // Right half of the screen: fast forward 10 seconds
+            } else if (details.globalPosition.dx > middleRangeEnd) {
+              // Right part of the screen: fast forward 10 seconds
               Fluttertoast.showToast(
-                  msg: '快进10秒',
-                  toastLength: Toast.LENGTH_SHORT,
-                  gravity: ToastGravity.CENTER,
-                  timeInSecForIosWeb: 1,
-                  backgroundColor: Colors.red,
-                  textColor: Colors.white,
-                  fontSize: 16.0);
+                msg: '快进10秒',
+                toastLength: Toast.LENGTH_SHORT,
+                gravity: ToastGravity.CENTER,
+                timeInSecForIosWeb: 1,
+                backgroundColor: Colors.red,
+                textColor: Colors.white,
+                fontSize: 16.0,
+              );
               _fastForward10Seconds();
+            } else {
+              // Middle part of the screen: toggle fullscreen
+              Fluttertoast.showToast(
+                msg: '切换全屏模式',
+                toastLength: Toast.LENGTH_SHORT,
+                gravity: ToastGravity.CENTER,
+                timeInSecForIosWeb: 1,
+                backgroundColor: Colors.blue,
+                textColor: Colors.white,
+                fontSize: 16.0,
+              );
+              widget.toggleFullScreen();
             }
           },
           onVerticalDragUpdate: (details) {
@@ -1256,16 +1365,19 @@ class _PlayerTabState extends State<PlayerTab>
                     // 当没有播放或 _isAudio 为 true 时显示 logo
                     Visibility(
                       visible: (_chewieController == null ||
-                          _videoController == null ||
-                          !_videoController!.value.isInitialized ||
-                          _isAudio) && coverData != null,
+                              _videoController == null ||
+                              !_videoController!.value.isInitialized ||
+                              _isAudio) &&
+                          coverData != null,
                       child: InkWell(
                         onTap: _openFile, // 点击时执行 _openFile 方法
                         child: AnimatedBuilder(
                           animation: _animeController!,
                           builder: (context, child) {
                             return Transform.rotate(
-                              angle: _animeController!.value * 2 * 3.14159, // 360度旋转
+                              angle: _animeController!.value *
+                                  2 *
+                                  3.14159, // 360度旋转
                               child: Stack(
                                 alignment: Alignment.center,
                                 children: [
@@ -1302,9 +1414,10 @@ class _PlayerTabState extends State<PlayerTab>
                     ),
                     Visibility(
                       visible: (_chewieController == null ||
-                          _videoController == null ||
-                          !_videoController!.value.isInitialized ||
-                          _isAudio) && coverData == null,
+                              _videoController == null ||
+                              !_videoController!.value.isInitialized ||
+                              _isAudio) &&
+                          coverData == null,
                       child: InkWell(
                         onTap: _openFile, // 点击时执行 _openFile 方法
                         child: Image.asset('Assets/icon.png'),
