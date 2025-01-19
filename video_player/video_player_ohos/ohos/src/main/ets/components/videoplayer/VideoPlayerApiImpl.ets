@@ -128,10 +128,16 @@ export class VideoPlayerApiImpl {
       let rawFileDescriptor: resourceManager.RawFileDescriptor = await this.getContext().resourceManager.getRawFd("flutter_assets/" + asset);
       let videoPlayer = new VideoPlayer(playerModel, surfaceTextureEntry, rawFileDescriptor, null, eventChannel, this.AudioFocus, null);
       await videoPlayer.createAVPlayer();
+      // if(videoPlayer.avPlayer!=null)
+      //   videoPlayer.setAVPlayerCallback(videoPlayer.avPlayer);
+      // videoPlayer.createSession();
       this.videoPlayers.set(textureId.toString(), videoPlayer);
     } else if (uri != null) {
       let videoPlayer = new VideoPlayer(playerModel, surfaceTextureEntry, null, uri, eventChannel, this.AudioFocus, header);
       await videoPlayer.createAVPlayer();
+      // if(videoPlayer.avPlayer!=null)
+      //   videoPlayer.setAVPlayerCallback(videoPlayer.avPlayer);
+      // videoPlayer.createSession();
       this.videoPlayers.set(textureId.toString(), videoPlayer);
     }
 

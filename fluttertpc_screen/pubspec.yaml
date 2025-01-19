@@ -5,7 +5,7 @@ author: Clovis Nicolas <clovisnicolas0@gmail.com>
 homepage: https://github.com/clovisnicolas/flutter_screen
 
 environment:
-  sdk: 
+  sdk: '>=2.19.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -56,3 +56,6 @@ flutter:
   #
   # For details regarding fonts in packages, see
   # https://flutter.io/custom-fonts/#from-packages
+analyzer:
+  enable-experiment:
+  - non-nullable

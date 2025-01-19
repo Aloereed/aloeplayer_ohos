@@ -19,6 +19,7 @@ import { FlutterAbility, FlutterEngine } from '@ohos/flutter_ohos';
 import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant';
 import { UIAbility, AbilityConstant, Want } from '@kit.AbilityKit';
 import  DownloadPlugin  from './DownloadPlugin';
+import  VolumePlugin  from './VolumePlugin';
 let wantInfo : Want;
 
 function createFile(openuri : string): void {
@@ -49,6 +50,7 @@ export default class EntryAbility extends FlutterAbility {
     super.configureFlutterEngine(flutterEngine)
     GeneratedPluginRegistrant.registerWith(flutterEngine)
     this.addPlugin(new DownloadPlugin());
+    this.addPlugin(new VolumePlugin());
   }
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam) {         
         let uri = want.uri;

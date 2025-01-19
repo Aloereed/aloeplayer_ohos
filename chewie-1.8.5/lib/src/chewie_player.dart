@@ -309,6 +309,7 @@ class ChewieController extends ChangeNotifier {
     this.progressIndicatorDelay,
     this.hideControlsTimer = defaultHideControlsTimer,
     this.controlsSafeAreaMinimum = EdgeInsets.zero,
+    this.setSystemVolume,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
           'The playbackSpeeds values must all be greater than 0',
@@ -365,6 +366,7 @@ class ChewieController extends ChangeNotifier {
       Animation<double>,
       ChewieControllerProvider,
     )? routePageBuilder,
+    double Function(double)? setSystemVolume,
   }) {
     return ChewieController(
       draggableProgressBar: draggableProgressBar ?? this.draggableProgressBar,
@@ -419,6 +421,7 @@ class ChewieController extends ChangeNotifier {
       hideControlsTimer: hideControlsTimer ?? this.hideControlsTimer,
       progressIndicatorDelay:
           progressIndicatorDelay ?? this.progressIndicatorDelay,
+      setSystemVolume: setSystemVolume ?? this.setSystemVolume,
     );
   }
 
@@ -601,6 +604,9 @@ class ChewieController extends ChangeNotifier {
 
   Timer? _brightnessSliderTimer;
   Timer? _volumeSliderTimer;
+  //以double为参数的一个函数作为构造函数的参数
+  double Function(double)? setSystemVolume;
+
 
   void setPlaybackSpeed(double speed) {
     videoPlayerController.setPlaybackSpeed(speed);

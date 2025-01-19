@@ -997,13 +997,11 @@ packages:
     source: hosted
     version: "2.6.5"
   video_player_ohos:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      path: "packages/video_player/video_player_ohos"
-      ref: HEAD
-      resolved-ref: "488ed8207ad8121e3d4fefb18303305155c90b38"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
-    source: git
+      path: "video_player/video_player_ohos"
+      relative: true
+    source: path
     version: "1.0.0+1"
   video_player_platform_interface:
     dependency: transitive

@@ -7,6 +7,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:video_player/video_player.dart';
 import 'package:screen/screen.dart';
 
+
 class PlayerWithControls extends StatefulWidget {
   @override
   _PlayerWithControlsState createState() => _PlayerWithControlsState();
@@ -203,7 +204,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                   if (touchX < screenWidth / 3) {
                     // 左侧 1/3 区域：调整亮度
                     double delta = details.primaryDelta ?? 0;
-                    double _brightness =  await Screen.brightness;
+                    double _brightness = (await Screen.brightness) ?? 0.5;
 
                     if (delta < 0) {
                       // 上滑增加亮度
@@ -234,23 +235,24 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                   } else if (touchX > (2 * screenWidth / 3)) {
                     // 右侧 1/3 区域：调整音量
                     double delta = details.primaryDelta ?? 0;
-                    double _volume =
-                        chewieController.videoPlayerController.value.volume;
-
+                    // double _volume =
+                    //     chewieController.videoPlayerController.value.volume;
+                    double _volume = 0.0;
                     if (delta < 0) {
                       // 上滑增加音量
-                      _volume = (_volume + 0.01).clamp(0.0, 1.0);
+                      _volume = 0.01;
                     } else if (delta > 0) {
                       // 下滑减少音量
-                      _volume = (_volume - 0.01).clamp(0.0, 1.0);
+                      _volume = -0.01;
                     }
 
                     // 设置音量
-                    chewieController.setVolume(_volume);
-
+                    double nextVolume = chewieController.setSystemVolume!(_volume);
+                    // VolumeViewController volumeViewController = VolumeViewController();
+                    // volumeExample.getController()?.sendMessageToOhosView('0.0');
                     // 显示音量变化提示
                     Fluttertoast.showToast(
-                      msg: '音量: ${(_volume * 100).toStringAsFixed(0)}%',
+                      msg: '音量: ${(nextVolume/15 * 100).toStringAsFixed(0)}%',
                       toastLength: Toast.LENGTH_SHORT,
                       gravity: ToastGravity.CENTER,
                       timeInSecForIosWeb: 1,
@@ -268,7 +270,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                 },
                 child: Stack(children: [
                   buildPlayerWithControls(chewieController, context),
-                  if (chewieController.showVolumeSlider)
+                  if (false&&chewieController.showVolumeSlider)
                     Positioned(
                       bottom: 100, // 悬浮在音量按钮上方
                       right: 20, // 靠近音量按钮
@@ -303,7 +305,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                         ),
                       ),
                     ),
-                    if (chewieController.showBrightnessSlider)
+                  if (chewieController.showBrightnessSlider)
                     Positioned(
                       bottom: 100, // 悬浮在按钮上方
                       left: 20, // 靠近音量按钮
@@ -338,21 +340,33 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
   }
 }
 
-
 class BrightnessSlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<double>(
-      future: Screen.brightness, // 获取亮度值
+    return FutureBuilder<double?>(
+      future: Screen.brightness, // 获取亮度值（可能为 null 或 int）
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return CircularProgressIndicator(); // 加载中显示进度条
         } else if (snapshot.hasError) {
-          return Text('Error: ${snapshot.error}'); // 出错时显示错误信息
+          print('Error: ${snapshot.error}'); // 出错时显示错误信息
+          // 数据加载完成后显示 Slider
+          double brightnessValue =
+              (snapshot.data ?? 0.5).toDouble(); // 确保值为 double 类型
+          return Slider(
+            value: brightnessValue, // 使用转换后的 double 值
+            min: 0.0,
+            max: 1.0,
+            onChanged: (value) async {
+              await Screen.setBrightness(value); // 设置亮度值
+            },
+          );
         } else {
           // 数据加载完成后显示 Slider
+          double brightnessValue =
+              (snapshot.data ?? 0.5).toDouble(); // 确保值为 double 类型
           return Slider(
-            value: snapshot.data!, // 使用 Future 的结果
+            value: brightnessValue, // 使用转换后的 double 值
             min: 0.0,
             max: 1.0,
             onChanged: (value) async {

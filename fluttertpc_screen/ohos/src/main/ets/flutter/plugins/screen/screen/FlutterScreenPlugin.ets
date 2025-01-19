@@ -69,7 +69,7 @@ export class FlutterScreenPlugin implements FlutterPlugin, MethodCallHandler {
       }
       switch (call.method) {
         case "brightness":
-          result.success(this.getBrightness());
+          result.success(this.getBrightness()*1.0);
           break;
         case "setBrightness":
           this.mainWindow?.setWindowBrightness(parseFloat(call.argument("brightness")));

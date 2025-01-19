@@ -64,6 +64,8 @@ dependency_overrides:
       url: https://gitee.com/openharmony-sig/flutter_packages.git
   video_player:
     path: ./video_player/video_player
+  video_player_ohos:
+    path: ./video_player/video_player_ohos
   video_thumbnail_ohos:
     git:
       path: ohos

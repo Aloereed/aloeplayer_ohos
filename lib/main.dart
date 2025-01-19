@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-19 10:30:02
+ * @LastEditTime: 2025-01-19 20:31:18
  * @Description: file content
  */
 /*
@@ -44,6 +44,7 @@ import 'settings.dart';
 import 'theme_provider.dart';
 import 'dart:typed_data';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+import 'volumeview.dart';
 
 late MyAudioHandler audioHandler;
 void main() async {
@@ -436,6 +437,8 @@ class _PlayerTabState extends State<PlayerTab>
     with SingleTickerProviderStateMixin {
   VideoPlayerController? _videoController;
   double _volume = 1.0;
+  double _systemVolume = 7.5;
+  double _systemMaxVolume = 15;
   AnimationController? _animeController;
   bool _isPlaying = false;
   bool _showControls = true;
@@ -459,6 +462,11 @@ class _PlayerTabState extends State<PlayerTab>
   double _scale = 1.0; // 当前缩放比例
   double _previousScale = 1.0; // 上一次缩放比例
   final SettingsService _settingsService = SettingsService();
+  String receivedData = '';
+  VolumeViewController? _volumeController;
+  VolumeExample? _volumeExample;
+  final EventChannel _eventChannel =
+      EventChannel('samples.flutter.dev/volumepluginevent');
   Future<void> _setupAudioSession() async {
     final session = await AudioSession.instance;
 
@@ -492,7 +500,7 @@ class _PlayerTabState extends State<PlayerTab>
   }
 
   @override
-  void initState() {
+  void initState() async {
     super.initState();
     _checkAndOpenUriFile(); // 添加文件检查逻辑
     if (widget.openfile.isNotEmpty) {
@@ -507,6 +515,25 @@ class _PlayerTabState extends State<PlayerTab>
       vsync: this,
       duration: Duration(seconds: 8),
     )..repeat();
+    _volumeExample = VolumeExample();
+    _eventChannel
+        .receiveBroadcastStream()
+        .listen(_onVolumeChanged, onError: _onError);
+    final _platform = const MethodChannel('samples.flutter.dev/volumeplugin');
+// 调用方法 getBatteryLevel
+    _systemMaxVolume =
+        ((await _platform.invokeMethod<int>('getMaxVolume')) ?? 15).toDouble();
+  }
+
+  void _onVolumeChanged(dynamic volume) {
+    print('Volume changed: $volume');
+    setState(() {
+      _systemVolume = (volume as int).toDouble(); // 将接收到的音量值赋值给 _volume
+    });
+  }
+
+  void _onError(Object error) {
+    print('Error: $error');
   }
 
   @override
@@ -581,17 +608,37 @@ class _PlayerTabState extends State<PlayerTab>
   }
 
   void _initializeChewieController() {
+    _volumeController = _volumeExample?.controller;
     _chewieController = ChewieController(
       videoPlayerController: _videoController!,
       autoPlay: true,
       looping: _isLooping,
       showControls: _showControls,
       allowFullScreen: true,
+      zoomAndPan: true,
       optionsTranslation: OptionsTranslation(
         playbackSpeedButtonText: '播放速率',
         subtitlesButtonText: '字幕',
         cancelButtonText: '取消',
       ),
+      setSystemVolume: (p0) {
+        double nextVolume = _systemVolume + p0 * _systemMaxVolume;
+
+// 确保音量不超过最大音量
+        if (nextVolume > _systemMaxVolume) {
+          nextVolume = _systemMaxVolume;
+        }
+
+// 确保音量不小于 0
+        if (nextVolume < 0) {
+          nextVolume = 0;
+        }
+
+        _volumeController?.sendMessageToOhosView(
+            'getMessageFromFlutterView2', nextVolume.toString());
+        _systemVolume = nextVolume;
+        return nextVolume;
+      },
       subtitleBuilder: (context, subtitle) => FutureBuilder<double>(
         future: _settingsService.getSubtitleFontSize(), // 异步获取字体大小
         builder: (context, snapshot) {
@@ -668,21 +715,32 @@ class _PlayerTabState extends State<PlayerTab>
           ),
           OptionItem(
             onTap: () {
-              widget.toggleFullScreen();
+              _chewieController?.toggleFullScreen();
             },
             iconData:
-                widget.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
-            title: '切换全屏（启用手势）',
+                (_chewieController!=null&&_chewieController!.isFullScreen) ? Icons.fullscreen_exit : Icons.fullscreen,
+            title: '切换全屏',
           ),
           OptionItem(
-            onTap: () {
-              setState(() {
-                _showVolumeSlider = !_showVolumeSlider;
-              });
-              _startVolumeSliderTimer();
+            onTap: () async {
+              double nextVolume = _systemVolume ;
+
+// 确保音量不超过最大音量
+              if (nextVolume > _systemMaxVolume) {
+                nextVolume = _systemMaxVolume;
+              }
+
+// 确保音量不小于 0
+              if (nextVolume < 0) {
+                nextVolume = 0;
+              }
+
+              _volumeController?.sendMessageToOhosView(
+                  'getMessageFromFlutterView2', nextVolume.toString());
+
             },
             iconData: Icons.volume_up,
-            title: '视频音量调节',
+            title: '音量调节',
           ),
           OptionItem(
             onTap: () {
@@ -1421,6 +1479,14 @@ class _PlayerTabState extends State<PlayerTab>
                       child: InkWell(
                         onTap: _openFile, // 点击时执行 _openFile 方法
                         child: Image.asset('Assets/icon.png'),
+                      ),
+                    ),
+                    Offstage(
+                      offstage: _volumeExample == null,
+                      child: SizedBox(
+                        width: 1,
+                        height: 1,
+                        child: _volumeExample!,
                       ),
                     )
                   ],

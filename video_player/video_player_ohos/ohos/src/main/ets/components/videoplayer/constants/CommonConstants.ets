@@ -66,7 +66,10 @@ export class CommonConstants {
     new VideoSpeed('1.0X', 1),
     new VideoSpeed('1.25X', 2),
     new VideoSpeed('1.75X', 3),
-    new VideoSpeed('2.0X', 4)
+    new VideoSpeed('2.0X', 4),
+    new VideoSpeed('0.5X', 5),
+    new VideoSpeed('1.5X', 6),
+    new VideoSpeed('3.0X', 7)
   ];
   /**
    * time system, Hour-minute-second conversion.
