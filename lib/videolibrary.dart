@@ -411,19 +411,23 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                   ),
                   itemCount: _filteredVideoFiles.length,
                   itemBuilder: (context, index) {
-                    return _buildVideoItem(_filteredVideoFiles[index]);
+                    final file = _filteredVideoFiles[index];
+                    return _buildVideoCard(file);
                   },
                 )
               : ListView.builder(
                   padding: EdgeInsets.all(8),
                   itemCount: _filteredVideoFiles.length,
                   itemBuilder: (context, index) {
-                    return _buildVideoItem(_filteredVideoFiles[index]);
+                    final file = _filteredVideoFiles[index];
+                    return _buildVideoCard(file, isListView: true);
                   },
                 ),
     );
   }
-  Widget _buildVideoItem(XFile file) {
+
+
+  Widget _buildVideoCard(File file, {bool isListView = false}) {
     return GestureDetector(
       onTap: () {
         widget.getopenfile(file.path); // 更新_openfile状态
@@ -464,14 +468,16 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                               onPressed: () {
                                 Navigator.pop(context); // 关闭对话框
                               },
-                              child: Text('取消', style: TextStyle(color: Colors.red)),
+                              child: Text('取消',
+                                  style: TextStyle(color: Colors.red)),
                             ),
                             TextButton(
                               onPressed: () {
                                 _deleteVideoFile(file); // 调用删除方法
                                 Navigator.pop(context); // 关闭对话框
                               },
-                              child: Text('删除', style: TextStyle(color: Colors.blue)),
+                              child: Text('删除',
+                                  style: TextStyle(color: Colors.blue)),
                             ),
                           ],
                         );
@@ -492,24 +498,67 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Card(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Column(
+              child: isListView
+                  ? ListTile(
+                      title: Text(
+                        path.basename(file.path),
+                        style: TextStyle(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text('加载中...'),
+                      leading: CircularProgressIndicator(),
+                    )
+                  : Column(
+                      children: [
+                        Expanded(
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                path.basename(file.path),
+                                style: TextStyle(fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '时长: 正在加载...',
+                                style: TextStyle(fontSize: 10),
+                              ),
+                              Text(
+                                '大小: ${_getFileSize(file)}',
+                                style: TextStyle(fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+            );
+          }
+          final thumbnail = snapshot.data?[0] as Uint8List?;
+          final duration = snapshot.data?[1] as Duration?;
+          return Card(
+            child: isListView
+                ? ListTile(
+                    leading: thumbnail != null
+                        ? Image.memory(thumbnail, fit: BoxFit.cover, width: 64)
+                        : Icon(Icons.video_library, size: 50),
+                    title: Text(
+                      path.basename(file.path),
+                      style: TextStyle(fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          path.basename(file.path),
-                          style: TextStyle(fontSize: 12),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          '时长: 正在加载...',
+                          '时长: ${duration?.inMinutes}:${duration?.inSeconds.remainder(60)}',
                           style: TextStyle(fontSize: 10),
                         ),
                         Text(
@@ -518,45 +567,38 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            );
-          }
-          final thumbnail = snapshot.data?[0] as Uint8List?;
-          final duration = snapshot.data?[1] as Duration?;
-          return Card(
-            child: Column(
-              children: [
-                Expanded(
-                  child: thumbnail != null
-                      ? Image.memory(thumbnail, fit: BoxFit.cover)
-                      : Icon(Icons.video_library, size: 50),
-                ),
-                Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  )
+                : Column(
                     children: [
-                      Text(
-                        path.basename(file.path),
-                        style: TextStyle(fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Expanded(
+                        child: thumbnail != null
+                            ? Image.memory(thumbnail, fit: BoxFit.cover)
+                            : Icon(Icons.video_library, size: 50),
                       ),
-                      Text(
-                        '时长: ${duration?.inMinutes}:${duration?.inSeconds.remainder(60)}',
-                        style: TextStyle(fontSize: 10),
-                      ),
-                      Text(
-                        '大小: ${_getFileSize(file)}',
-                        style: TextStyle(fontSize: 10),
+                      Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              path.basename(file.path),
+                              style: TextStyle(fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '时长: ${duration?.inMinutes}:${duration?.inSeconds.remainder(60)}',
+                              style: TextStyle(fontSize: 10),
+                            ),
+                            Text(
+                              '大小: ${_getFileSize(file)}',
+                              style: TextStyle(fontSize: 10),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
           );
         },
       ),

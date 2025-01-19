@@ -48,6 +48,8 @@ dependency_overrides:
     git:
       path: packages/path_provider/path_provider
       url: https://gitee.com/openharmony-sig/flutter_packages.git
+  screen:
+    path: ./fluttertpc_screen/
   share_plus:
     git:
       path: packages/share_plus/share_plus
@@ -61,9 +63,7 @@ dependency_overrides:
       path: packages/url_launcher/url_launcher
       url: https://gitee.com/openharmony-sig/flutter_packages.git
   video_player:
-    git:
-      path: packages/video_player/video_player
-      url: https://gitee.com/openharmony-sig/flutter_packages.git
+    path: ./video_player/video_player
   video_thumbnail_ohos:
     git:
       path: ohos
@@ -94,4 +94,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 0.9.6+7
+version: 0.9.8+9

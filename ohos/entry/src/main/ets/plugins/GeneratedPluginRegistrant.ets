@@ -8,6 +8,7 @@ import ImagePickerPlugin from 'image_picker_ohos';
 import JustAudioOhosPlugin from 'just_audio_ohos';
 import FlutterPluginMediaInfoPlugin from 'media_info';
 import PathProviderPlugin from 'path_provider_ohos';
+import ScreenPlugin from 'screen';
 import SharePlusOhosPlugin from 'share_plus';
 import SharedPreferencesPlugin from 'shared_preferences_ohos';
 import UrlLauncherPlugin from 'url_launcher_ohos';
@@ -37,6 +38,7 @@ export class GeneratedPluginRegistrant {
       flutterEngine.getPlugins()?.add(new JustAudioOhosPlugin());
       flutterEngine.getPlugins()?.add(new FlutterPluginMediaInfoPlugin());
       flutterEngine.getPlugins()?.add(new PathProviderPlugin());
+      flutterEngine.getPlugins()?.add(new ScreenPlugin());
       flutterEngine.getPlugins()?.add(new SharePlusOhosPlugin());
       flutterEngine.getPlugins()?.add(new SharedPreferencesPlugin());
       flutterEngine.getPlugins()?.add(new UrlLauncherPlugin());

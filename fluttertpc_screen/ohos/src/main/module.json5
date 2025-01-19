@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "screen",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+[
+    {
+        "Name": "flutter_screen",
+        "License": "MIT License",
+        "License File": "LICENSE",
+        "Version Number": "3e9c4e3cc5281d5ea6804f468e55793deb7d1b08",
+        "Owner": "george.lihui@huawei.com",
+        "Upstream URL": "https://github.com/clovisnicolas/flutter_screen",
+        "Description": "A Flutter plugin to manage the device's screen on Android and iOS."
+    }
+]

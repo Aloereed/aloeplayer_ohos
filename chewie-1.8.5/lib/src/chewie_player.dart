@@ -55,6 +55,8 @@ class ChewieState extends State<Chewie> {
   @override
   void dispose() {
     widget.controller.removeListener(listener);
+    widget.controller._volumeSliderTimer?.cancel();
+    widget.controller._brightnessSliderTimer?.cancel();
     notifier.dispose();
     super.dispose();
   }
@@ -89,7 +91,7 @@ class ChewieState extends State<Chewie> {
       controller: widget.controller,
       child: ChangeNotifierProvider<PlayerNotifier>.value(
         value: notifier,
-        builder: (context, w) => const PlayerWithControls(),
+        builder: (context, w) => PlayerWithControls(),
       ),
     );
   }
@@ -132,7 +134,7 @@ class ChewieState extends State<Chewie> {
       controller: widget.controller,
       child: ChangeNotifierProvider<PlayerNotifier>.value(
         value: notifier,
-        builder: (context, w) => const PlayerWithControls(),
+        builder: (context, w) => PlayerWithControls(),
       ),
     );
 
@@ -298,7 +300,7 @@ class ChewieController extends ChangeNotifier {
     this.allowMuting = true,
     this.allowPlaybackSpeedChanging = true,
     this.useRootNavigator = true,
-    this.playbackSpeeds = const [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2,3],
+    this.playbackSpeeds = const [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3],
     this.systemOverlaysOnEnterFullScreen,
     this.deviceOrientationsOnEnterFullScreen,
     this.systemOverlaysAfterFullScreen = SystemUiOverlay.values,
@@ -588,6 +590,23 @@ class ChewieController extends ChangeNotifier {
 
   bool get isPlaying => videoPlayerController.value.isPlaying;
 
+  double get playbackSpeed => videoPlayerController.value.playbackSpeed;
+
+  double previousPlaybackSpeed = 1.0;
+
+  double swipeDistance = 0.0;
+
+  bool showVolumeSlider = false;
+  bool showBrightnessSlider = false;
+
+  Timer? _brightnessSliderTimer;
+  Timer? _volumeSliderTimer;
+
+  void setPlaybackSpeed(double speed) {
+    videoPlayerController.setPlaybackSpeed(speed);
+    notifyListeners();
+  }
+
   Future<dynamic> _initialize() async {
     await videoPlayerController.setLooping(looping);
 
@@ -612,6 +631,23 @@ class ChewieController extends ChangeNotifier {
       videoPlayerController.addListener(_fullScreenListener);
     }
   }
+
+  void startVolumeSliderTimer() {
+    _volumeSliderTimer?.cancel(); // 取消之前的 Timer
+    _volumeSliderTimer = Timer(Duration(seconds: 5), () {
+      showVolumeSlider = false; // 5 秒后隐藏 Slider
+      notifyListeners();
+    });
+  }
+
+    void startBrightnessSliderTimer() {
+    _brightnessSliderTimer?.cancel(); // 取消之前的 Timer
+    _brightnessSliderTimer = Timer(Duration(seconds: 5), () {
+      showBrightnessSlider = false; // 5 秒后隐藏 Slider
+      notifyListeners();
+    });
+  }
+
 
   Future<void> _fullScreenListener() async {
     if (videoPlayerController.value.isPlaying && !_isFullScreen) {

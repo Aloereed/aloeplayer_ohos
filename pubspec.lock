@@ -691,6 +691,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.27.7"
+  screen:
+    dependency: "direct overridden"
+    description:
+      path: fluttertpc_screen
+      relative: true
+    source: path
+    version: "0.0.5"
   share_plus:
     dependency: "direct overridden"
     description:
@@ -969,11 +976,9 @@ packages:
   video_player:
     dependency: "direct overridden"
     description:
-      path: "packages/video_player/video_player"
-      ref: HEAD
-      resolved-ref: "488ed8207ad8121e3d4fefb18303305155c90b38"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
-    source: git
+      path: "video_player/video_player"
+      relative: true
+    source: path
     version: "2.7.1"
   video_player_android:
     dependency: transitive

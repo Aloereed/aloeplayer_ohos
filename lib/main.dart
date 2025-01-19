@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-13 17:22:10
+ * @LastEditTime: 2025-01-19 10:30:02
  * @Description: file content
  */
 /*
@@ -1205,157 +1205,157 @@ class _PlayerTabState extends State<PlayerTab>
                 ],
               ),
         body: GestureDetector(
-          onTap: () {
-            setState(() {
-              _showControls = !_showControls;
-              _resetHideTimer();
-            });
-          },
-          onScaleStart: (details) {
-            // 开始缩放手势时，记录当前缩放比例
-            _previousScale = _scale;
-          },
-          onScaleUpdate: (details) {
-            setState(() {
-              // 更新缩放比例
-              _scale = _previousScale * details.scale;
+          // onTap: () {
+          //   setState(() {
+          //     _showControls = !_showControls;
+          //     _resetHideTimer();
+          //   });
+          // },
+          // onScaleStart: (details) {
+          //   // 开始缩放手势时，记录当前缩放比例
+          //   _previousScale = _scale;
+          // },
+          // onScaleUpdate: (details) {
+          //   setState(() {
+          //     // 更新缩放比例
+          //     _scale = _previousScale * details.scale;
 
-              // 如果缩放比例超过一定的阈值，则执行全屏切换
-              if (_scale > 1.5) {
-                widget.toggleFullScreen();
-                _scale = 1.0; // 重置缩放比例
-                _previousScale = 1.0;
-              } else if (_scale < 0.5) {
-                widget.toggleFullScreen();
-                _scale = 1.0; // 重置缩放比例
-                _previousScale = 1.0;
-              }
-            });
-          },
-          onScaleEnd: (details) {
-            // 缩放结束，重置缩放比例
-            _previousScale = 1.0;
-          },
-          onLongPress: () {
-            if (!_isAudio) {
-              // 记录当前的播放速率
-              _previousPlaybackSpeed = _playbackSpeed; // 假设有一个方法可以获取当前的播放速率
+          //     // 如果缩放比例超过一定的阈值，则执行全屏切换
+          //     if (_scale > 1.5) {
+          //       widget.toggleFullScreen();
+          //       _scale = 1.0; // 重置缩放比例
+          //       _previousScale = 1.0;
+          //     } else if (_scale < 0.5) {
+          //       widget.toggleFullScreen();
+          //       _scale = 1.0; // 重置缩放比例
+          //       _previousScale = 1.0;
+          //     }
+          //   });
+          // },
+          // onScaleEnd: (details) {
+          //   // 缩放结束，重置缩放比例
+          //   _previousScale = 1.0;
+          // },
+          // onLongPress: () {
+          //   if (!_isAudio) {
+          //     // 记录当前的播放速率
+          //     _previousPlaybackSpeed = _playbackSpeed; // 假设有一个方法可以获取当前的播放速率
 
-              // 使用 fluttertoast 显示消息
-              // 背景半透明
-              Fluttertoast.showToast(
-                msg: '长按3倍速播放',
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.CENTER,
-                timeInSecForIosWeb: 1,
-                backgroundColor: Colors.grey,
-                textColor: Colors.white,
-                fontSize: 16.0,
-              );
+          //     // 使用 fluttertoast 显示消息
+          //     // 背景半透明
+          //     Fluttertoast.showToast(
+          //       msg: '长按3倍速播放',
+          //       toastLength: Toast.LENGTH_SHORT,
+          //       gravity: ToastGravity.CENTER,
+          //       timeInSecForIosWeb: 1,
+          //       backgroundColor: Colors.grey,
+          //       textColor: Colors.white,
+          //       fontSize: 16.0,
+          //     );
 
-              _setPlaybackSpeed(3.0); // 长按三倍速播放
-            }
-          },
-          onLongPressEnd: (_) {
-            if (!_isAudio) {
-              _setPlaybackSpeed(_previousPlaybackSpeed); // 松开恢复到长按之前的播放速率
-            }
-          },
-          onHorizontalDragUpdate: (details) {
-            // 计算滑动的距离
-            _swipeDistance += details.delta.dx;
+          //     _setPlaybackSpeed(3.0); // 长按三倍速播放
+          //   }
+          // },
+          // onLongPressEnd: (_) {
+          //   if (!_isAudio) {
+          //     _setPlaybackSpeed(_previousPlaybackSpeed); // 松开恢复到长按之前的播放速率
+          //   }
+          // },
+          // onHorizontalDragUpdate: (details) {
+          //   // 计算滑动的距离
+          //   _swipeDistance += details.delta.dx;
 
-            // 根据滑动距离计算快进或快退的时间
-            final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
-            final Duration seekDuration = Duration(
-                milliseconds: (_swipeDistance / sensitivity).round() * 1000);
+          //   // 根据滑动距离计算快进或快退的时间
+          //   final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
+          //   final Duration seekDuration = Duration(
+          //       milliseconds: (_swipeDistance / sensitivity).round() * 1000);
 
-            if (seekDuration.inMilliseconds != 0) {
-              _seekVideo(seekDuration);
-              _swipeDistance = 0.0; // 重置滑动距离
-            }
-          },
-          onHorizontalDragEnd: (details) {
-            // 滑动结束时重置滑动距离
-            _swipeDistance = 0.0;
-          },
-          onDoubleTapDown: (details) {
-            // Get the width of the screen
-            final double screenWidth = MediaQuery.of(context).size.width;
+          //   if (seekDuration.inMilliseconds != 0) {
+          //     _seekVideo(seekDuration);
+          //     _swipeDistance = 0.0; // 重置滑动距离
+          //   }
+          // },
+          // onHorizontalDragEnd: (details) {
+          //   // 滑动结束时重置滑动距离
+          //   _swipeDistance = 0.0;
+          // },
+          // onDoubleTapDown: (details) {
+          //   // Get the width of the screen
+          //   final double screenWidth = MediaQuery.of(context).size.width;
 
-            // Define a range for the middle part of the screen
-            final double middleRangeStart = screenWidth * 0.4;
-            final double middleRangeEnd = screenWidth * 0.6;
+          //   // Define a range for the middle part of the screen
+          //   final double middleRangeStart = screenWidth * 0.4;
+          //   final double middleRangeEnd = screenWidth * 0.6;
 
-            // Determine the position of the double tap
-            if (details.globalPosition.dx < middleRangeStart) {
-              // Left part of the screen: rewind 10 seconds
-              Fluttertoast.showToast(
-                msg: '快退10秒',
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.CENTER,
-                timeInSecForIosWeb: 1,
-                backgroundColor: Colors.red,
-                textColor: Colors.white,
-                fontSize: 16.0,
-              );
-              _rewind10Seconds();
-            } else if (details.globalPosition.dx > middleRangeEnd) {
-              // Right part of the screen: fast forward 10 seconds
-              Fluttertoast.showToast(
-                msg: '快进10秒',
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.CENTER,
-                timeInSecForIosWeb: 1,
-                backgroundColor: Colors.red,
-                textColor: Colors.white,
-                fontSize: 16.0,
-              );
-              _fastForward10Seconds();
-            } else {
-              // Middle part of the screen: toggle fullscreen
-              Fluttertoast.showToast(
-                msg: '切换全屏模式',
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.CENTER,
-                timeInSecForIosWeb: 1,
-                backgroundColor: Colors.blue,
-                textColor: Colors.white,
-                fontSize: 16.0,
-              );
-              widget.toggleFullScreen();
-            }
-          },
-          onVerticalDragUpdate: (details) {
-            if (true) {
-              // 计算滑动的距离
-              double delta = details.primaryDelta ?? 0;
+          //   // Determine the position of the double tap
+          //   if (details.globalPosition.dx < middleRangeStart) {
+          //     // Left part of the screen: rewind 10 seconds
+          //     Fluttertoast.showToast(
+          //       msg: '快退10秒',
+          //       toastLength: Toast.LENGTH_SHORT,
+          //       gravity: ToastGravity.CENTER,
+          //       timeInSecForIosWeb: 1,
+          //       backgroundColor: Colors.red,
+          //       textColor: Colors.white,
+          //       fontSize: 16.0,
+          //     );
+          //     _rewind10Seconds();
+          //   } else if (details.globalPosition.dx > middleRangeEnd) {
+          //     // Right part of the screen: fast forward 10 seconds
+          //     Fluttertoast.showToast(
+          //       msg: '快进10秒',
+          //       toastLength: Toast.LENGTH_SHORT,
+          //       gravity: ToastGravity.CENTER,
+          //       timeInSecForIosWeb: 1,
+          //       backgroundColor: Colors.red,
+          //       textColor: Colors.white,
+          //       fontSize: 16.0,
+          //     );
+          //     _fastForward10Seconds();
+          //   } else {
+          //     // Middle part of the screen: toggle fullscreen
+          //     Fluttertoast.showToast(
+          //       msg: '切换全屏模式',
+          //       toastLength: Toast.LENGTH_SHORT,
+          //       gravity: ToastGravity.CENTER,
+          //       timeInSecForIosWeb: 1,
+          //       backgroundColor: Colors.blue,
+          //       textColor: Colors.white,
+          //       fontSize: 16.0,
+          //     );
+          //     widget.toggleFullScreen();
+          //   }
+          // },
+          // onVerticalDragUpdate: (details) {
+          //   if (true) {
+          //     // 计算滑动的距离
+          //     double delta = details.primaryDelta ?? 0;
 
-              // 根据滑动方向调整音量
-              setState(() {
-                if (delta < 0) {
-                  // 上滑增加音量
-                  _volume = (_volume + 0.01).clamp(0.0, 1.0);
-                } else if (delta > 0) {
-                  // 下滑减少音量
-                  _volume = (_volume - 0.01).clamp(0.0, 1.0);
-                }
-                _videoController?.setVolume(_volume);
-              });
-              _showVolumeSlider = true;
-              _startVolumeSliderTimer();
-              // 显示音量变化提示
-              Fluttertoast.showToast(
-                msg: '音量: ${(_volume * 100).toStringAsFixed(0)}%',
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.CENTER,
-                timeInSecForIosWeb: 1,
-                backgroundColor: Colors.black.withOpacity(0.7),
-                textColor: Colors.white,
-                fontSize: 16.0,
-              );
-            }
-          },
+          //     // 根据滑动方向调整音量
+          //     setState(() {
+          //       if (delta < 0) {
+          //         // 上滑增加音量
+          //         _volume = (_volume + 0.01).clamp(0.0, 1.0);
+          //       } else if (delta > 0) {
+          //         // 下滑减少音量
+          //         _volume = (_volume - 0.01).clamp(0.0, 1.0);
+          //       }
+          //       _videoController?.setVolume(_volume);
+          //     });
+          //     _showVolumeSlider = true;
+          //     _startVolumeSliderTimer();
+          //     // 显示音量变化提示
+          //     Fluttertoast.showToast(
+          //       msg: '音量: ${(_volume * 100).toStringAsFixed(0)}%',
+          //       toastLength: Toast.LENGTH_SHORT,
+          //       gravity: ToastGravity.CENTER,
+          //       timeInSecForIosWeb: 1,
+          //       backgroundColor: Colors.black.withOpacity(0.7),
+          //       textColor: Colors.white,
+          //       fontSize: 16.0,
+          //     );
+          //   }
+          // },
           child: Stack(
             children: [
               Center(
