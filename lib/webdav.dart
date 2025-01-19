@@ -157,7 +157,7 @@ class _WebDAVDialogState extends State<WebDAVDialog> {
           : widget.fileExts.contains('mp4')
               ? 'Videos'
               : 'Others';
-      final localPath = '/data/storage/el2/base/$mediaType/${file.name}';
+      final localPath = '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/$mediaType/${file.name}';
       await _client!.read2File(
         file.path!,
         localPath,
