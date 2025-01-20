@@ -23,9 +23,10 @@ import common from '@ohos.app.ability.common';
 import { media } from '@kit.MediaKit';
 import { EventChannel } from '@ohos/flutter_ohos';
 import { GlobalContext } from './util/GlobalContext';
+import { BusinessError } from '@ohos.base';
 import { window } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
-
+import { avSession } from '@kit.AVSessionKit';
 const TAG: string = "VideoPlayerApiImpl";
 export class VideoPlayerApiImpl {
   private videoPlayers: HashMap<String, VideoPlayer> = new HashMap<String, VideoPlayer>();
@@ -33,6 +34,7 @@ export class VideoPlayerApiImpl {
   private binding: AbilityPluginBinding | null = null;
   private AudioFocus: Boolean = false;
   private pixelMaps: HashMap<string, image.PixelMap> = new HashMap();
+  private latestAVSession: avSession.AVSession | null = null;
 
   constructor(flutterState: FlutterState | null, binding: AbilityPluginBinding | null) {
     this.flutterState = flutterState;
@@ -129,15 +131,32 @@ export class VideoPlayerApiImpl {
       let videoPlayer = new VideoPlayer(playerModel, surfaceTextureEntry, rawFileDescriptor, null, eventChannel, this.AudioFocus, null);
       await videoPlayer.createAVPlayer();
       // if(videoPlayer.avPlayer!=null)
-      //   videoPlayer.setAVPlayerCallback(videoPlayer.avPlayer);
-      // videoPlayer.createSession();
+      // videoPlayer.setAVPlayerCallback();
+      try {
+        if(this.latestAVSession!=null)
+          await this.latestAVSession.destroy();
+        console.info('Destroy : SUCCESS ');
+        this.latestAVSession = null;
+      } catch (err) {
+        console.error(`Destroy BusinessError: code: ${err.code}, message: ${err.message}`);
+      }
+      this.latestAVSession = await videoPlayer.createSession();
       this.videoPlayers.set(textureId.toString(), videoPlayer);
     } else if (uri != null) {
       let videoPlayer = new VideoPlayer(playerModel, surfaceTextureEntry, null, uri, eventChannel, this.AudioFocus, header);
       await videoPlayer.createAVPlayer();
       // if(videoPlayer.avPlayer!=null)
-      //   videoPlayer.setAVPlayerCallback(videoPlayer.avPlayer);
-      // videoPlayer.createSession();
+      // videoPlayer.setAVPlayerCallback();
+      try {
+        if(this.latestAVSession!=null)
+          await this.latestAVSession.destroy();
+        console.info('Destroy : SUCCESS ');
+        this.latestAVSession = null;
+      } catch (err) {
+        console.error(`Destroy BusinessError: code: ${err.code}, message: ${err.message}`);
+      }
+
+      this.latestAVSession = await videoPlayer.createSession();
       this.videoPlayers.set(textureId.toString(), videoPlayer);
     }
 

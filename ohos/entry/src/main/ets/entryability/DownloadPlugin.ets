@@ -31,6 +31,8 @@ import { EventSink } from '@ohos/flutter_ohos/src/main/ets/plugin/common/EventCh
 import { picker } from '@kit.CoreFileKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { common , Want } from '@kit.AbilityKit';
+import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
+ import { wantAgent, WantAgent } from '@kit.AbilityKit';
 const TAG = "DownloadPluginTag";
 
 export default class DownloadPlugin implements FlutterPlugin {
@@ -49,6 +51,9 @@ export default class DownloadPlugin implements FlutterPlugin {
             break;
           case "openFileManager":
             that.api.openFileManager(result);
+            break;
+          case "startBgTask":
+            that.api.startBgTask(result);
             break;
           case "callEvent":
             that.eventSink?.success("Success at " + new Date());
@@ -123,5 +128,43 @@ class DownloadApi {
       result.error("UNAVAILABLE", "Download level not available.", null)
     }
     Log.i(TAG, "openFileManager finish");
+  }
+  startBgTask(result: MethodResult) {
+    let context = getContext(this) as common.UIAbilityContext;
+    let uri = 'Start BG Task.';
+    let wantAgentInfo: wantAgent.WantAgentInfo = {
+      // 点击通知后，将要执行的动作列表
+      // 添加需要被拉起应用的bundleName和abilityName
+    wants: [
+        {
+          bundleName: "com.aloereed.aloeplayer",
+          abilityName: "com.aloereed.aloeplayer.EntryAbility"
+        }
+      ],
+      // 指定点击通知栏消息后的动作是拉起ability
+      actionType: wantAgent.OperationType.START_ABILITY,
+      // 使用者自定义的一个私有值
+      requestCode: 0,
+      // 点击通知后，动作执行属性
+      wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+    };
+    // 通过wantAgent模块下getWantAgent方法获取WantAgent对象
+    wantAgent.getWantAgent(wantAgentInfo).then((wantAgentObj: WantAgent) => {
+      backgroundTaskManager.startBackgroundRunning(context,
+        backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK, wantAgentObj).then(() => {
+        console.info(`Succeeded in operationing startBackgroundRunning.`);
+      }).catch((err: BusinessError) => {
+        console.error(`Failed to operation startBackgroundRunning. Code is ${err.code}, message is ${err.message}`);
+      });
+    });
+    let wrapped: Map<String, Any> = new Map<String, Any>();
+    if (uri != null) {
+      result.success(uri);
+    } else {
+      Log.i(TAG, "startBgTask else");
+      wrapped.set("UNAVAILABLE", "Download level not available.");
+      result.error("UNAVAILABLE", "Download level not available.", null)
+    }
+    Log.i(TAG, "startBgTask finish");
   }
 }

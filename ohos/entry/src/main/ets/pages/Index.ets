@@ -25,6 +25,7 @@ struct Index {
   private context = getContext(this) as common.UIAbilityContext
   @LocalStorageLink('viewId') viewId: string = "";
 
+
   build() {
     Column() {
       FlutterPage({ viewId: this.viewId })

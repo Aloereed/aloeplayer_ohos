@@ -441,6 +441,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
 
     _textureId = (await _videoPlayerPlatform.create(dataSourceDescription)) ??
         kUninitializedTextureId;
+    print('textureId: $_textureId');
     _creatingCompleter!.complete(null);
     final Completer<void> initializingCompleter = Completer<void>();
 
@@ -503,6 +504,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     _eventSubscription = _videoPlayerPlatform
         .videoEventsFor(_textureId)
         .listen(eventListener, onError: errorListener);
+    print('eventSubscription: $_eventSubscription');
     return initializingCompleter.future;
   }
 

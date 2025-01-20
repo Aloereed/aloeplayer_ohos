@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-13 17:22:53
+ * @LastEditTime: 2025-01-20 13:29:45
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,8 +11,10 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'theme_provider.dart'; // 假设你已经有一个ThemeProvider
 import 'package:url_launcher/url_launcher.dart';
+
 class SettingsService {
   static const String _fontSizeKey = 'subtitle_font_size';
+  static const String _backgroundPlayKey = 'background_play';
 
   Future<void> saveSubtitleFontSize(double fontSize) async {
     final prefs = await SharedPreferences.getInstance();
@@ -23,9 +25,17 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble(_fontSizeKey) ?? 18.0; // 默认值为18
   }
+
+  Future<void> saveBackgroundPlay(bool backgroundPlay) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_backgroundPlayKey, backgroundPlay);
+  }
+
+  Future<bool> getBackgroundPlay() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_backgroundPlayKey) ?? true; // 默认值为true
+  }
 }
-
-
 
 class SettingsTab extends StatefulWidget {
   @override
@@ -34,18 +44,28 @@ class SettingsTab extends StatefulWidget {
 
 class _SettingsTabState extends State<SettingsTab> {
   double _subtitleFontSize = 18.0;
+  late Future<bool> _backgroundPlayFuture;
   final SettingsService _settingsService = SettingsService();
 
   @override
   void initState() {
     super.initState();
     _loadSubtitleFontSize();
+    _backgroundPlayFuture = _settingsService.getBackgroundPlay();
   }
 
   Future<void> _loadSubtitleFontSize() async {
     final fontSize = await _settingsService.getSubtitleFontSize();
     setState(() {
       _subtitleFontSize = fontSize;
+    });
+  }
+
+  void _updateBackgroundPlay(bool value) async {
+    await _settingsService.saveBackgroundPlay(value);
+    setState(() {
+      // 重新触发 FutureBuilder 的 future
+      _backgroundPlayFuture = _settingsService.getBackgroundPlay();
     });
   }
 
@@ -104,8 +124,8 @@ class _SettingsTabState extends State<SettingsTab> {
               value: _subtitleFontSize.toInt(),
               items: List.generate(10, (index) {
                 return DropdownMenuItem<int>(
-                  value: 18 + 3*index,
-                  child: Text('${18 + 3*index}'),
+                  value: 18 + 3 * index,
+                  child: Text('${18 + 3 * index}'),
                 );
               }),
               onChanged: (int? value) {
@@ -114,6 +134,27 @@ class _SettingsTabState extends State<SettingsTab> {
                     _subtitleFontSize = value * 1.0;
                   });
                   _settingsService.saveSubtitleFontSize(value.toDouble());
+                }
+              },
+            ),
+          ),
+          // 添加一个设置，是否默认后台播放(使用_settingsService)
+          ListTile(
+            title: Text('默认后台播放'),
+            subtitle: Text('默认情况下，播放器可以在后台播放音频。设置后新播放有效。'),
+            trailing: FutureBuilder<bool>(
+              future: _backgroundPlayFuture,
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Switch(
+                    value: snapshot.data!,
+                    onChanged: _updateBackgroundPlay,
+                    activeColor: Colors.blue, // 设置滑块的颜色为蓝色
+                    activeTrackColor:
+                        Colors.blue.withOpacity(0.5), // 设置滑轨的颜色为半透明蓝色
+                  );
+                } else {
+                  return const CircularProgressIndicator();
                 }
               },
             ),
@@ -130,7 +171,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 SizedBox(height: 8),
                 Text('AloePlayer'),
                 SizedBox(height: 4),
-                Text('版本号: 0.9.6。 本版本默认使用下载文件夹作为库存储位置（请确保给予权限）。'),
+                Text('版本号: 0.9.8。 本版本默认全屏横屏、添加后台播放和系统集成、调节系统亮度和音量。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),
@@ -153,7 +194,8 @@ class _SettingsTabState extends State<SettingsTab> {
                 GestureDetector(
                   onTap: () async {
                     await launchUrl(
-                      Uri.parse('https://aloereed.com/aloeplayer/privacy-statement.html'),
+                      Uri.parse(
+                          'https://aloereed.com/aloeplayer/privacy-statement.html'),
                       mode: LaunchMode.externalApplication,
                     );
                   },
@@ -170,13 +212,13 @@ class _SettingsTabState extends State<SettingsTab> {
                 SizedBox(height: 8),
                 Text('1. 长按: 三倍速播放'),
                 SizedBox(height: 4),
-                Text('2. 双击播放界面左侧或右侧: 快退、快进10秒，或者使用左右滑动来快退、快进'),
+                Text('2. 双击播放界面左侧、右侧、中间: 快退、快进10秒、全屏，或者使用左右滑动来快退、快进'),
                 SizedBox(height: 4),
-                Text('3. 上下滑动: 增减音量，右下角全屏按钮不启用手势，双击视频中间以使用可使用手势的全屏'),
+                Text('3. 上下滑动: 靠左侧增减亮度，靠右侧增减音量，'),
                 SizedBox(height: 4),
                 Text('4. 添加媒体进入音频库或视频库需要时间。较大的文件不建议加入媒体库。如果长时间没反应可以再次尝试。'),
                 SizedBox(height: 4),
-                Text('5. 长按媒体控制的音量按钮可以切换静音。'),
+                Text('5. 点击媒体控制的音量按钮可以切换静音。'),
                 SizedBox(height: 4),
                 Text('6. 添加字幕文件后，请在右上角打开“CC”。'),
                 SizedBox(height: 4),

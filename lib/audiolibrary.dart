@@ -224,19 +224,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
 
   // 获取音频时长
   Future<Duration> _getAudioDuration(File file) async {
-    // 使用videoplayer获取时长
-    final videoPlayerController = VideoPlayerController.file(file);
-
-    // 初始化控制器
-    await videoPlayerController.initialize();
-
-    // 获取视频时长
-    final duration = videoPlayerController.value.duration;
-
-    // 释放控制器资源
-    videoPlayerController.dispose();
-
-    return duration;
+    final metadata = readMetadata(file, getImage: false);
+    return metadata.duration??Duration.zero;
   }
 
   // 获取文件大小

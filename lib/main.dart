@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-19 20:31:18
+ * @LastEditTime: 2025-01-20 13:13:26
  * @Description: file content
  */
 /*
@@ -263,6 +263,8 @@ class _HomeScreenState extends State<HomeScreen>
 // 调用方法 getBatteryLevel
       final result =
           await _platform.invokeMethod<String>('getDownloadPermission');
+      final result2 =
+          await _platform.invokeMethod<String>('startBgTask');
     }
   }
 
@@ -510,7 +512,7 @@ class _PlayerTabState extends State<PlayerTab>
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       _checkAndOpenUriFile();
     });
-    _setupAudioSession();
+    // _setupAudioSession();
     _animeController = AnimationController(
       vsync: this,
       duration: Duration(seconds: 8),
@@ -723,7 +725,7 @@ class _PlayerTabState extends State<PlayerTab>
           ),
           OptionItem(
             onTap: () async {
-              double nextVolume = _systemVolume ;
+              double nextVolume = _systemVolume + 0.01;
 
 // 确保音量不超过最大音量
               if (nextVolume > _systemMaxVolume) {
@@ -793,11 +795,12 @@ class _PlayerTabState extends State<PlayerTab>
     if (uri.startsWith('/Photo')) {
       uri = 'file://media' + uri;
     }
+    bool isBgPlay = await _settingsService.getBackgroundPlay();
     if (uri.contains(':')) {
       if (_videoController != null) {
         _videoController?.dispose();
       }
-      _videoController = VideoPlayerController.network(uri)
+      _videoController = VideoPlayerController.network(uri,videoPlayerOptions: VideoPlayerOptions(allowBackgroundPlayback: isBgPlay))
         ..initialize().then((_) {
           setState(() {
             _totalDuration = _videoController!.value.duration;
@@ -818,7 +821,7 @@ class _PlayerTabState extends State<PlayerTab>
         Wakelock.enable();
         return;
       }
-      _videoController = VideoPlayerController.file(File(uri))
+      _videoController = VideoPlayerController.file(File(uri),videoPlayerOptions: VideoPlayerOptions(allowBackgroundPlayback: isBgPlay))
         ..initialize().then((_) {
           setState(() {
             _totalDuration = _videoController!.value.duration;
