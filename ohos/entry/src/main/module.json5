@@ -49,6 +49,16 @@
                 type: "general.video",
                 "linkFeature": "FileOpen" ,
               },
+              {
+                scheme: "file",
+                type: "general.audio",
+                "maxFileSupported": 1
+              },
+              {
+                scheme: "file",
+                type: "general.video",
+                "maxFileSupported": 1
+              },
             ],
           },
         ],

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chewie/src/chewie_player.dart';
 import 'package:chewie/src/helpers/adaptive_controls.dart';
 import 'package:chewie/src/notifiers/index.dart';
@@ -7,6 +9,23 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:video_player/video_player.dart';
 import 'package:screen/screen.dart';
 
+class BrightnessSliderTimer {
+  Timer? _timer;
+  final VoidCallback onTimerEnd;
+
+  BrightnessSliderTimer({required this.onTimerEnd});
+
+  void startTimer() {
+    _timer?.cancel(); // 取消之前的 Timer
+    _timer = Timer(Duration(seconds: 5), () {
+      onTimerEnd(); // 5 秒后执行回调
+    });
+  }
+
+  void cancelTimer() {
+    _timer?.cancel();
+  }
+}
 
 class PlayerWithControls extends StatefulWidget {
   @override
@@ -15,13 +34,33 @@ class PlayerWithControls extends StatefulWidget {
 
 class _PlayerWithControlsState extends State<PlayerWithControls> {
   final Stream<double?> brightnessStream = _createBrightnessStream();
-
+  bool showBrightnessSlider = false;
   static Stream<double?> _createBrightnessStream() async* {
     while (true) {
       yield await Screen.brightness;
       await Future.delayed(Duration(milliseconds: 100)); // 每隔 1 秒更新一次
     }
   }
+
+  BrightnessSliderTimer? _brightnessSliderTimer;
+  @override
+  void initState() {
+    super.initState();
+    _brightnessSliderTimer = BrightnessSliderTimer(
+      onTimerEnd: () {
+        setState(() {
+          showBrightnessSlider = false;
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _brightnessSliderTimer?.cancelTimer();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final ChewieController chewieController = ChewieController.of(context);
@@ -236,10 +275,17 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                       fontSize: 16.0,
                     );
                     // 显示音量滑块
+                    // setState(() {
+                    //   chewieController.showBrightnessSlider = true;
+                    // });
+                    // chewieController.startBrightnessSliderTimer();
+                    // 显示亮度滑块
                     setState(() {
-                      chewieController.showBrightnessSlider = true;
+                      showBrightnessSlider = true;
                     });
-                    chewieController.startBrightnessSliderTimer();
+
+                    // 启动计时器
+                    _brightnessSliderTimer?.startTimer();
                   } else if (touchX > (2 * screenWidth / 3)) {
                     // 右侧 1/3 区域：调整音量
                     double delta = details.primaryDelta ?? 0;
@@ -255,12 +301,13 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                     }
 
                     // 设置音量
-                    double nextVolume = chewieController.setSystemVolume!(_volume);
+                    double nextVolume =
+                        chewieController.setSystemVolume!(_volume);
                     // VolumeViewController volumeViewController = VolumeViewController();
                     // volumeExample.getController()?.sendMessageToOhosView('0.0');
                     // 显示音量变化提示
                     Fluttertoast.showToast(
-                      msg: '音量: ${(nextVolume/15 * 100).toStringAsFixed(0)}%',
+                      msg: '音量: ${(nextVolume / 15 * 100).toStringAsFixed(0)}%',
                       toastLength: Toast.LENGTH_SHORT,
                       gravity: ToastGravity.CENTER,
                       timeInSecForIosWeb: 1,
@@ -278,7 +325,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                 },
                 child: Stack(children: [
                   buildPlayerWithControls(chewieController, context),
-                  if (false&&chewieController.showVolumeSlider)
+                  if (false && chewieController.showVolumeSlider)
                     Positioned(
                       bottom: 100, // 悬浮在音量按钮上方
                       right: 20, // 靠近音量按钮
@@ -313,7 +360,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                         ),
                       ),
                     ),
-                  if (chewieController.showBrightnessSlider)
+                  if (showBrightnessSlider)
                     Positioned(
                       bottom: 100, // 悬浮在按钮上方
                       left: 20, // 靠近音量按钮
@@ -335,7 +382,8 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                               overlayShape: RoundSliderOverlayShape(
                                   overlayRadius: 12), // 调整滑块点击区域大小
                             ),
-                            child: BrightnessSlider(brightnessStream: brightnessStream),
+                            child: BrightnessSlider(
+                                brightnessStream: brightnessStream),
                           ),
                         ),
                       ),

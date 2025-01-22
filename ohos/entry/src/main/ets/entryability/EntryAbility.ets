@@ -47,10 +47,13 @@ function createFile(openuri : string): void {
 
 export default class EntryAbility extends FlutterAbility {
 
+  private  myDownloadPlugin?:DownloadPlugin;
+
   configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
     GeneratedPluginRegistrant.registerWith(flutterEngine)
-    this.addPlugin(new DownloadPlugin());
+    this.myDownloadPlugin = new DownloadPlugin();
+    this.addPlugin(this.myDownloadPlugin);
     this.addPlugin(new VolumePlugin());
     this.addPlugin(new FfmpegPlugin());
   }
@@ -61,7 +64,8 @@ export default class EntryAbility extends FlutterAbility {
             return;
         } 
         else
-          createFile(uri); 
+          this.myDownloadPlugin?.sendWant(uri);
+          // createFile(uri); 
       } 
   async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam) {      
         super.onCreate(want, launchParam);   
@@ -70,7 +74,9 @@ export default class EntryAbility extends FlutterAbility {
             console.info('The length of str');
             return;
         } 
-        else
+        else{
           createFile(uri); 
+          this.myDownloadPlugin?.sendWant(uri);
+        }
       } 
 }

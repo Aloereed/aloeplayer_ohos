@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-22 15:08:05
+ * @LastEditTime: 2025-01-22 20:34:43
  * @Description: file content
  */
 /*
@@ -417,11 +417,13 @@ class MyAudioHandler extends BaseAudioHandler {
   }
 }
 
+
+
 class PlayerTab extends StatefulWidget {
   final VoidCallback toggleFullScreen;
   final bool isFullScreen;
   final Function(String) getopenfile;
-  final String openfile;
+  String openfile;
 
   PlayerTab(
       {Key? key, // 定义Key参数,
@@ -450,6 +452,7 @@ class _PlayerTabState extends State<PlayerTab>
   double _lastVolume = 1.0;
   bool _isMirrored = false;
   bool _isAudio = true;
+  bool wantFirst = false;
   bool _showVolumeSlider = false;
   Timer? _volumeSliderTimer;
   Timer? _timer;
@@ -466,6 +469,9 @@ class _PlayerTabState extends State<PlayerTab>
   String receivedData = '';
   VolumeViewController? _volumeController;
   VolumeExample? _volumeExample;
+  List<SubtitleData> _subtitles = []; // 存储所有字幕
+  int _currentSubtitleIndex = -1; // 当前启用的字幕索引
+  final EventChannel _eventChannel2 = EventChannel('com.example.app/events');
   final EventChannel _eventChannel =
       EventChannel('samples.flutter.dev/volumepluginevent');
   Future<void> _setupAudioSession() async {
@@ -499,18 +505,31 @@ class _PlayerTabState extends State<PlayerTab>
       });
     });
   }
+  
+  void _onEventOpenuri(dynamic event) {
+    if (event is String && event.isNotEmpty) {
+      _openUri(event); // 打开URI
+      setState(() {
+        widget.openfile = event;
+      });
+    }
+  }
 
+  void _onErrorOpenuri(Object error) {
+    print('Error receiving event: $error');
+  }
   @override
   void initState() async {
     super.initState();
     _checkAndOpenUriFile(); // 添加文件检查逻辑
-    if (widget.openfile.isNotEmpty) {
-      _openUri(widget.openfile);
-    }
-    // 启动定时器，每秒执行一次
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
-      _checkAndOpenUriFile();
-    });
+    // if (widget.openfile.isNotEmpty) {
+    //   _openUri(widget.openfile);
+    // }
+    // // 启动定时器，每秒执行一次
+    // _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+    //   _checkAndOpenUriFile();
+    // });
+    _eventChannel2.receiveBroadcastStream().listen(_onEventOpenuri, onError: _onErrorOpenuri);
     // _setupAudioSession();
     _animeController = AnimationController(
       vsync: this,
@@ -541,7 +560,8 @@ class _PlayerTabState extends State<PlayerTab>
   void didUpdateWidget(PlayerTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.openfile != oldWidget.openfile && widget.openfile.isNotEmpty) {
-      _openUri(widget.openfile);
+      _openUri(widget.openfile,wantFirst: wantFirst);
+      wantFirst=false;
     }
   }
 
@@ -552,8 +572,14 @@ class _PlayerTabState extends State<PlayerTab>
       if (await file.exists()) {
         final uri = await file.readAsString(); // 读取文件内容
         if (uri.isNotEmpty) {
-          await _openUri(uri); // 打开URI
-          await _openUri(uri); // 打开URI
+          // await _openUri(uri,wantFirst: true); // 打开URI
+          // await _openUri(uri,wantFirst: true); // 打开URI
+          wantFirst=true;
+          widget.getopenfile(uri);
+          // setState(() {
+          //   widget.openfile = uri;
+          // });
+          
         }
         await file.delete(); // 删除文件
       }
@@ -659,7 +685,12 @@ class _PlayerTabState extends State<PlayerTab>
           OptionItem(
             onTap: () => _openSRT(),
             iconData: Icons.subtitles,
-            title: '选择字幕文件',
+            title: '打开字幕文件',
+          ),
+          OptionItem(
+            onTap: () => _selectSubtitle(),
+            iconData: Icons.subtitles_sharp,
+            title: '选择字幕轨道',
           ),
           OptionItem(
             onTap: () {
@@ -742,7 +773,8 @@ class _PlayerTabState extends State<PlayerTab>
 
     // 构造文件目录
     String directoryPath = '/data/storage/el2/base/haps/entry/cache/';
-    await Future.delayed(Duration(seconds: 3));
+    await Future.delayed(Duration(seconds: 2));
+
     // 尝试读取文件
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
@@ -760,7 +792,8 @@ class _PlayerTabState extends State<PlayerTab>
           return (name.startsWith(fileName) &&
               (name.endsWith('.ass') || name.endsWith('.srt')));
         }).toList();
-        // 遍历print匹配文件
+
+        // 遍历并打印匹配文件
         if (matchingFiles.isNotEmpty) {
           print('找到 ${matchingFiles.length} 个匹配的文件：');
           for (var file in matchingFiles) {
@@ -770,22 +803,27 @@ class _PlayerTabState extends State<PlayerTab>
           print('未找到匹配的文件。');
         }
 
-        // 如果找到符合条件的文件，加载第一个
+        // 如果找到符合条件的文件，加载所有匹配的字幕
         if (matchingFiles.isNotEmpty) {
-          File file = matchingFiles.first;
-          print("Readfile: " + file.path);
-          String content = await file.readAsString();
+          for (var file in matchingFiles) {
+            String content = await file.readAsString();
 
-          // 如果是 .ass 文件，转换为 .srt 格式
-          if (file.path.endsWith('.ass') && _chewieController != null) {
-            _chewieController!.setSubtitle(await ass2srt(content));
-          } else if (file.path.endsWith('.srt') && _chewieController != null) {
-            _subtitleController =
-                SubtitleController.string(content, format: SubtitleFormat.srt);
+            // 创建字幕数据对象
+            SubtitleData subtitleData = SubtitleData(
+              name: file.path.split('/').last,
+              content: content,
+              extension: file.path.split('.').last,
+            );
 
-            // 将解析后的字幕设置到 ChewieController 中
-            _chewieController!.setSubtitle(
-              _subtitleController!.subtitles
+            // 解析字幕内容
+            if (subtitleData.extension == 'ass') {
+              subtitleData.subtitles = await ass2srt(content);
+            } else if (subtitleData.extension == 'srt') {
+              SubtitleController controller = SubtitleController.string(
+                content,
+                format: SubtitleFormat.srt,
+              );
+              subtitleData.subtitles = controller.subtitles
                   .map(
                     (e) => Subtitle(
                       index: e.number,
@@ -794,9 +832,21 @@ class _PlayerTabState extends State<PlayerTab>
                       text: e.text,
                     ),
                   )
-                  .toList(),
-            );
+                  .toList();
+            }
+
+            // 将字幕添加到列表中
+            _subtitles.add(subtitleData);
           }
+
+          // 如果当前没有启用的字幕，则默认启用第一个匹配的字幕
+          if (_currentSubtitleIndex == -1 && _subtitles.isNotEmpty) {
+            _currentSubtitleIndex = 0;
+            _chewieController!.setSubtitle(_subtitles[0].subtitles!);
+          }
+
+          // 更新 UI
+          setState(() {});
 
           // 文件加载成功，退出循环
           return;
@@ -821,11 +871,17 @@ class _PlayerTabState extends State<PlayerTab>
     return;
   }
 
-  Future<void> _openUri(String uri) async {
+  Future<void> _openUri(String uri, {bool wantFirst = false}) async {
     // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
+    _subtitles.clear();
+    _currentSubtitleIndex = -1;
     coverData = null;
     if (uri.startsWith('/Photo')) {
       uri = 'file://media' + uri;
+    }
+    if(uri.startsWith('file://docs') && !wantFirst){
+      // 删除file://docs并解析unicode码
+      uri = Uri.decodeFull(uri.substring(11));
     }
     bool isBgPlay = await _settingsService.getBackgroundPlay();
     if (uri.contains(':')) {
@@ -869,6 +925,16 @@ class _PlayerTabState extends State<PlayerTab>
           _videoController?.addListener(_updatePlaybackState);
         })
         ..setLooping(_isLooping);
+      String fileName = uri.split('/').last;
+      final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
+      final cacheDir = await getTemporaryDirectory();
+      final directoryPath = cacheDir.path; // 缓存目录路径
+      // 调用方法 getBatteryLevel
+      final result2 = await _platform.invokeMethod<String>('getassold', {
+        "path": uri,
+        "type": "srt",
+        "output": path.join(directoryPath, fileName)
+      });
       if (await _settingsService.getAutoLoadSubtitle() == true) {
         readFileWithRetry(uri);
       }
@@ -926,16 +992,7 @@ class _PlayerTabState extends State<PlayerTab>
     if (result != null) {
       PlatformFile file = result.files.first;
       widget.getopenfile(file.path!);
-      String fileName = file.path!.split('/').last;
-      final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
-      final cacheDir = await getTemporaryDirectory();
-      final directoryPath = cacheDir.path; // 缓存目录路径
-      // 调用方法 getBatteryLevel
-      final result2 = await _platform.invokeMethod<String>('getassold', {
-        "path": file.path,
-        "type": "srt",
-        "output": path.join(directoryPath, fileName)
-      });
+      
     } else {
       // 用户取消了选择
       print('用户取消了文件选择');
@@ -1133,33 +1190,45 @@ class _PlayerTabState extends State<PlayerTab>
       // 读取文件内容
       String fileContent = await File(file.path!).readAsString();
 
-      if (file.extension == 'ass') {
-        _chewieController!.setSubtitle(await ass2srt(fileContent));
-      } else if (file.extension == 'lrc') {
-        _chewieController!.setSubtitle(parseLrcToSubtitles(fileContent));
+      // 创建字幕数据对象
+      SubtitleData subtitleData = SubtitleData(
+        name: file.name,
+        content: fileContent,
+        extension: file.extension ?? 'srt', // 默认扩展名
+      );
+
+      // 解析字幕内容
+      if (subtitleData.extension == 'ass') {
+        subtitleData.subtitles = await ass2srt(fileContent);
+      } else if (subtitleData.extension == 'lrc') {
+        subtitleData.subtitles = parseLrcToSubtitles(fileContent);
       } else {
-        // 根据文件扩展名选择字幕格式
-        SubtitleFormat format = file.extension == 'srt'
+        SubtitleFormat format = subtitleData.extension == 'srt'
             ? SubtitleFormat.srt
             : SubtitleFormat.webvtt;
-
-        // 解析字幕内容
-        _subtitleController =
-            SubtitleController.string(fileContent, format: format);
-
-        // 将解析后的字幕设置到 ChewieController 中
-        _chewieController!.setSubtitle(
-          _subtitleController!.subtitles
-              .map(
-                (e) => Subtitle(
-                  index: e.number,
-                  start: Duration(milliseconds: e.start),
-                  end: Duration(milliseconds: e.end),
-                  text: e.text,
-                ),
-              )
-              .toList(),
+        SubtitleController controller = SubtitleController.string(
+          fileContent,
+          format: format,
         );
+        subtitleData.subtitles = controller.subtitles
+            .map(
+              (e) => Subtitle(
+                index: e.number,
+                start: Duration(milliseconds: e.start),
+                end: Duration(milliseconds: e.end),
+                text: e.text,
+              ),
+            )
+            .toList();
+      }
+
+      // 将字幕添加到列表中
+      _subtitles.add(subtitleData);
+
+      // 如果当前没有启用的字幕，则默认启用新添加的字幕
+      if (_currentSubtitleIndex == -1) {
+        _currentSubtitleIndex = _subtitles.length - 1;
+        _chewieController!.setSubtitle(subtitleData.subtitles!);
       }
 
       // 更新 UI
@@ -1167,6 +1236,44 @@ class _PlayerTabState extends State<PlayerTab>
     } else {
       // 用户取消了选择
       print('用户取消了文件选择');
+    }
+  }
+
+  Future<void> _selectSubtitle() async {
+    if (_subtitles.isEmpty) {
+      print('没有可用的字幕');
+      Fluttertoast.showToast(msg: '没有可用的字幕');
+      return;
+    }
+
+    // 显示字幕选择对话框
+    int? selectedIndex = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('选择字幕轨道'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: _subtitles
+                .asMap()
+                .entries
+                .map(
+                  (entry) => ListTile(
+                    title: Text(entry.value.name),
+                    onTap: () => Navigator.pop(context, entry.key),
+                  ),
+                )
+                .toList(),
+          ),
+        );
+      },
+    );
+
+    // 如果用户选择了字幕
+    if (selectedIndex != null) {
+      _currentSubtitleIndex = selectedIndex;
+      _chewieController!.setSubtitle(_subtitles[selectedIndex].subtitles!);
+      setState(() {});
     }
   }
 
@@ -1841,19 +1948,31 @@ class _SubtitleBuilderState extends State<SubtitleBuilder> {
   Widget _buildSubtitle(double fontSize) {
     return Container(
       padding: const EdgeInsets.all(10.0),
-      child: Text(
-        widget.subtitle,
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: fontSize,
-          shadows: [
-            const Shadow(
-              color: Colors.black,
-              blurRadius: 1.0,
-              offset: Offset(1.0, 1.0),
+      alignment: Alignment.center, // 使文本居中
+      child: Stack(
+        children: [
+          // 四周黑边描边效果
+          Text(
+            widget.subtitle,
+            textAlign: TextAlign.center, // 文本居中
+            style: TextStyle(
+              fontSize: fontSize,
+              foreground: Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.5 // 描边宽度
+                ..color = Colors.black,
             ),
-          ],
-        ),
+          ),
+          // 实际文本
+          Text(
+            widget.subtitle,
+            textAlign: TextAlign.center, // 文本居中
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: fontSize,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1861,8 +1980,10 @@ class _SubtitleBuilderState extends State<SubtitleBuilder> {
   Widget _buildErrorSubtitle() {
     return Container(
       padding: const EdgeInsets.all(10.0),
+      alignment: Alignment.center, // 使文本居中
       child: Text(
         '加载字体大小失败',
+        textAlign: TextAlign.center, // 文本居中
         style: const TextStyle(
           color: Colors.red,
           fontSize: 18,
@@ -1870,4 +1991,18 @@ class _SubtitleBuilderState extends State<SubtitleBuilder> {
       ),
     );
   }
+}
+
+class SubtitleData {
+  final String name; // 字幕名称（文件名）
+  final String content; // 字幕内容
+  final String extension; // 文件扩展名
+  List<Subtitle>? subtitles; // 解析后的字幕列表
+
+  SubtitleData({
+    required this.name,
+    required this.content,
+    required this.extension,
+    this.subtitles,
+  });
 }

@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-22 14:29:06
+ * @LastEditTime: 2025-01-22 19:16:30
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
@@ -58,7 +58,7 @@ class SettingsService {
 
   Future<bool> getExtractAssSubtitle() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_extractAssSubtitleKey) ?? true; // 默认值为true
+    return prefs.getBool(_extractAssSubtitleKey) ?? false; // 默认值为false
   }
   // 清除缓存 递归删除“/data/storage/el2/base/haps/entry/cache/”下的所有文件
 
@@ -85,12 +85,12 @@ class SettingsService {
       }
 
       // 最后删除根目录
-      try {
-        await directory.delete(recursive: true);
-        print('Deleted root directory: ${directory.path}');
-      } catch (e) {
-        print('Failed to delete root directory: ${directory.path}, error: $e');
-      }
+      // try {
+      //   await directory.delete(recursive: true);
+      //   print('Deleted root directory: ${directory.path}');
+      // } catch (e) {
+      //   print('Failed to delete root directory: ${directory.path}, error: $e');
+      // }
     } else {
       print('Directory does not exist: ${directory.path}');
     }
@@ -98,8 +98,8 @@ class SettingsService {
 
 // 调用方法
   Future<void> clearCache() async {
-    const cachePath = '/data/storage/el2/base/haps/entry/cache/';
-    await deleteCacheDirectory(cachePath);
+    // const cachePath = '/data/storage/el2/base/haps/entry/cache/';
+    // await deleteCacheDirectory(cachePath);
     final cacheDir = await getTemporaryDirectory();
     final directoryPath = cacheDir.path; // 缓存目录路径
     await deleteCacheDirectory(directoryPath);

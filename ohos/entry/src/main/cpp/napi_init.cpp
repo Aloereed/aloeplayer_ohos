@@ -15,6 +15,7 @@ extern "C" {
 
 #include <iostream>
 #include <fstream>
+#include <regex>
 #include <vector>
 #include <map>
 #include <streambuf>
@@ -93,9 +94,9 @@ std::string generate_filename(const AVStream *stream, const std::string &base) {
     // 获取语言元数据
     AVDictionaryEntry *lang_tag = av_dict_get(stream->metadata, "language", nullptr, 0);
     if (lang_tag && lang_tag->value) {
-        ss << lang_tag->value;
+        ss << lang_tag->value << "_" << stream->index; // 添加语言和流索引
     } else {
-        ss << "stream_" << stream->index;
+        ss << "stream_" << stream->index; // 如果没有语言信息，只使用流索引
     }
     ss << ".srt";
     return ss.str();
@@ -143,7 +144,7 @@ std::vector<std::string> split_ignore_escaped(const std::string &str, char delim
 
 // 辅助函数：合并相邻字幕
 void merge_adjacent_subtitles(std::vector<SubtitleInfo> &subs) {
-    for (size_t i = 0; i + 1 < subs.size(); ) {
+    for (size_t i = 0; i + 1 < subs.size();) {
         if (subs[i].start == subs[i + 1].start) {
             // 合并文本
             subs[i].text += "\n" + subs[i + 1].text;
@@ -159,7 +160,7 @@ void merge_adjacent_subtitles(std::vector<SubtitleInfo> &subs) {
 
 int extract_subtitle(int argc, char *argv[]) {
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <input_video>" << " <output_prefix>"<< std::endl;
+        std::cerr << "Usage: " << argv[0] << " <input_video>" << " <output_prefix>" << std::endl;
         return 1;
     }
     // redirectStdOutAndStdErr();
@@ -357,9 +358,16 @@ int extract_subtitle(int argc, char *argv[]) {
         // 处理文本中的逗号
         for (auto &sub : subs) {
             std::vector<std::string> tokens = split_ignore_escaped(sub.text, ',');
-            if (tokens.size() >= 8) {
-                // 只取最后一项作为文本
-                sub.text = tokens.back();
+            if (tokens.size() >= 9) { // 至少有 8 个逗号（9 个部分）
+                // 拼接第 8 个逗号之后的所有部分
+                sub.text.clear();
+                for (size_t i = 8; i < tokens.size(); ++i) { // 从第 9 个部分开始
+                    if (i > 8) {
+                        sub.text += ","; // 添加逗号分隔符
+                    }
+                    sub.text += tokens[i];
+                }
+
                 // 处理转义逗号
                 size_t pos = 0;
                 while ((pos = sub.text.find("\\,", pos)) != std::string::npos) {
@@ -367,7 +375,16 @@ int extract_subtitle(int argc, char *argv[]) {
                     pos += 1;
                 }
             }
+
+            // 查找 "}" 并删除包括它自己在内的左边所有字符
+            size_t bracePos = sub.text.find('}');
+            if (bracePos != std::string::npos) {
+                sub.text.erase(0, bracePos + 1); // 删除从开头到 "}" 的所有字符
+            }
+            std::regex bracePattern("\\{.*?\\}");
+            sub.text = std::regex_replace(sub.text, bracePattern, "");
         }
+
 
         // 合并相邻字幕
         merge_adjacent_subtitles(subs);
@@ -475,7 +492,8 @@ void parseCommandLine(const std::string &input, int &argc, char **&argv) {
 
 //     napi_get_value_string_utf8(env, args[0], nullptr, 0, &typeLen);
 
-//     // napi_get_value_string_utf8（env，数组对象，char，缓存长度，获取的长度）主要作用是通过缓存复制的方法，将对象转换为char，复制到缓存中，获取长度
+//     //
+//     napi_get_value_string_utf8（env，数组对象，char，缓存长度，获取的长度）主要作用是通过缓存复制的方法，将对象转换为char，复制到缓存中，获取长度
 
 //     str = new char[typeLen + 1];
 
@@ -553,7 +571,8 @@ void parseCommandLine(const std::string &input, int &argc, char **&argv) {
 // EXTERN_C_START
 // static napi_value Init(napi_env env, napi_value exports) {
 //     napi_property_descriptor desc[] = {{"add", nullptr, Add, nullptr, nullptr, nullptr, napi_default, nullptr},
-//                                        {"getsrt", nullptr, Getsrt, nullptr, nullptr, nullptr, napi_default, nullptr}};
+//                                        {"getsrt", nullptr, Getsrt, nullptr, nullptr, nullptr, napi_default,
+//                                        nullptr}};
 //     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
 //     return exports;
 // }
