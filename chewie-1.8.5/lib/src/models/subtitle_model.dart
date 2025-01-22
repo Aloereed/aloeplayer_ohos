@@ -1,3 +1,10 @@
+/*
+ * @Author: 
+ * @Date: 2025-01-17 17:30:36
+ * @LastEditors: 
+ * @LastEditTime: 2025-01-22 10:26:13
+ * @Description: file content
+ */
 class Subtitles {
   Subtitles(this.subtitle);
 
@@ -39,10 +46,11 @@ class Subtitle {
     );
   }
 
-  final int index;
-  final Duration start;
-  final Duration end;
-  final dynamic text;
+  int index;
+  Duration start;
+  Duration end;
+  dynamic text;
+
 
   @override
   String toString() {

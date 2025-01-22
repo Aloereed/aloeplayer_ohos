@@ -13,6 +13,7 @@ import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'package:media_info/media_info.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'webdav.dart';
+import 'settings.dart';
 
 class VideoLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
@@ -32,7 +33,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
   List<File> _filteredVideoFiles = []; // 用于存储过滤后的视频文件
   String _searchQuery = ''; // 搜索框的内容
   bool _isGridView = true; // 默认显示Grid视图
-
+  final SettingsService _settingsService = SettingsService();
+  bool isFFmpeged = false;
   @override
   void initState() {
     super.initState();
@@ -61,7 +63,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
         // 获取文件扩展名
         String extension = path.extension(file.path).toLowerCase();
         // 排除 .srt 和 .ass 文件
-        return extension != '.srt' && extension != '.ass';
+        return extension != '.srt' &&
+            extension != '.ass' &&
+            !file.path.contains('.ux_store');
       }).toList();
     }
 
@@ -72,7 +76,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
         // 获取文件扩展名
         String extension = path.extension(file.path).toLowerCase();
         // 排除 .srt 和 .ass 文件
-        return extension != '.srt' && extension != '.ass';
+        return extension != '.srt' &&
+            extension != '.ass' &&
+            extension != '.ux_store';
       }).toList();
     }
 
@@ -455,6 +461,70 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
           builder: (context) {
             return Wrap(
               children: [
+                // 转换为MP4到库文件夹
+                ListTile(
+                  leading: Icon(Icons.file_download, color: Colors.grey),
+                  title: Text('转换为MP4'),
+                  enabled: !isFFmpeged,
+                  onTap: () {
+                    Navigator.pop(context); // 关闭弹窗
+                    showDialog(
+                      context: context,
+                      builder: (context) {
+                        return AlertDialog(
+                          title: Text('转换为MP4'),
+                          content: Text('确定要转换该视频为MP4格式吗？'),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(context); // 关闭对话框
+                              },
+                              child: Text('取消',
+                                  style: TextStyle(color: Colors.red)),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.pop(context); // 关闭对话框
+                                final _platform = const MethodChannel(
+                                    'samples.flutter.dev/ffmpegplugin');
+                                // 调用方法 getBatteryLevel
+                                final result = await _platform
+                                    .invokeMethod<String>(
+                                        'tomp4', {"path": file.path});
+                                setState(() {
+                                  isFFmpeged = true;
+                                });
+
+                                showDialog(
+                                  context: context,
+                                  builder: (context) {
+                                    return AlertDialog(
+                                      title: Text('转换为MP4'),
+                                      content: Text(
+                                          '视频转换为MP4格式已启动，请保持前台运行，并自行到库文件夹检查结果。'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.pop(context); // 关闭对话框
+                                          },
+                                          child: Text('确定',
+                                              style: TextStyle(
+                                                  color: Colors.blue)),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
+                              },
+                              child: Text('确定',
+                                  style: TextStyle(color: Colors.blue)),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
                 // 抽取内挂字幕到库文件夹
                 ListTile(
                   leading: Icon(Icons.subtitles, color: Colors.grey),
@@ -478,12 +548,48 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                             TextButton(
                               onPressed: () async {
                                 Navigator.pop(context); // 关闭对话框
-                                final _platform = const MethodChannel(
-                                    'samples.flutter.dev/ffmpegplugin');
-                                // 调用方法 getBatteryLevel
-                                final result = await _platform
-                                    .invokeMethod<String>(
-                                        'getsrt', {"path": file.path});
+                                if (await _settingsService
+                                    .getExtractAssSubtitle()) {
+                                      if(isFFmpeged){
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) {
+                                            return AlertDialog(
+                                              title: Text('抽取内挂字幕'),
+                                              content: Text('由于当前限制，ASS内挂字幕抽取功能每次只能运行一次，请重启应用或关闭ASS抽取。'),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () {
+                                                    Navigator.pop(context); // 关闭对话框
+                                                  },
+                                                  child: Text('确定',
+                                                      style: TextStyle(
+                                                          color: Colors.blue)),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                        return;
+                                      }
+                                  final _platform = const MethodChannel(
+                                      'samples.flutter.dev/ffmpegplugin');
+                                  // 调用方法 getBatteryLevel
+                                  final result = await _platform
+                                      .invokeMethod<String>('getsrt',
+                                          {"path": file.path, "type": "ass"});
+                                  setState(() {
+                                    isFFmpeged = true;
+                                  });
+                                } else {
+                                  final _platform = const MethodChannel(
+                                      'samples.flutter.dev/ffmpegplugin');
+                                  // 调用方法 getBatteryLevel
+                                  final result = await _platform
+                                      .invokeMethod<String>('getsrtold',
+                                          {"path": file.path, "type": "ass"});
+                                }
+
                                 showDialog(
                                   context: context,
                                   builder: (context) {

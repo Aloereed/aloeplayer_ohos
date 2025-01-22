@@ -66,6 +66,6 @@ target_link_libraries(fftool PUBLIC avcodec avformat avutil avdevice swresample 
 # 添加 fftool 的头文件目录
 target_include_directories(fftool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_library(entry SHARED main.cpp )
+add_library(entry SHARED main.cpp napi_init.cpp)
 target_link_libraries(entry PUBLIC libace_napi.z.so  libhilog_ndk.z.so fftool Aki::libjsbind)
 target_compile_features(entry PRIVATE cxx_std_17)

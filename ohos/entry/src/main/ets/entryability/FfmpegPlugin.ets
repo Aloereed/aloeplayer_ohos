@@ -52,9 +52,25 @@ export default class FfmpegPlugin implements FlutterPlugin {
     this.channel.setMethodCallHandler({
       onMethodCall(call: MethodCall, result: MethodResult) {
         switch (call.method) {
+          case "getassold":
+            console.info("getassold start");
+            that.api.getassold(result, call.argument("path") as string,call.argument("type") as string,call.argument("output"));
+            break;
+          case "getsrtold":
+            console.info("getsrtold start");
+            that.api.getsrtold(result, call.argument("path") as string,call.argument("type") as string);
+            break;
           case "getsrt":
             console.info("getsrt start");
-            that.api.getsrt(result, call.argument("path") as string);
+            that.api.getsrt(result, call.argument("path") as string,call.argument("type") as string);
+            break;
+          case "getass":
+            console.info("getassstart");
+            that.api.getass(result, call.argument("path") as string,call.argument("type") as string,call.argument("output"));
+            break;
+          case "tomp4":
+            console.info("tomp4 start");
+            that.api.tomp4(result, call.argument("path") as string);
             break;
           case "getFfmpegPermission":
             that.api.getFfmpegPermission(result);
@@ -138,7 +154,7 @@ function uriToPath(uri: string): string {
   return path;
 }
 @Concurrent
-async function StartExtractSrt(command: string): Promise<void> {
+async function StartExtractAss(command: string,typ:string,output:string): Promise<void> {
   emitter.on({ eventId: 1 }, () => {
     emitter.off(1)
   });
@@ -155,7 +171,143 @@ async function StartExtractSrt(command: string): Promise<void> {
   };
 
   const options: FFmpegCommandOptions = {
-    cmds:['ffmpeg', '-i', command , '-map', '0:s:0', command+"_1.ass"], // 替换为实际的 FFmpeg 命令
+    cmds:['ffmpeg', '-i', command , '-map', '0:s:0', output+"."+typ], // 替换为实际的 FFmpeg 命令
+    onFFmpegProgress,
+    onFFmpegFail,
+    onFFmpegSuccess,
+  };
+
+  try {
+      const exitCode = await FFMpegUtils.executeFFmpegCommand(options);
+      console.log(`FFmpeg command exited with code: ${exitCode}`);
+    } catch (error) {
+      console.error('Failed to execute FFmpeg command:', error);
+    }
+
+  // testNapi.getsrt(command);
+}
+@Concurrent
+async function StartExtractSrt(command: string,typ:string): Promise<void> {
+  // emitter.on({ eventId: 1 }, () => {
+  //   emitter.off(1)
+  // });
+  const onFFmpegProgress = (progress: number) => {
+  console.log(`FFmpeg progress: ${progress}%`);
+  };
+
+  const onFFmpegFail = (code: number, msg: string) => {
+    console.error(`FFmpeg failed with code ${code}: ${msg}`);
+  };
+
+  const onFFmpegSuccess = () => {
+    console.log('FFmpeg command executed successfully!');
+  };
+
+  const options: FFmpegCommandOptions = {
+    cmds:['ffmpeg', '-i', command , '-map', '0:s:0', command+"_1."+typ], // 替换为实际的 FFmpeg 命令
+    onFFmpegProgress,
+    onFFmpegFail,
+    onFFmpegSuccess,
+  };
+
+  try {
+      const exitCode = await FFMpegUtils.executeFFmpegCommand(options);
+      console.log(`FFmpeg command exited with code: ${exitCode}`);
+    } catch (error) {
+      console.error('Failed to execute FFmpeg command:', error);
+    }
+}
+@Concurrent
+async function StartExtractAssOld(command: string,typ:string,output:string): Promise<void> {
+  // emitter.on({ eventId: 1 }, () => {
+  //   emitter.off(1)
+  // });
+  const onFFmpegProgress = (progress: number) => {
+  console.log(`FFmpeg progress: ${progress}%`);
+  };
+
+  const onFFmpegFail = (code: number, msg: string) => {
+    console.error(`FFmpeg failed with code ${code}: ${msg}`);
+  };
+
+  const onFFmpegSuccess = () => {
+    console.log('FFmpeg command executed successfully!');
+  };
+  console.log("command:"+ command+" "+" "+output);
+  const options: FFmpegCommandOptions = {
+    cmds:['ffmpeg', command , output], // 替换为实际的 FFmpeg 命令
+    onFFmpegProgress,
+    onFFmpegFail,
+    onFFmpegSuccess,
+  };
+
+  try {
+      const exitCode = await FFMpegUtils.executeFFmpegCommand2(options);
+      console.log(`FFmpeg command exited with code: ${exitCode}`);
+    } catch (error) {
+      console.error('Failed to execute FFmpeg command:', error);
+    }
+
+  // testNapi.getsrt(command);
+}
+@Concurrent
+async function StartExtractSrtOld(command: string,typ:string): Promise<void> {
+  // emitter.on({ eventId: 1 }, () => {
+  //   emitter.off(1)
+  // });
+  const onFFmpegProgress = (progress: number) => {
+  console.log(`FFmpeg progress: ${progress}%`);
+  };
+
+  const onFFmpegFail = (code: number, msg: string) => {
+    console.error(`FFmpeg failed with code ${code}: ${msg}`);
+  };
+
+  const onFFmpegSuccess = () => {
+    console.log('FFmpeg command executed successfully!');
+  };
+
+  const options: FFmpegCommandOptions = {
+    cmds:['ffmpeg', command , command], // 替换为实际的 FFmpeg 命令
+    onFFmpegProgress,
+    onFFmpegFail,
+    onFFmpegSuccess,
+  };
+
+  try {
+      const exitCode = await FFMpegUtils.executeFFmpegCommand2(options);
+      console.log(`FFmpeg command exited with code: ${exitCode}`);
+    } catch (error) {
+      console.error('Failed to execute FFmpeg command:', error);
+    }
+}
+@Concurrent
+async function StartToMp4(command: string): Promise<void> {
+  emitter.on({ eventId: 1 }, () => {
+    emitter.off(1)
+  });
+  const onFFmpegProgress = (progress: number) => {
+  console.log(`FFmpeg progress: ${progress}%`);
+  };
+
+  const onFFmpegFail = (code: number, msg: string) => {
+    console.error(`FFmpeg failed with code ${code}: ${msg}`);
+  };
+
+  const onFFmpegSuccess = () => {
+    console.log('FFmpeg command executed successfully!');
+  };
+
+  const options: FFmpegCommandOptions = {
+    cmds:[
+    'ffmpeg',
+    '-i', command,       
+    '-map', '0:v',          
+    '-map', '0:a:0',        
+    '-c:v', 'copy',         
+    '-c:a', 'copy',        
+    command+'.mp4'            
+]   , // 替换为实际的 FFmpeg 命令
     onFFmpegProgress,
     onFFmpegFail,
     onFFmpegSuccess,
@@ -172,9 +324,97 @@ async function StartExtractSrt(command: string): Promise<void> {
 }
 class FfmpegApi {
   private task1: taskpool.Task | undefined;
-  getsrt(result:MethodResult, path:string){
+  getass(result:MethodResult, path:string, typ:string,output:string){
     let command = `./getsrt "${path}" "${path}"`;
-    this.task1 = new taskpool.Task(StartExtractSrt, path);
+    this.task1 = new taskpool.Task(StartExtractAss, path,typ,output);
+    taskpool.execute(this.task1, taskpool.Priority.LOW);
+    let uri: string = '';
+    // 请确保 getContext(this) 返回结果为 UIAbilityContext
+    let context = getContext(this) as common.UIAbilityContext; 
+    // let voctrl = AVFfmpegPanel({
+    //       ffmpegLevel: 0,
+    //     })
+
+    Log.i(TAG, "level=" + uri);
+    let wrapped: Map<String, Any> = new Map<String, Any>();
+    if (uri != null) {
+      result.success(uri);
+    } else {
+      Log.i(TAG, "getFfmpegPermission else");
+      wrapped.set("UNAVAILABLE", "Ffmpeg level not available.");
+      result.error("UNAVAILABLE", "Ffmpeg level not available.", null)
+    }
+    Log.i(TAG, "getFfmpegPermission finish");
+  }
+  getassold(result:MethodResult, path:string, typ:string,output:string){
+    let command = `./getsrt "${path}" "${path}"`;
+    this.task1 = new taskpool.Task(StartExtractAssOld, path,typ,output);
+    taskpool.execute(this.task1, taskpool.Priority.LOW);
+    let uri: string = '';
+    // 请确保 getContext(this) 返回结果为 UIAbilityContext
+    let context = getContext(this) as common.UIAbilityContext; 
+    // let voctrl = AVFfmpegPanel({
+    //       ffmpegLevel: 0,
+    //     })
+
+    Log.i(TAG, "level=" + uri);
+    let wrapped: Map<String, Any> = new Map<String, Any>();
+    if (uri != null) {
+      result.success(uri);
+    } else {
+      Log.i(TAG, "getFfmpegPermission else");
+      wrapped.set("UNAVAILABLE", "Ffmpeg level not available.");
+      result.error("UNAVAILABLE", "Ffmpeg level not available.", null)
+    }
+    Log.i(TAG, "getFfmpegPermission finish");
+  }
+  getsrtold(result:MethodResult, path:string, typ:string){
+    let command = `./getsrt "${path}" "${path}"`;
+    this.task1 = new taskpool.Task(StartExtractSrtOld, path,typ);
+    taskpool.execute(this.task1, taskpool.Priority.LOW);
+    let uri: string = '';
+    // 请确保 getContext(this) 返回结果为 UIAbilityContext
+    let context = getContext(this) as common.UIAbilityContext; 
+    // let voctrl = AVFfmpegPanel({
+    //       ffmpegLevel: 0,
+    //     })
+
+    Log.i(TAG, "level=" + uri);
+    let wrapped: Map<String, Any> = new Map<String, Any>();
+    if (uri != null) {
+      result.success(uri);
+    } else {
+      Log.i(TAG, "getFfmpegPermission else");
+      wrapped.set("UNAVAILABLE", "Ffmpeg level not available.");
+      result.error("UNAVAILABLE", "Ffmpeg level not available.", null)
+    }
+    Log.i(TAG, "getFfmpegPermission finish");
+  }
+  getsrt(result:MethodResult, path:string, typ:string){
+    let command = `./getsrt "${path}" "${path}"`;
+    this.task1 = new taskpool.Task(StartExtractSrt, path,typ);
+    taskpool.execute(this.task1, taskpool.Priority.LOW);
+    let uri: string = '';
+    // 请确保 getContext(this) 返回结果为 UIAbilityContext
+    let context = getContext(this) as common.UIAbilityContext; 
+    // let voctrl = AVFfmpegPanel({
+    //       ffmpegLevel: 0,
+    //     })
+
+    Log.i(TAG, "level=" + uri);
+    let wrapped: Map<String, Any> = new Map<String, Any>();
+    if (uri != null) {
+      result.success(uri);
+    } else {
+      Log.i(TAG, "getFfmpegPermission else");
+      wrapped.set("UNAVAILABLE", "Ffmpeg level not available.");
+      result.error("UNAVAILABLE", "Ffmpeg level not available.", null)
+    }
+    Log.i(TAG, "getFfmpegPermission finish");
+  }
+  tomp4(result:MethodResult, path:string){
+    let command = `./getsrt "${path}" "${path}"`;
+    this.task1 = new taskpool.Task(StartToMp4, path);
     taskpool.execute(this.task1, taskpool.Priority.LOW);
     let uri: string = '';
     // 请确保 getContext(this) 返回结果为 UIAbilityContext

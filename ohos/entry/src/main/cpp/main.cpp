@@ -2,7 +2,7 @@
  * @Author:
  * @Date: 2025-01-21 20:39:36
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-22 09:43:01
+ * @LastEditTime: 2025-01-22 12:37:06
  * @Description: file content
  */
 #include "utils.hpp"
@@ -15,6 +15,7 @@ extern "C"{
 #include <string>
 #include <cstring> // for strdup
 #include "hilog/log.h" 
+#include "napi_init.h"
 struct CallBackInfo {
     // 用于处理 FFmpeg 命令执行进度的回调函数
     const aki::JSFunction* onFFmpegProgress;
@@ -84,10 +85,33 @@ int executeFFmpegCommandAPP(std::string uuid, int cmdLen, std::vector<std::strin
     }
     return ret;
 }
+int executeFFmpegCommandAPP2(std::string uuid, int cmdLen, std::vector<std::string> argv) {
+    char **argv1 = vector_to_argv(argv);
 
+    // Callbacks callbacks = {
+    //     .onFFmpegProgress = onFFmpegProgress, .onFFmpegFail = onFFmpegFail, .onFFmpegSuccess = onFFmpegSuccess};
+    CallBackInfo onActionListener;
+
+    onActionListener.onFFmpegProgress = aki::JSBind::GetJSFunction(uuid + "_onFFmpegProgress");
+    onActionListener.onFFmpegFail = aki::JSBind::GetJSFunction(uuid + "_onFFmpegFail");
+    onActionListener.onFFmpegSuccess = aki::JSBind::GetJSFunction(uuid + "_onFFmpegSuccess");
+    int ret = extract_subtitle(cmdLen, argv1);
+    if (ret != 0) {
+        char err[1024] = {0};
+        onActionListener.onFFmpegFail->Invoke<void>(ret, err);
+    } else {
+        onActionListener.onFFmpegSuccess->Invoke<void>();
+    }
+
+    for (int i = 0; i < cmdLen; ++i) {
+        free(argv1[i]);
+    }
+    return ret;
+}
 JSBIND_ADDON(entry)
 
 JSBIND_GLOBAL() {
     JSBIND_PFUNCTION(executeFFmpegCommandAPP);
+    JSBIND_PFUNCTION(executeFFmpegCommandAPP2);
     JSBIND_FUNCTION(showLog);
 }

@@ -37,7 +37,7 @@ class _MaterialControlsState extends State<MaterialControls>
   Timer? _hideTimer;
   Timer? _initTimer;
   late var _subtitlesPosition = Duration.zero;
-  bool _subtitleOn = false;
+  bool _subtitleOn = true;
   Timer? _showAfterExpandCollapseTimer;
   bool _dragging = false;
   bool _displayTapped = false;
@@ -96,7 +96,7 @@ class _MaterialControlsState extends State<MaterialControls>
               Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
-                  if (_subtitleOn)
+                  if (_subtitleOn&&(chewieController.subtitle?.isNotEmpty ?? false))
                     Transform.translate(
                       offset: Offset(
                         0.0,
@@ -214,7 +214,7 @@ class _MaterialControlsState extends State<MaterialControls>
   }
 
   Widget _buildSubtitles(BuildContext context, Subtitles subtitles) {
-    if (!_subtitleOn) {
+    if (!_subtitleOn||!(chewieController.subtitle?.isNotEmpty ?? false)) {
       return const SizedBox();
     }
     final currentSubtitle = subtitles.getByPosition(_subtitlesPosition);
@@ -525,7 +525,8 @@ class _MaterialControlsState extends State<MaterialControls>
   }
 
   Future<void> _initialize() async {
-    _subtitleOn = chewieController.subtitle?.isNotEmpty ?? false;
+    // _subtitleOn = chewieController.subtitle?.isNotEmpty ?? false;
+    _subtitleOn = true;
     controller.addListener(_updateState);
 
     _updateState();

@@ -2,20 +2,23 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-21 22:29:41
+ * @LastEditTime: 2025-01-22 14:29:06
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'theme_provider.dart'; // 假设你已经有一个ThemeProvider
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 
 class SettingsService {
   static const String _fontSizeKey = 'subtitle_font_size';
   static const String _backgroundPlayKey = 'background_play';
-
+  static const String _autoLoadSubtitleKey = 'auto_load_subtitle';
+  static const String _extractAssSubtitleKey = 'extract_ass_subtitle';
   Future<void> saveSubtitleFontSize(double fontSize) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_fontSizeKey, fontSize);
@@ -34,6 +37,72 @@ class SettingsService {
   Future<bool> getBackgroundPlay() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_backgroundPlayKey) ?? true; // 默认值为true
+  }
+
+  // 是否自动加载字幕
+  Future<void> saveAutoLoadSubtitle(bool autoLoadSubtitle) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoLoadSubtitleKey, autoLoadSubtitle);
+  }
+
+  Future<bool> getAutoLoadSubtitle() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_autoLoadSubtitleKey) ?? true; // 默认值为true
+  }
+
+  // 是否抽取ASS字幕
+  Future<void> saveExtractAssSubtitle(bool extractAssSubtitle) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_extractAssSubtitleKey, extractAssSubtitle);
+  }
+
+  Future<bool> getExtractAssSubtitle() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_extractAssSubtitleKey) ?? true; // 默认值为true
+  }
+  // 清除缓存 递归删除“/data/storage/el2/base/haps/entry/cache/”下的所有文件
+
+  Future<void> deleteCacheDirectory(String path) async {
+    final directory = Directory(path);
+
+    // 检查目录是否存在
+    if (await directory.exists()) {
+      // 递归遍历目录
+      await for (final entity in directory.list(recursive: true)) {
+        if (entity is File) {
+          // 删除文件
+          await entity.delete();
+          print('Deleted file: ${entity.path}');
+        } else if (entity is Directory) {
+          // 删除目录（如果是空目录）
+          try {
+            await entity.delete(recursive: true);
+            print('Deleted directory: ${entity.path}');
+          } catch (e) {
+            print('Failed to delete directory: ${entity.path}, error: $e');
+          }
+        }
+      }
+
+      // 最后删除根目录
+      try {
+        await directory.delete(recursive: true);
+        print('Deleted root directory: ${directory.path}');
+      } catch (e) {
+        print('Failed to delete root directory: ${directory.path}, error: $e');
+      }
+    } else {
+      print('Directory does not exist: ${directory.path}');
+    }
+  }
+
+// 调用方法
+  Future<void> clearCache() async {
+    const cachePath = '/data/storage/el2/base/haps/entry/cache/';
+    await deleteCacheDirectory(cachePath);
+    final cacheDir = await getTemporaryDirectory();
+    final directoryPath = cacheDir.path; // 缓存目录路径
+    await deleteCacheDirectory(directoryPath);
   }
 }
 
@@ -159,7 +228,94 @@ class _SettingsTabState extends State<SettingsTab> {
               },
             ),
           ),
-
+          // 添加一个设置，是否自动尝试加载字幕
+          ListTile(
+            title: Text('自动尝试加载内挂字幕'),
+            subtitle: Text('默认情况下，播放器会自动尝试加载视频文件内挂字幕。'),
+            trailing: FutureBuilder<bool>(
+              future: _settingsService.getAutoLoadSubtitle(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Switch(
+                    value: snapshot.data!,
+                    onChanged: (value) {
+                      _settingsService.saveAutoLoadSubtitle(value);
+                      setState(() {});
+                    },
+                    activeColor: Colors.blue, // 设置滑块的颜色为蓝色
+                    activeTrackColor:
+                        Colors.blue.withOpacity(0.5), // 设置滑轨的颜色为半透明蓝色
+                  );
+                } else {
+                  return const CircularProgressIndicator();
+                }
+              },
+            ),
+          ),
+          ListTile(
+            title: Text('库内抽取ASS字幕'),
+            subtitle: Text('由于当前实现，转换为MP4和抽取ASS字幕只能在一次会话中进行一次，然后需要退出重新进入软件。'),
+            trailing: FutureBuilder<bool>(
+              future: _settingsService.getExtractAssSubtitle(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Switch(
+                    value: snapshot.data!,
+                    onChanged: (value) {
+                      _settingsService.saveExtractAssSubtitle(value);
+                      setState(() {});
+                    },
+                    activeColor: Colors.blue, // 设置滑块的颜色为蓝色
+                    activeTrackColor:
+                        Colors.blue.withOpacity(0.5), // 设置滑轨的颜色为半透明蓝色
+                  );
+                } else {
+                  return const CircularProgressIndicator();
+                }
+              },
+            ),
+          ),
+          // 清除缓存按钮
+          ListTile(
+            title: Text('清除临时文件'),
+            subtitle: Text('删除从图库中播放的临时文件、临时抽取的字幕等。'),
+            trailing: Icon(Icons.delete, color: Colors.red), // 使用红色删除图标
+            onTap: () {
+              // 弹出确认对话框
+              showDialog(
+                context: context,
+                builder: (context) {
+                  return AlertDialog(
+                    title: Text('清除临时文件'),
+                    content: Text('确定要删除所有临时文件吗？此操作不可恢复！'),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context); // 关闭对话框
+                        },
+                        child: Text('取消', style: TextStyle(color: Colors.grey)),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(context); // 关闭对话框
+                          // 调用清除临时文件的逻辑
+                          await _settingsService.clearCache();
+                          // 提示用户操作完成
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('临时文件已清除'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        child: Text('确定', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
           Divider(), // 分割线
 
           // 关于此应用程序部分
@@ -171,7 +327,8 @@ class _SettingsTabState extends State<SettingsTab> {
                 SizedBox(height: 8),
                 Text('AloePlayer'),
                 SizedBox(height: 4),
-                Text('版本号: 0.9.9。 本版本是正式版前频道最后一个版本，预埋FFmpeg编解码器，库内文件长按可提取字幕文件到相同目录下。'),
+                Text(
+                    '版本号: 1.0.0。 本版本是可打开视频同时加载内挂字幕、转换MP4和删除临时文件。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),

@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-21 22:38:46
+ * @LastEditTime: 2025-01-22 15:08:05
  * @Description: file content
  */
 /*
@@ -263,8 +263,7 @@ class _HomeScreenState extends State<HomeScreen>
 // 调用方法 getBatteryLevel
       final result =
           await _platform.invokeMethod<String>('getDownloadPermission');
-      final result2 =
-          await _platform.invokeMethod<String>('startBgTask');
+      final result2 = await _platform.invokeMethod<String>('startBgTask');
     }
   }
 
@@ -553,7 +552,8 @@ class _PlayerTabState extends State<PlayerTab>
       if (await file.exists()) {
         final uri = await file.readAsString(); // 读取文件内容
         if (uri.isNotEmpty) {
-          _openUri(uri); // 打开URI
+          await _openUri(uri); // 打开URI
+          await _openUri(uri); // 打开URI
         }
         await file.delete(); // 删除文件
       }
@@ -666,7 +666,9 @@ class _PlayerTabState extends State<PlayerTab>
               _chewieController?.toggleFullScreen();
             },
             iconData:
-                (_chewieController!=null&&_chewieController!.isFullScreen) ? Icons.fullscreen_exit : Icons.fullscreen,
+                (_chewieController != null && _chewieController!.isFullScreen)
+                    ? Icons.fullscreen_exit
+                    : Icons.fullscreen,
             title: '切换全屏',
           ),
           OptionItem(
@@ -685,7 +687,6 @@ class _PlayerTabState extends State<PlayerTab>
 
               _volumeController?.sendMessageToOhosView(
                   'getMessageFromFlutterView2', nextVolume.toString());
-
             },
             iconData: Icons.volume_up,
             title: '音量调节',
@@ -735,6 +736,91 @@ class _PlayerTabState extends State<PlayerTab>
     );
   }
 
+  Future<void> readFileWithRetry(String path) async {
+    // 提取文件名
+    String fileName = path.split('/').last;
+
+    // 构造文件目录
+    String directoryPath = '/data/storage/el2/base/haps/entry/cache/';
+    await Future.delayed(Duration(seconds: 3));
+    // 尝试读取文件
+    for (int attempt = 0; attempt < 3; attempt++) {
+      try {
+        // 查找是否有以 fileName 为前缀的 .ass 或 .srt 文件
+        final cacheDir = await getTemporaryDirectory();
+        final directoryPath = cacheDir.path; // 缓存目录路径
+
+        print('缓存目录路径: $directoryPath');
+        Directory directory = Directory(directoryPath);
+        List<FileSystemEntity> files = await directory.list().toList();
+
+        // 过滤出符合条件的文件
+        List<File> matchingFiles = files.whereType<File>().where((file) {
+          String name = file.path.split('/').last;
+          return (name.startsWith(fileName) &&
+              (name.endsWith('.ass') || name.endsWith('.srt')));
+        }).toList();
+        // 遍历print匹配文件
+        if (matchingFiles.isNotEmpty) {
+          print('找到 ${matchingFiles.length} 个匹配的文件：');
+          for (var file in matchingFiles) {
+            print(file.path);
+          }
+        } else {
+          print('未找到匹配的文件。');
+        }
+
+        // 如果找到符合条件的文件，加载第一个
+        if (matchingFiles.isNotEmpty) {
+          File file = matchingFiles.first;
+          print("Readfile: " + file.path);
+          String content = await file.readAsString();
+
+          // 如果是 .ass 文件，转换为 .srt 格式
+          if (file.path.endsWith('.ass') && _chewieController != null) {
+            _chewieController!.setSubtitle(await ass2srt(content));
+          } else if (file.path.endsWith('.srt') && _chewieController != null) {
+            _subtitleController =
+                SubtitleController.string(content, format: SubtitleFormat.srt);
+
+            // 将解析后的字幕设置到 ChewieController 中
+            _chewieController!.setSubtitle(
+              _subtitleController!.subtitles
+                  .map(
+                    (e) => Subtitle(
+                      index: e.number,
+                      start: Duration(milliseconds: e.start),
+                      end: Duration(milliseconds: e.end),
+                      text: e.text,
+                    ),
+                  )
+                  .toList(),
+            );
+          }
+
+          // 文件加载成功，退出循环
+          return;
+        } else {
+          // 如果没有找到文件，抛出异常
+          throw FileSystemException('文件不存在', directoryPath);
+        }
+      } catch (e) {
+        // 如果文件不存在，等待3秒后重试
+        if (e is FileSystemException && e.osError?.errorCode == 2) {
+          print('文件不存在，等待3秒后重试...');
+          await Future.delayed(Duration(seconds: 3));
+        } else {
+          // 其他异常，直接抛出
+          rethrow;
+        }
+      }
+    }
+
+    // 如果3次尝试都失败，返回null
+    print('文件读取失败，放弃尝试。');
+    return;
+  }
+
   Future<void> _openUri(String uri) async {
     // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
     coverData = null;
@@ -746,7 +832,9 @@ class _PlayerTabState extends State<PlayerTab>
       if (_videoController != null) {
         _videoController?.dispose();
       }
-      _videoController = VideoPlayerController.network(uri,videoPlayerOptions: VideoPlayerOptions(allowBackgroundPlayback: isBgPlay))
+      _videoController = VideoPlayerController.network(uri,
+          videoPlayerOptions:
+              VideoPlayerOptions(allowBackgroundPlayback: isBgPlay))
         ..initialize().then((_) {
           setState(() {
             _totalDuration = _videoController!.value.duration;
@@ -767,7 +855,9 @@ class _PlayerTabState extends State<PlayerTab>
         Wakelock.enable();
         return;
       }
-      _videoController = VideoPlayerController.file(File(uri),videoPlayerOptions: VideoPlayerOptions(allowBackgroundPlayback: isBgPlay))
+      _videoController = VideoPlayerController.file(File(uri),
+          videoPlayerOptions:
+              VideoPlayerOptions(allowBackgroundPlayback: isBgPlay))
         ..initialize().then((_) {
           setState(() {
             _totalDuration = _videoController!.value.duration;
@@ -779,6 +869,9 @@ class _PlayerTabState extends State<PlayerTab>
           _videoController?.addListener(_updatePlaybackState);
         })
         ..setLooping(_isLooping);
+      if (await _settingsService.getAutoLoadSubtitle() == true) {
+        readFileWithRetry(uri);
+      }
       final metadata = readMetadata(File(uri), getImage: true);
       coverData = metadata.pictures[0].bytes;
     }
@@ -833,6 +926,16 @@ class _PlayerTabState extends State<PlayerTab>
     if (result != null) {
       PlatformFile file = result.files.first;
       widget.getopenfile(file.path!);
+      String fileName = file.path!.split('/').last;
+      final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
+      final cacheDir = await getTemporaryDirectory();
+      final directoryPath = cacheDir.path; // 缓存目录路径
+      // 调用方法 getBatteryLevel
+      final result2 = await _platform.invokeMethod<String>('getassold', {
+        "path": file.path,
+        "type": "srt",
+        "output": path.join(directoryPath, fileName)
+      });
     } else {
       // 用户取消了选择
       print('用户取消了文件选择');
@@ -904,8 +1007,50 @@ class _PlayerTabState extends State<PlayerTab>
         );
       }
     }
+    // 假设 subtitles 是一个 List<Subtitle> 类型的列表
+    List<Subtitle> processedSubtitles = [];
 
-    return subtitles;
+// 创建一个 Map 来存储相同 start 时间的字幕
+    Map<Duration, Subtitle> subtitleMap = {};
+
+    for (var subtitle in subtitles) {
+      if (subtitleMap.containsKey(subtitle.start)) {
+        // 如果已经存在相同 start 时间的字幕，则合并文本并更新 end 时间
+        var existingSubtitle = subtitleMap[subtitle.start]!;
+        existingSubtitle.text = '${existingSubtitle.text}\n${subtitle.text}';
+        if (subtitle.end > existingSubtitle.end) {
+          existingSubtitle.end = subtitle.end;
+        }
+      } else {
+        // 如果不存在相同 start 时间的字幕，则直接添加到 Map 中
+        subtitleMap[subtitle.start] = Subtitle(
+          index: subtitle.index, // 暂时保留原始 index
+          start: subtitle.start,
+          end: subtitle.end,
+          text: subtitle.text,
+        );
+      }
+    }
+
+// 将 Map 中的值转换为列表
+    processedSubtitles = subtitleMap.values.toList();
+
+// 按 start 时间排序（如果需要）
+    processedSubtitles.sort((a, b) => a.start.compareTo(b.start));
+
+// 重新分配 index
+    for (int i = 0; i < processedSubtitles.length; i++) {
+      processedSubtitles[i] = Subtitle(
+        index: i, // 重新分配 index
+        start: processedSubtitles[i].start,
+        end: processedSubtitles[i].end,
+        text: processedSubtitles[i].text,
+      );
+    }
+
+// 现在 processedSubtitles 就是处理后的字幕列表
+
+    return processedSubtitles;
   }
 
   List<Subtitle> parseLrcToSubtitles(String data) {

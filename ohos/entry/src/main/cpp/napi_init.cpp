@@ -1,4 +1,4 @@
-#include "napi/native_api.h"
+// #include "napi/native_api.h"
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
@@ -158,12 +158,13 @@ void merge_adjacent_subtitles(std::vector<SubtitleInfo> &subs) {
 }
 
 int extract_subtitle(int argc, char *argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <input_video>" << std::endl;
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <input_video>" << " <output_prefix>"<< std::endl;
         return 1;
     }
     // redirectStdOutAndStdErr();
     const char *filename = argv[1];
+    const char *outputfilename = argv[2];
     AVFormatContext *fmt_ctx = nullptr;
 
     avformat_network_init();
@@ -206,7 +207,7 @@ int extract_subtitle(int argc, char *argv[]) {
             SubtitleStream ss;
             ss.index = i;
             ss.codec_ctx = codec_ctx;
-            ss.output_filename = generate_filename(stream, std::string(filename) + "_");
+            ss.output_filename = generate_filename(stream, std::string(outputfilename) + "_");
             subtitle_streams[i] = ss;
         }
     }
@@ -441,131 +442,131 @@ void parseCommandLine(const std::string &input, int &argc, char **&argv) {
 }
 
 
-std::string global_result;
-static napi_value Getsrt(napi_env env, napi_callback_info info) {
-    // 输入参数个数
-    OH_LOG_ERROR(LOG_APP, "cpp side start");
+// std::string global_result;
+// static napi_value Getsrt(napi_env env, napi_callback_info info) {
+//     // 输入参数个数
+//     OH_LOG_ERROR(LOG_APP, "cpp side start");
 
 
-    size_t argc = 1;
+//     size_t argc = 1;
 
-    // 输入参数数组
+//     // 输入参数数组
 
-    napi_value args[1] = {nullptr};
+//     napi_value args[1] = {nullptr};
 
-    // 将获取的传入参数放入数组中
+//     // 将获取的传入参数放入数组中
 
-    if (napi_ok != napi_get_cb_info(env, info, &argc, args, nullptr, nullptr)) {
+//     if (napi_ok != napi_get_cb_info(env, info, &argc, args, nullptr, nullptr)) {
 
-        return nullptr;
-    }
+//         return nullptr;
+//     }
 
-    // 上面的你就能把输入的字符串放入args[0]中了，下面就是写对应的调用逻辑
+//     // 上面的你就能把输入的字符串放入args[0]中了，下面就是写对应的调用逻辑
 
-    // 记录长度
+//     // 记录长度
 
-    size_t typeLen = 0;
+//     size_t typeLen = 0;
 
-    // char类型的转换
+//     // char类型的转换
 
-    char *str = nullptr;
+//     char *str = nullptr;
 
-    // 写入缓存，获得args[0]对应的char长度
+//     // 写入缓存，获得args[0]对应的char长度
 
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &typeLen);
+//     napi_get_value_string_utf8(env, args[0], nullptr, 0, &typeLen);
 
-    // napi_get_value_string_utf8（env，数组对象，char，缓存长度，获取的长度）主要作用是通过缓存复制的方法，将对象转换为char，复制到缓存中，获取长度
+//     // napi_get_value_string_utf8（env，数组对象，char，缓存长度，获取的长度）主要作用是通过缓存复制的方法，将对象转换为char，复制到缓存中，获取长度
 
-    str = new char[typeLen + 1];
+//     str = new char[typeLen + 1];
 
-    // 获取输入的字符串转换为char类型的str
+//     // 获取输入的字符串转换为char类型的str
 
-    napi_get_value_string_utf8(env, args[0], str, typeLen + 1, &typeLen);
+//     napi_get_value_string_utf8(env, args[0], str, typeLen + 1, &typeLen);
 
-    // 然后你就可以写对应的加密之类的操作了，这个自己写，我跳过了
-    //  示例输入
-    std::string input(str, typeLen);
+//     // 然后你就可以写对应的加密之类的操作了，这个自己写，我跳过了
+//     //  示例输入
+//     std::string input(str, typeLen);
 
-    int _argc;
-    char **_argv;
+//     int _argc;
+//     char **_argv;
 
-    // 解析输入
-    parseCommandLine(input, _argc, _argv);
-    std::cout << "argc: " << _argc << std::endl;
-    OH_LOG_ERROR(LOG_APP, "Argc:%{public}d, argv:%{public}s", _argc, str);
-    extract_subtitle(_argc, _argv);
-    // 输出 argc 和 argv
+//     // 解析输入
+//     parseCommandLine(input, _argc, _argv);
+//     std::cout << "argc: " << _argc << std::endl;
+//     OH_LOG_ERROR(LOG_APP, "Argc:%{public}d, argv:%{public}s", _argc, str);
+//     extract_subtitle(_argc, _argv);
+//     // 输出 argc 和 argv
 
-    //     std::thread thread_obj([&]() {
-    //         main_function(_argc, _argv);
-    //     });
+//     //     std::thread thread_obj([&]() {
+//     //         main_function(_argc, _argv);
+//     //     });
 
 
-    // 释放动态分配的内存
-    //     for (int i = 0; i < argc; ++i) {
-    //         delete[] argv[i];
-    //     }
-    //     delete[] argv;
-    //
-    //     main_function(, char **argv)
+//     // 释放动态分配的内存
+//     //     for (int i = 0; i < argc; ++i) {
+//     //         delete[] argv[i];
+//     //     }
+//     //     delete[] argv;
+//     //
+//     //     main_function(, char **argv)
 
-    // 创建输出对象
+//     // 创建输出对象
 
-    napi_value output;
+//     napi_value output;
 
-    // 将char类型的str，赋值给output,类型为string
+//     // 将char类型的str，赋值给output,类型为string
 
-    napi_create_string_utf8(env, global_result.c_str(), global_result.size(), &output);
+//     napi_create_string_utf8(env, global_result.c_str(), global_result.size(), &output);
 
-    // 返回的是长度
+//     // 返回的是长度
 
-    // napi_create_double(env, typeLen, &output);
+//     // napi_create_double(env, typeLen, &output);
 
-    return output;
+//     return output;
 
-    //    return args[0];//这个是直接返回输入对象
-}
-static napi_value Add(napi_env env, napi_callback_info info) {
-    size_t argc = 2;
-    napi_value args[2] = {nullptr};
+//     //    return args[0];//这个是直接返回输入对象
+// }
+// static napi_value Add(napi_env env, napi_callback_info info) {
+//     size_t argc = 2;
+//     napi_value args[2] = {nullptr};
 
-    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+//     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    napi_valuetype valuetype0;
-    napi_typeof(env, args[0], &valuetype0);
+//     napi_valuetype valuetype0;
+//     napi_typeof(env, args[0], &valuetype0);
 
-    napi_valuetype valuetype1;
-    napi_typeof(env, args[1], &valuetype1);
+//     napi_valuetype valuetype1;
+//     napi_typeof(env, args[1], &valuetype1);
 
-    double value0;
-    napi_get_value_double(env, args[0], &value0);
+//     double value0;
+//     napi_get_value_double(env, args[0], &value0);
 
-    double value1;
-    napi_get_value_double(env, args[1], &value1);
+//     double value1;
+//     napi_get_value_double(env, args[1], &value1);
 
-    napi_value sum;
-    napi_create_double(env, value0 + value1, &sum);
+//     napi_value sum;
+//     napi_create_double(env, value0 + value1, &sum);
 
-    return sum;
-}
+//     return sum;
+// }
 
-EXTERN_C_START
-static napi_value Init(napi_env env, napi_value exports) {
-    napi_property_descriptor desc[] = {{"add", nullptr, Add, nullptr, nullptr, nullptr, napi_default, nullptr},
-                                       {"getsrt", nullptr, Getsrt, nullptr, nullptr, nullptr, napi_default, nullptr}};
-    napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
-    return exports;
-}
-EXTERN_C_END
+// EXTERN_C_START
+// static napi_value Init(napi_env env, napi_value exports) {
+//     napi_property_descriptor desc[] = {{"add", nullptr, Add, nullptr, nullptr, nullptr, napi_default, nullptr},
+//                                        {"getsrt", nullptr, Getsrt, nullptr, nullptr, nullptr, napi_default, nullptr}};
+//     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
+//     return exports;
+// }
+// EXTERN_C_END
 
-static napi_module demoModule = {
-    .nm_version = 1,
-    .nm_flags = 0,
-    .nm_filename = nullptr,
-    .nm_register_func = Init,
-    .nm_modname = "entry",
-    .nm_priv = ((void *)0),
-    .reserved = {0},
-};
+// static napi_module demoModule = {
+//     .nm_version = 1,
+//     .nm_flags = 0,
+//     .nm_filename = nullptr,
+//     .nm_register_func = Init,
+//     .nm_modname = "entry",
+//     .nm_priv = ((void *)0),
+//     .reserved = {0},
+// };
 
-extern "C" __attribute__((constructor)) void RegisterEntryModule(void) { napi_module_register(&demoModule); }
+// extern "C" __attribute__((constructor)) void RegisterEntryModule(void) { napi_module_register(&demoModule); }

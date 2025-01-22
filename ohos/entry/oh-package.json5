@@ -24,8 +24,7 @@
     "webview_flutter_ohos": "file:../har/webview_flutter_ohos.har",
     "screen": "file:../har/screen.har",
     "libentry.so": "file:./src/main/cpp/types/libentry",
-    "@ohos/aki": "^1.2.15",
-    "@pura/harmony-utils": "^1.2.6"
+    "@ohos/aki": "^1.2.15"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

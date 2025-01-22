@@ -6,3 +6,4 @@ export class JSBind{
 
 }
 export const executeFFmpegCommandAPP:(a:string,b:number,c:any)=>any;
+export const executeFFmpegCommandAPP2:(a:string,b:number,c:any)=>any;
