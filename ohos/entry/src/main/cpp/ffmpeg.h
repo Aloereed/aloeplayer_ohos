@@ -560,7 +560,7 @@ typedef struct KeyframeForceCtx {
 } KeyframeForceCtx;
 
 typedef struct OutputStream {
-    const AVClass *class1;
+    const AVClass *class;
 
     int file_index;          /* file index */
     int index;               /* stream index in the output file */
@@ -690,7 +690,7 @@ typedef struct OutputStream {
 } OutputStream;
 
 typedef struct OutputFile {
-    const AVClass *class1;
+    const AVClass *class;
 
     int index;
 
@@ -767,7 +767,7 @@ extern int recast_media;
 #if FFMPEG_OPT_PSNR
 extern int do_psnr;
 #endif
-int exe_ffmpeg_cmd(int argc, char **argv);
+
 void term_init(void);
 void term_exit(void);
 

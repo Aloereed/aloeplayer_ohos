@@ -54,7 +54,7 @@
 #include <windows.h>
 #include "compat/w32dlfcn.h"
 #endif
-
+__thread volatile int longjmp_value;
 AVDictionary *sws_dict;
 AVDictionary *swr_opts;
 AVDictionary *format_opts, *codec_opts;
@@ -169,7 +169,7 @@ void show_help_options(const OptionDef *options, const char *msg, int req_flags,
     printf("\n");
 }
 
-void show_help_children(const AVClass *class1, int flags)
+void show_help_children(const AVClass *class, int flags)
 {
     void *iter = NULL;
     const AVClass *child;

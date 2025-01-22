@@ -34,8 +34,8 @@ import { taskpool } from '@kit.ArkTS';
 import { common , Want } from '@kit.AbilityKit';
 import { FfmpegFactory } from './FfmpegFactory';
 import { audio } from '@kit.AudioKit';
-import testNapi from 'libentry.so';
-// import { FFMpegUtils, FFmpegCommandOptions } from './path/to/FFMpegUtils';
+// import testNapi from 'libentry.so';
+import { FFMpegUtils, FFmpegCommandOptions } from './FFmpegUtils';
 
 
 const TAG = "FfmpegPluginTag";
@@ -142,13 +142,39 @@ async function StartExtractSrt(command: string): Promise<void> {
   emitter.on({ eventId: 1 }, () => {
     emitter.off(1)
   });
-  testNapi.getsrt(command);
+  const onFFmpegProgress = (progress: number) => {
+  console.log(`FFmpeg progress: ${progress}%`);
+  };
+
+  const onFFmpegFail = (code: number, msg: string) => {
+    console.error(`FFmpeg failed with code ${code}: ${msg}`);
+  };
+
+  const onFFmpegSuccess = () => {
+    console.log('FFmpeg command executed successfully!');
+  };
+
+  const options: FFmpegCommandOptions = {
+    cmds:['ffmpeg', '-i', command , '-map', '0:s:0', command+"_1.ass"], // 替换为实际的 FFmpeg 命令
+    onFFmpegProgress,
+    onFFmpegFail,
+    onFFmpegSuccess,
+  };
+
+  try {
+      const exitCode = await FFMpegUtils.executeFFmpegCommand(options);
+      console.log(`FFmpeg command exited with code: ${exitCode}`);
+    } catch (error) {
+      console.error('Failed to execute FFmpeg command:', error);
+    }
+
+  // testNapi.getsrt(command);
 }
 class FfmpegApi {
   private task1: taskpool.Task | undefined;
   getsrt(result:MethodResult, path:string){
     let command = `./getsrt "${path}" "${path}"`;
-    this.task1 = new taskpool.Task(StartExtractSrt, command);
+    this.task1 = new taskpool.Task(StartExtractSrt, path);
     taskpool.execute(this.task1, taskpool.Priority.LOW);
     let uri: string = '';
     // 请确保 getContext(this) 返回结果为 UIAbilityContext

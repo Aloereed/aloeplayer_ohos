@@ -2,18 +2,29 @@
  * @Author:
  * @Date: 2025-01-21 20:39:36
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-21 21:36:09
+ * @LastEditTime: 2025-01-22 09:43:01
  * @Description: file content
  */
-extern "C" {
-#include "ffmpeg.h"
-
-}
+#include "utils.hpp"
 #include <aki/jsbind.h>
-
+extern "C"{
+    #include<libavutil/log.h>
+    #include<libavutil/error.h>
+}
 #include <vector>
 #include <string>
 #include <cstring> // for strdup
+#include "hilog/log.h" 
+struct CallBackInfo {
+    // 用于处理 FFmpeg 命令执行进度的回调函数
+    const aki::JSFunction* onFFmpegProgress;
+
+    // 用于处理 FFmpeg 命令执行失败的回调函数
+    const aki::JSFunction* onFFmpegFail;
+
+    // 用于处理 FFmpeg 命令执行成功的回调函数
+    const aki::JSFunction* onFFmpegSuccess;
+};
 
 char **vector_to_argv(const std::vector<std::string> &vec) {
     // 分配足够的内存来存储 char* 指针（包括最后一个 nullptr）
@@ -56,10 +67,10 @@ int executeFFmpegCommandAPP(std::string uuid, int cmdLen, std::vector<std::strin
     onActionListener.onFFmpegFail = aki::JSBind::GetJSFunction(uuid + "_onFFmpegFail");
     onActionListener.onFFmpegSuccess = aki::JSBind::GetJSFunction(uuid + "_onFFmpegSuccess");
 
-    Callbacks callbacks = {
-        .onFFmpegProgress = onFFmpegProgress, .onFFmpegFail = onFFmpegFail, .onFFmpegSuccess = onFFmpegSuccess};
+    // Callbacks callbacks = {
+    //     .onFFmpegProgress = onFFmpegProgress, .onFFmpegFail = onFFmpegFail, .onFFmpegSuccess = onFFmpegSuccess};
 
-    int ret = exe_ffmpeg_cmd(cmdLen, argv1, &callbacks);
+    int ret = exe_ffmpeg_cmd(cmdLen, argv1, nullptr);
     if (ret != 0) {
         char err[1024] = {0};
         int nRet = av_strerror(ret, err, 1024);

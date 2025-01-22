@@ -3947,7 +3947,7 @@ int exe_ffmpeg_cmd(int argc, char **argv, Callbacks *callback) {
     int i, ret;
     BenchmarkTimeStamps ti;
     int saveCode = setjmp(ex_buf__);
-    if (savedCode == 0) {
+    if (saveCode == 0) {
         init_dynload();
 
         register_exit(ffmpeg_cleanup);
@@ -3956,6 +3956,13 @@ int exe_ffmpeg_cmd(int argc, char **argv, Callbacks *callback) {
 
         av_log_set_flags(AV_LOG_SKIP_REPEATED);
         parse_loglevel(argc, argv, options);
+        // if (argc > 1 && !strcmp(argv[1], "-d")) {
+        //     run_as_daemon = 1;
+        //     // av_log_set_callback(log_callback_null);
+        //     av_log_set_level(AV_LOG_QUIET);
+        //     argc--;
+        //     argv++;
+        // }
 
 #if CONFIG_AVDEVICE
         avdevice_register_all();
