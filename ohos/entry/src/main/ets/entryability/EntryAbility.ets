@@ -20,6 +20,7 @@ import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant'
 import { UIAbility, AbilityConstant, Want } from '@kit.AbilityKit';
 import  DownloadPlugin  from './DownloadPlugin';
 import  VolumePlugin  from './VolumePlugin';
+import  FfmpegPlugin  from './FfmpegPlugin';
 let wantInfo : Want;
 
 function createFile(openuri : string): void {
@@ -51,6 +52,7 @@ export default class EntryAbility extends FlutterAbility {
     GeneratedPluginRegistrant.registerWith(flutterEngine)
     this.addPlugin(new DownloadPlugin());
     this.addPlugin(new VolumePlugin());
+    this.addPlugin(new FfmpegPlugin());
   }
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam) {         
         let uri = want.uri;

@@ -373,7 +373,7 @@ class _MaterialControlsState extends State<MaterialControls>
 
     return GestureDetector(
       onTap: () {
-        if (_latestValue.isPlaying) {
+        if (true||_latestValue.isPlaying) {
           if (_displayTapped) {
             setState(() {
               notifier.hideStuff = true;
@@ -382,6 +382,7 @@ class _MaterialControlsState extends State<MaterialControls>
             _cancelAndRestartTimer();
           }
         } else {
+          // TODO: this is a hack to show the player controls when the video is paused
           _playPause();
 
           setState(() {

@@ -165,6 +165,7 @@ class DownloadApi {
       wrapped.set("UNAVAILABLE", "Download level not available.");
       result.error("UNAVAILABLE", "Download level not available.", null)
     }
+    console.info("startBgTask finish");
     Log.i(TAG, "startBgTask finish");
   }
 }

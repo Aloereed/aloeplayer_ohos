@@ -14,6 +14,14 @@ class PlayerWithControls extends StatefulWidget {
 }
 
 class _PlayerWithControlsState extends State<PlayerWithControls> {
+  final Stream<double?> brightnessStream = _createBrightnessStream();
+
+  static Stream<double?> _createBrightnessStream() async* {
+    while (true) {
+      yield await Screen.brightness;
+      await Future.delayed(Duration(milliseconds: 100)); // 每隔 1 秒更新一次
+    }
+  }
   @override
   Widget build(BuildContext context) {
     final ChewieController chewieController = ChewieController.of(context);
@@ -208,10 +216,10 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
 
                     if (delta < 0) {
                       // 上滑增加亮度
-                      _brightness = (_brightness + 0.01).clamp(0.0, 1.0);
+                      _brightness = (_brightness + 0.005).clamp(0.0, 1.0);
                     } else if (delta > 0) {
                       // 下滑减少亮度
-                      _brightness = (_brightness - 0.01).clamp(0.0, 1.0);
+                      _brightness = (_brightness - 0.005).clamp(0.0, 1.0);
                     }
 
                     // 设置亮度
@@ -240,10 +248,10 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                     double _volume = 0.0;
                     if (delta < 0) {
                       // 上滑增加音量
-                      _volume = 0.01;
+                      _volume = 0.005;
                     } else if (delta > 0) {
                       // 下滑减少音量
-                      _volume = -0.01;
+                      _volume = -0.005;
                     }
 
                     // 设置音量
@@ -265,7 +273,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                     setState(() {
                       chewieController.showVolumeSlider = true;
                     });
-                    chewieController.startVolumeSliderTimer();
+                    // chewieController.startVolumeSliderTimer();
                   }
                 },
                 child: Stack(children: [
@@ -327,7 +335,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                               overlayShape: RoundSliderOverlayShape(
                                   overlayRadius: 12), // 调整滑块点击区域大小
                             ),
-                            child: BrightnessSlider(),
+                            child: BrightnessSlider(brightnessStream: brightnessStream),
                           ),
                         ),
                       ),
@@ -341,39 +349,36 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
 }
 
 class BrightnessSlider extends StatelessWidget {
+  final Stream<double?> brightnessStream;
+
+  BrightnessSlider({required this.brightnessStream});
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<double?>(
-      future: Screen.brightness, // 获取亮度值（可能为 null 或 int）
+    return StreamBuilder<double?>(
+      stream: brightnessStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return CircularProgressIndicator(); // 加载中显示进度条
         } else if (snapshot.hasError) {
-          print('Error: ${snapshot.error}'); // 出错时显示错误信息
-          // 数据加载完成后显示 Slider
-          double brightnessValue =
-              (snapshot.data ?? 0.5).toDouble(); // 确保值为 double 类型
-          return Slider(
-            value: brightnessValue, // 使用转换后的 double 值
-            min: 0.0,
-            max: 1.0,
-            onChanged: (value) async {
-              await Screen.setBrightness(value); // 设置亮度值
-            },
-          );
+          print('Error: ${snapshot.error}'); // 出错时打印错误信息
+          return _buildSlider(0.5); // 出错时使用默认值
         } else {
           // 数据加载完成后显示 Slider
-          double brightnessValue =
-              (snapshot.data ?? 0.5).toDouble(); // 确保值为 double 类型
-          return Slider(
-            value: brightnessValue, // 使用转换后的 double 值
-            min: 0.0,
-            max: 1.0,
-            onChanged: (value) async {
-              await Screen.setBrightness(value); // 设置亮度值
-            },
-          );
+          double brightnessValue = (snapshot.data ?? 0.5).toDouble();
+          return _buildSlider(brightnessValue);
         }
+      },
+    );
+  }
+
+  Widget _buildSlider(double brightnessValue) {
+    return Slider(
+      value: brightnessValue,
+      min: 0.0,
+      max: 1.0,
+      onChanged: (value) async {
+        await Screen.setBrightness(value); // 设置亮度值
       },
     );
   }

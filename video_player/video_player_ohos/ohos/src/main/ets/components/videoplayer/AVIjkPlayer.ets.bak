@@ -1,0 +1,160 @@
+import { IjkMediaPlayer } from "@ohos/ijkplayer";
+import type { OnPreparedListener } from "@ohos/ijkplayer";
+import type { OnVideoSizeChangedListener } from "@ohos/ijkplayer";
+import type { OnCompletionListener } from "@ohos/ijkplayer";
+import type { OnBufferingUpdateListener } from "@ohos/ijkplayer";
+import type { OnErrorListener } from "@ohos/ijkplayer";
+import type { OnInfoListener } from "@ohos/ijkplayer";
+import type { OnSeekCompleteListener } from "@ohos/ijkplayer";
+import { LogUtils } from "@ohos/ijkplayer";
+import { BusinessError } from "@ohos.base"
+import media from "@ohos.multimedia.media"
+import {
+    AvplayerStatus,
+    CommonConstants,
+    Events,
+    SliderMode,
+} from "./constants/CommonConstants"
+class AVIjkPlayer {
+    private ijkPlayer: IjkMediaPlayer
+    private seekCompleteListeners: ((seekCompleteTime: number) => void)[] = []
+    private videoSizeChangeListeners: ((
+        width: number,
+        height: number
+    ) => void)[] = []
+    private errorListeners: ((err: BusinessError) => void)[] = []
+    private stateChangeListeners: ((
+        state: string,
+        reason: media.StateChangeReason
+    ) => void)[] = []
+    private timeUpdateListeners: ((time: number) => void)[] = []
+    private bufferUpdateListeners: ((
+        infoType: media.BufferingInfoType,
+        value: number
+    ) => void)[] = []
+
+    constructor() {
+        this.ijkPlayer = IjkMediaPlayer.getInstance()
+    }
+
+    // Methods
+    // 为每个事件类型实现独立的 on 方
+
+    on(event: Events.ERROR, listener: (err: BusinessError) => void): void {
+        this.errorListeners.push(listener)
+        const onErrorListener: OnErrorListener = {
+            onError: (what: number, extra: number) => {
+                this.errorListeners.forEach((listener) => listener(throw new BusinessError(what.toString(), extra.toString(), null)))
+            },
+        }
+        this.ijkPlayer.setOnErrorListener(onErrorListener)
+    }
+
+    on(event: Events.STATE_CHANGE, listener: async (state: media.AVPlayerState) => void): void {
+        this.stateChangeListeners.push(listener)
+        const onInfoListener: OnInfoListener = {
+            onInfo: (what: number, extra: number) => {
+                if (what === media.InfoType.MEDIA_INFO_STATE_CHANGE) {
+                    this.stateChangeListeners.forEach((listener) =>
+                        listener(AvplayerStatus[extra], media.StateChangeReason[extra])
+                    )
+                }
+            },
+        }
+        this.ijkPlayer.setOnInfoListener(onInfoListener)
+    }
+
+
+    on(event: Events.TIME_UPDATE, listener: (time: number) => void): void {
+        // this.timeUpdateListeners.push(listener)
+        // const onTimeUpdateListener: OnTimeUpdateListener = {
+        //     onTimeUpdate: (time: number) => {
+        //         this.timeUpdateListeners.forEach((listener) => listener(time))
+        //     },
+        // }
+        // this.ijkPlayer.setOnTimeUpdateListener(onTimeUpdateListener)
+    }
+
+    on(
+        event: Events.BUFFER_UPDATE,
+        listener: (infoType: media.BufferingInfoType, value: number) => void
+    ): void {
+        this.bufferUpdateListeners.push(listener)
+        const onBufferUpdateListener: OnBufferUpdateListener = {
+            onBufferUpdate: (
+                percent: number
+            ) => {
+                this.bufferUpdateListeners.forEach((listener) =>
+                    listener(media.BufferingInfoType.BUFFERING_PERCENT, percent)
+                )
+            },
+        }
+        this.ijkPlayer.setOnBufferUpdateListener(onBufferUpdateListener)
+    }
+
+
+    reset(): void {
+        this.ijkPlayer.reset()
+    }
+
+    release(): void {
+        this.ijkPlayer.release()
+    }
+
+    prepare(): void {
+        this.ijkPlayer.prepareAsync()
+    }
+
+    play(): void {
+        this.ijkPlayer.start()
+    }
+
+    pause(): void {
+        this.ijkPlayer.pause()
+    }
+
+    stop(): void {
+        this.ijkPlayer.stop()
+    }
+
+    seek(position: number): void {
+        this.ijkPlayer.seekTo(position)
+    }
+
+    setMediaSource(src:string, strategy?: PlaybackStrategy): void {
+        this.ijkPlayer.setDataSource(mediaSource)
+    }
+
+    setVolume(volume: number): void {
+        this.ijkPlayer.setVolume(volume.toString(), volume.toString())
+    }
+
+    setSpeed(speed: number): void {
+        this.ijkPlayer.setSpeed(speed.toString())
+    }
+
+    // Properties
+    get currentTime(): number {
+        return this.ijkPlayer.getCurrentPosition()
+    }
+
+    get duration(): number {
+        return this.ijkPlayer.getDuration()
+    }
+
+    get state(): string {
+        return this.ijkPlayer.isPlaying() ? "playing" : "paused"
+    }
+
+    get width(): number {
+        return this.ijkPlayer.getVideoWidth()
+    }
+
+    get height(): number {
+        return this.ijkPlayer.getVideoHeight()
+    }
+
+    // Event listeners setup
+}
+
+// export default AVIjkPlayer

@@ -34,7 +34,7 @@ import { ArrayList, HashMap } from "@kit.ArkTS"
 import { audio } from "@kit.AudioKit"
 import { avSession } from "@kit.AVSessionKit"
 import fs from "@ohos.file.fs"
-
+// import { AVIjkPlayer } from "./AVIjkPlayer"
 const FORMAT_SS: String = "ss"
 const FORMAT_DASH: String = "dash"
 const FORMAT_HLS: String = "hls"
@@ -46,7 +46,7 @@ const AVPLAYER_IO_ERROR: number = 5400103
 
 const TAG = "VideoPlayer"
 export class VideoPlayer {
-    private avPlayer: media.AVPlayer | null = null
+    private avPlayer: media.AVPlayer  | null = null
     private session: avSession.AVSession | null = null
     private currentState: avSession.AVPlaybackState = {
         state: avSession.PlaybackState.PLAYBACK_STATE_PAUSE,

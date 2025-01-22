@@ -52,18 +52,30 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     }
   }
 
-  // 加载视频文件
+// 加载视频文件
   Future<void> _loadVideoFiles() async {
     final directory = Directory(_videoDirPath);
     List<File> files = [];
     if (await directory.exists()) {
-      files = directory.listSync().whereType<File>().toList();
+      files = directory.listSync().whereType<File>().where((file) {
+        // 获取文件扩展名
+        String extension = path.extension(file.path).toLowerCase();
+        // 排除 .srt 和 .ass 文件
+        return extension != '.srt' && extension != '.ass';
+      }).toList();
     }
+
     final directoryOld = Directory(_videoDirPathOld);
     List<File> filesOld = [];
     if (await directoryOld.exists()) {
-      filesOld = directoryOld.listSync().whereType<File>().toList();
+      filesOld = directoryOld.listSync().whereType<File>().where((file) {
+        // 获取文件扩展名
+        String extension = path.extension(file.path).toLowerCase();
+        // 排除 .srt 和 .ass 文件
+        return extension != '.srt' && extension != '.ass';
+      }).toList();
     }
+
     // 拼接新旧视频文件
     final filesCap = [...files, ...filesOld];
     setState(() {
@@ -426,7 +438,6 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     );
   }
 
-
   Widget _buildVideoCard(File file, {bool isListView = false}) {
     return GestureDetector(
       onTap: () {
@@ -444,6 +455,64 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
           builder: (context) {
             return Wrap(
               children: [
+                // 抽取内挂字幕到库文件夹
+                ListTile(
+                  leading: Icon(Icons.subtitles, color: Colors.grey),
+                  title: Text('抽取内挂字幕'),
+                  onTap: () {
+                    Navigator.pop(context); // 关闭弹窗
+                    showDialog(
+                      context: context,
+                      builder: (context) {
+                        return AlertDialog(
+                          title: Text('抽取内挂字幕'),
+                          content: Text('确定要抽取该视频的内挂字幕吗？'),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(context); // 关闭对话框
+                              },
+                              child: Text('取消',
+                                  style: TextStyle(color: Colors.red)),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.pop(context); // 关闭对话框
+                                final _platform = const MethodChannel(
+                                    'samples.flutter.dev/ffmpegplugin');
+                                // 调用方法 getBatteryLevel
+                                final result = await _platform
+                                    .invokeMethod<String>(
+                                        'getsrt', {"path": file.path});
+                                showDialog(
+                                  context: context,
+                                  builder: (context) {
+                                    return AlertDialog(
+                                      title: Text('抽取内挂字幕'),
+                                      content: Text('内挂字幕抽取已启动，请自行到库文件夹检查结果。'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.pop(context); // 关闭对话框
+                                          },
+                                          child: Text('确定',
+                                              style: TextStyle(
+                                                  color: Colors.blue)),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
+                              },
+                              child: Text('确定',
+                                  style: TextStyle(color: Colors.blue)),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
                 ListTile(
                   leading: Icon(Icons.share, color: Colors.blue), // 分享图标
                   title: Text('分享'),

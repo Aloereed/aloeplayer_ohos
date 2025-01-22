@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-20 13:29:45
+ * @LastEditTime: 2025-01-21 22:29:41
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
@@ -171,7 +171,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 SizedBox(height: 8),
                 Text('AloePlayer'),
                 SizedBox(height: 4),
-                Text('版本号: 0.9.8。 本版本默认全屏横屏、添加后台播放和系统集成、调节系统亮度和音量。'),
+                Text('版本号: 0.9.9。 本版本是正式版前频道最后一个版本，预埋FFmpeg编解码器，库内文件长按可提取字幕文件到相同目录下。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),

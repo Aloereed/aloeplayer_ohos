@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-20 13:13:26
+ * @LastEditTime: 2025-01-21 22:38:46
  * @Description: file content
  */
 /*
@@ -641,63 +641,9 @@ class _PlayerTabState extends State<PlayerTab>
         _systemVolume = nextVolume;
         return nextVolume;
       },
-      subtitleBuilder: (context, subtitle) => FutureBuilder<double>(
-        future: _settingsService.getSubtitleFontSize(), // 异步获取字体大小
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            // 如果还在加载中，显示默认字体大小
-            return Container(
-              padding: const EdgeInsets.all(10.0),
-              child: Text(
-                subtitle,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18.0, // 默认字体大小
-                  shadows: [
-                    Shadow(
-                      color: Colors.black,
-                      blurRadius: 1.0,
-                      offset: Offset(1.0, 1.0),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          } else if (snapshot.hasError) {
-            // 如果出错，显示错误信息
-            return Container(
-              padding: const EdgeInsets.all(10.0),
-              child: Text(
-                '加载字体大小失败',
-                style: const TextStyle(
-                  color: Colors.red,
-                  fontSize: 18,
-                ),
-              ),
-            );
-          } else {
-            // 获取到字体大小后，动态设置字体大小
-            final fontSize = snapshot.data ?? 18.0; // 如果获取失败，使用默认值
-            return Container(
-              padding: const EdgeInsets.all(10.0),
-              child: Text(
-                subtitle,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: fontSize.toDouble(), // 动态设置字体大小
-                  shadows: [
-                    const Shadow(
-                      color: Colors.black,
-                      blurRadius: 1.0,
-                      offset: Offset(1.0, 1.0),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-        },
-      ),
+      subtitleBuilder: (context, subtitle) {
+        return SubtitleBuilder(subtitle: subtitle);
+      },
       additionalOptions: (context) {
         return <OptionItem>[
           OptionItem(
@@ -1708,5 +1654,75 @@ class _PlayerTabState extends State<PlayerTab>
             ],
           ),
         ));
+  }
+}
+
+class SubtitleBuilder extends StatefulWidget {
+  final String subtitle;
+
+  SubtitleBuilder({required this.subtitle});
+
+  @override
+  _SubtitleBuilderState createState() => _SubtitleBuilderState();
+}
+
+class _SubtitleBuilderState extends State<SubtitleBuilder> {
+  late Future<double> _fontSizeFuture;
+  final SettingsService _settingsService = SettingsService();
+
+  @override
+  void initState() {
+    super.initState();
+    _fontSizeFuture = _settingsService.getSubtitleFontSize();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<double>(
+      future: _fontSizeFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildSubtitle(18.0); // 默认字体大小
+        } else if (snapshot.hasError) {
+          return _buildErrorSubtitle();
+        } else {
+          final fontSize = snapshot.data ?? 18.0; // 如果获取失败，使用默认值
+          return _buildSubtitle(fontSize);
+        }
+      },
+    );
+  }
+
+  Widget _buildSubtitle(double fontSize) {
+    return Container(
+      padding: const EdgeInsets.all(10.0),
+      child: Text(
+        widget.subtitle,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: fontSize,
+          shadows: [
+            const Shadow(
+              color: Colors.black,
+              blurRadius: 1.0,
+              offset: Offset(1.0, 1.0),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorSubtitle() {
+    return Container(
+      padding: const EdgeInsets.all(10.0),
+      child: Text(
+        '加载字体大小失败',
+        style: const TextStyle(
+          color: Colors.red,
+          fontSize: 18,
+        ),
+      ),
+    );
   }
 }
