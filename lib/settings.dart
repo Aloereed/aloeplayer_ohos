@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-22 19:16:30
+ * @LastEditTime: 2025-01-23 10:54:04
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
@@ -328,7 +328,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 Text('AloePlayer'),
                 SizedBox(height: 4),
                 Text(
-                    '版本号: 1.0.0。 本版本是可打开视频同时加载内挂字幕、转换MP4和删除临时文件。'),
+                    '版本号: 1.0.1。 本版本可打开本地弹幕、打开视频同时加载内挂字幕轨道、转换MP4和删除临时文件。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),

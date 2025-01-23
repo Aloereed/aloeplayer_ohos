@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:video_player/video_player.dart';
 import 'package:screen/screen.dart';
-
+import 'package:canvas_danmaku/canvas_danmaku.dart';
 
 class BrightnessSliderTimer {
   Timer? _timer;
@@ -361,7 +361,29 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                         ),
                       ),
                     ),
-                  
+                  // Visibility(
+                  //   visible: false&&chewieController.danmakuOn,
+                  //   child: Positioned.fill(
+                  //     child: DanmakuScreen(
+                  //       key: chewieController.danmuKey,
+                  //       createdController: (DanmakuController e) {
+                  //         chewieController.danmakuController = e;
+                  //       },
+                  //       option: DanmakuOption(
+                  //         opacity: chewieController.opacity,
+                  //         fontSize: chewieController.fontSize,
+                  //         fontWeight:chewieController.fontWeight,
+                  //         duration: chewieController.duration,
+                  //         showStroke: chewieController.showStroke,
+                  //         // massiveMode: chewieController.massiveMode,
+                  //         hideScroll: chewieController.hideScroll,
+                  //         hideTop: chewieController.hideTop,
+                  //         hideBottom: chewieController.hideBottom,
+                  //         // safeArea: chewieController.safeArea,
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                   if (showBrightnessSlider)
                     Positioned(
                       bottom: 100, // 悬浮在按钮上方

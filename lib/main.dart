@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-22 22:43:55
+ * @LastEditTime: 2025-01-23 10:42:25
  * @Description: file content
  */
 /*
@@ -46,7 +46,7 @@ import 'theme_provider.dart';
 import 'dart:typed_data';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'volumeview.dart';
-import 'package:ns_danmaku/ns_danmaku.dart';
+import 'package:canvas_danmaku/canvas_danmaku.dart';
 
 late MyAudioHandler audioHandler;
 void main() async {
@@ -217,6 +217,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
+  int videoHeight = 0;
+  int videoWidth = 0;
   bool _isFullScreen = false;
   String _openfile = '';
   bool _isPolicyAccepted = false;
@@ -224,6 +226,13 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _checkPrivacyPolicyStatus();
+  }
+
+  void setHomeWH(int width, int height) {
+    setState(() {
+      videoHeight = height;
+      videoWidth = width;
+    });
   }
 
   void _toggleFullScreen() {
@@ -234,9 +243,51 @@ class _HomeScreenState extends State<HomeScreen>
     if (_isFullScreen) {
       // 进入全屏时隐藏状态栏
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      final _videoWidth = videoWidth;
+      final _videoHeight = videoHeight;
+
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+
+      // if (widget.controller.systemOverlaysOnEnterFullScreen != null) {
+      //   /// Optional user preferred settings
+      //   SystemChrome.setEnabledSystemUIMode(
+      //     SystemUiMode.manual,
+      //     overlays: widget.controller.systemOverlaysOnEnterFullScreen,
+      //   );
+      // } else {
+      //   /// Default behavior
+      //   SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+      // }
+
+      final isLandscapeVideo = videoWidth > videoHeight;
+      final isPortraitVideo = videoWidth < videoHeight;
+
+      /// Default behavior
+      /// Video w > h means we force landscape
+      if (isLandscapeVideo) {
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      }
+
+      /// Video h > w means we force portrait
+      else if (isPortraitVideo) {
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
+      }
+
+      /// Otherwise if h == w (square video)
+      else {
+        SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+
+      }
     } else {
       // 退出全屏时显示状态栏
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     }
   }
 
@@ -315,6 +366,7 @@ class _HomeScreenState extends State<HomeScreen>
             isFullScreen: _isFullScreen,
             getopenfile: _getopenfile,
             openfile: _openfile, // 传递_openfile
+            setHomeWH: setHomeWH,
           ),
           VideoLibraryTab(
             getopenfile: _getopenfile,
@@ -455,6 +507,7 @@ List<Map<String, dynamic>> parseDanmakuXml(String xmlString) {
         danmakuContents.add({
           'time': double.parse(pValues[0]), // 弹幕时间
           'content': DanmakuContentItem(content,
+              // time: double.parse(pValues[0]).toInt(), // 弹幕时间
               type: itemType,
               color: Color(rgbToColor(int.parse(pValues[3])))) // 弹幕内容
           // 其他属性可以根据需要添加
@@ -476,6 +529,7 @@ class PlayerTab extends StatefulWidget {
   final VoidCallback toggleFullScreen;
   final bool isFullScreen;
   final Function(String) getopenfile;
+  final Function(int,int) setHomeWH;
   String openfile;
 
   PlayerTab(
@@ -483,7 +537,8 @@ class PlayerTab extends StatefulWidget {
       required this.toggleFullScreen,
       required this.isFullScreen,
       required this.getopenfile,
-      required this.openfile});
+      required this.openfile,
+      required this.setHomeWH});
 
   @override
   _PlayerTabState createState() => _PlayerTabState();
@@ -700,6 +755,7 @@ class _PlayerTabState extends State<PlayerTab>
       showControls: _showControls,
       allowFullScreen: true,
       zoomAndPan: true,
+      customToggleFullScreen: widget.toggleFullScreen,
       optionsTranslation: OptionsTranslation(
         playbackSpeedButtonText: '播放速率',
         subtitlesButtonText: '字幕',
@@ -957,6 +1013,7 @@ class _PlayerTabState extends State<PlayerTab>
             _totalDuration = _videoController!.value.duration;
             _isAudio = _videoController == null ||
                 _videoController!.value.size.width == 0; // 判断是否为音频文件
+            widget.setHomeWH(_videoController!.value.size.width.toInt(), _videoController!.value.size.height.toInt());
           });
           _initializeChewieController();
           _videoController?.play();
@@ -980,6 +1037,7 @@ class _PlayerTabState extends State<PlayerTab>
             _totalDuration = _videoController!.value.duration;
             _isAudio = _videoController == null ||
                 _videoController!.value.size.width == 0; // 判断是否为音频文件
+            widget.setHomeWH(_videoController!.value.size.width.toInt(), _videoController!.value.size.height.toInt());
           });
           _initializeChewieController();
           _videoController?.play();
@@ -1705,6 +1763,14 @@ class _PlayerTabState extends State<PlayerTab>
           // },
           child: Stack(
             children: [
+              Positioned.fill(
+                  child: widget.isFullScreen
+                      ? Container(
+                          color: Colors.black, // 完全透明
+                        )
+                      : Container(
+                          color: Colors.transparent, // 完全透明
+                        )),
               Center(
                 child: Stack(
                   alignment: Alignment.center,

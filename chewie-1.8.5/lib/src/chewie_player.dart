@@ -13,7 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:ns_danmaku/ns_danmaku.dart';
+import 'package:canvas_danmaku/canvas_danmaku.dart';
 
 typedef ChewieRoutePageBuilder = Widget Function(
   BuildContext context,
@@ -312,6 +312,7 @@ class ChewieController extends ChangeNotifier {
     this.hideControlsTimer = defaultHideControlsTimer,
     this.controlsSafeAreaMinimum = EdgeInsets.zero,
     this.setSystemVolume,
+    this.customToggleFullScreen,
     this.danmakuContents,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
@@ -370,6 +371,7 @@ class ChewieController extends ChangeNotifier {
       ChewieControllerProvider,
     )? routePageBuilder,
     double Function(double)? setSystemVolume,
+    Function? customToggleFullScreen,
     List<Map<String, dynamic>>? danmakuContents,
   }) {
     return ChewieController(
@@ -426,6 +428,8 @@ class ChewieController extends ChangeNotifier {
       progressIndicatorDelay:
           progressIndicatorDelay ?? this.progressIndicatorDelay,
       setSystemVolume: setSystemVolume ?? this.setSystemVolume,
+      customToggleFullScreen:
+          customToggleFullScreen ?? this.customToggleFullScreen,
       danmakuContents: danmakuContents ?? this.danmakuContents,
     );
   }
@@ -609,13 +613,36 @@ class ChewieController extends ChangeNotifier {
 
   Timer? _brightnessSliderTimer;
   Timer? _volumeSliderTimer;
+  bool danmakuOn = true;
   //以double为参数的一个函数作为构造函数的参数
   double Function(double)? setSystemVolume;
+  Function? customToggleFullScreen;
   List<Map<String, dynamic>>? danmakuContents;
+  Map<int, List<Map<String, dynamic>>> danmakuByTime = {};
+
   set setDanmakuContents(List<Map<String, dynamic>>? contents) {
+    // 清空之前的弹幕内容和索引
     // danmakuController.clearDanmaku();
     sentDanmakuIndexes.clear();
+    danmakuByTime.clear();
+
     danmakuContents = contents;
+
+    if (contents != null) {
+      for (var danmaku in contents) {
+        // 获取时间并转换为整数
+        double time = danmaku['time'] ?? 0.0;
+        int timeKey = time.toInt();
+
+        // 如果该时间点还没有对应的列表，则创建一个新的列表
+        if (!danmakuByTime.containsKey(timeKey)) {
+          danmakuByTime[timeKey] = [];
+        }
+
+        // 将弹幕添加到对应时间的列表中
+        danmakuByTime[timeKey]!.add(danmaku);
+      }
+    }
   }
 
   late DanmakuController _danmakuController;
@@ -763,12 +790,21 @@ class ChewieController extends ChangeNotifier {
 
     // 发送弹幕
     if (danmakuContents != null) {
-      for (int i = 0; i < danmakuContents!.length; i++) {
-        if (!sentDanmakuIndexes.contains(i) &&
-            danmakuContents![i]['time'] <= currentPosition &&
-            danmakuContents![i]['time'] > currentPosition - 2) {
-          _danmakuController.addDanmaku(danmakuContents![i]['content']);
-          sentDanmakuIndexes.add(i);
+      // 获取当前时间范围内的弹幕
+      int currentTimeKey = currentPosition.toInt();
+      for (int timeKey = currentTimeKey - 1;
+          timeKey <= currentTimeKey;
+          timeKey++) {
+        if (danmakuByTime.containsKey(timeKey)) {
+          for (var danmaku in danmakuByTime[timeKey]!) {
+            int index = danmakuContents!.indexOf(danmaku);
+            if (!sentDanmakuIndexes.contains(index) &&
+                danmaku['time'] <= currentPosition &&
+                danmaku['time'] > currentPosition - 2) {
+              _danmakuController.addDanmaku(danmaku['content']);
+              sentDanmakuIndexes.add(index);
+            }
+          }
         }
       }
     }
@@ -816,6 +852,10 @@ class ChewieController extends ChangeNotifier {
   }
 
   void toggleFullScreen() {
+    if (customToggleFullScreen != null) {
+      customToggleFullScreen!();
+      return;
+    }
     _isFullScreen = !_isFullScreen;
     notifyListeners();
   }
