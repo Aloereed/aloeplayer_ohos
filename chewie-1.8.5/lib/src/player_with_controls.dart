@@ -9,6 +9,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:video_player/video_player.dart';
 import 'package:screen/screen.dart';
 
+
 class BrightnessSliderTimer {
   Timer? _timer;
   final VoidCallback onTimerEnd;
@@ -360,6 +361,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                         ),
                       ),
                     ),
+                  
                   if (showBrightnessSlider)
                     Positioned(
                       bottom: 100, // 悬浮在按钮上方

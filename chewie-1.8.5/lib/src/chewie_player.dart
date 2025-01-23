@@ -1,4 +1,5 @@
 import 'dart:async';
+// import 'dart:nativewrappers/_internal/vm/lib/core_patch.dart';
 
 import 'package:chewie/src/chewie_progress_colors.dart';
 import 'package:chewie/src/models/option_item.dart';
@@ -12,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:ns_danmaku/ns_danmaku.dart';
 
 typedef ChewieRoutePageBuilder = Widget Function(
   BuildContext context,
@@ -310,6 +312,7 @@ class ChewieController extends ChangeNotifier {
     this.hideControlsTimer = defaultHideControlsTimer,
     this.controlsSafeAreaMinimum = EdgeInsets.zero,
     this.setSystemVolume,
+    this.danmakuContents,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
           'The playbackSpeeds values must all be greater than 0',
@@ -367,6 +370,7 @@ class ChewieController extends ChangeNotifier {
       ChewieControllerProvider,
     )? routePageBuilder,
     double Function(double)? setSystemVolume,
+    List<Map<String, dynamic>>? danmakuContents,
   }) {
     return ChewieController(
       draggableProgressBar: draggableProgressBar ?? this.draggableProgressBar,
@@ -422,6 +426,7 @@ class ChewieController extends ChangeNotifier {
       progressIndicatorDelay:
           progressIndicatorDelay ?? this.progressIndicatorDelay,
       setSystemVolume: setSystemVolume ?? this.setSystemVolume,
+      danmakuContents: danmakuContents ?? this.danmakuContents,
     );
   }
 
@@ -606,7 +611,109 @@ class ChewieController extends ChangeNotifier {
   Timer? _volumeSliderTimer;
   //以double为参数的一个函数作为构造函数的参数
   double Function(double)? setSystemVolume;
+  List<Map<String, dynamic>>? danmakuContents;
+  set setDanmakuContents(List<Map<String, dynamic>>? contents) {
+    // danmakuController.clearDanmaku();
+    sentDanmakuIndexes.clear();
+    danmakuContents = contents;
+  }
 
+  late DanmakuController _danmakuController;
+  DanmakuController get danmakuController => _danmakuController;
+  // 设置一个setter
+  set danmakuController(DanmakuController controller) {
+    _danmakuController = controller;
+    notifyListeners();
+  }
+
+  List<int> sentDanmakuIndexes = [];
+  var _key = new GlobalKey<ScaffoldState>();
+
+  final _danmuKey = GlobalKey();
+  get danmuKey => _danmuKey;
+
+  bool _running = true;
+  bool get running => _running;
+
+  /// 弹幕描边
+  bool _showStroke = true;
+  bool get showStroke => _showStroke;
+  set showStroke(bool showStroke) {
+    _showStroke = showStroke;
+    notifyListeners();
+  }
+
+  /// 弹幕海量模式(弹幕轨道填满时继续绘制)
+  bool _massiveMode = false;
+  bool get massiveMode => _massiveMode;
+  set massiveMode(bool massiveMode) {
+    _massiveMode = massiveMode;
+    notifyListeners();
+  }
+
+  /// 弹幕透明度
+  double _opacity = 1.0;
+  double get opacity => _opacity;
+  set opacity(double opacity) {
+    _opacity = opacity;
+    notifyListeners();
+  }
+
+  /// 弹幕持续时间
+  int _duration = 8;
+  int get duration => _duration;
+  set duration(int duration) {
+    _duration = duration;
+    notifyListeners();
+  }
+
+  /// 弹幕字号
+  double _fontSize = 20;
+  double get fontSize => _fontSize;
+  set fontSize(double fontSize) {
+    _fontSize = fontSize;
+    notifyListeners();
+  }
+
+  /// 弹幕粗细
+  int _fontWeight = 4;
+  int get fontWeight => _fontWeight;
+  set fontWeight(int fontWeight) {
+    _fontWeight = fontWeight;
+    notifyListeners();
+  }
+
+  /// 隐藏滚动弹幕
+  bool _hideScroll = false;
+  bool get hideScroll => _hideScroll;
+  set hideScroll(bool hideScroll) {
+    _hideScroll = hideScroll;
+    notifyListeners();
+  }
+
+  /// 隐藏顶部弹幕
+  bool _hideTop = false;
+  bool get hideTop => _hideTop;
+  set hideTop(bool hideTop) {
+    _hideTop = hideTop;
+    notifyListeners();
+  }
+
+  /// 隐藏底部弹幕
+  bool _hideBottom = false;
+  bool get hideBottom => _hideBottom;
+  set hideBottom(bool hideBottom) {
+    _hideBottom = hideBottom;
+    notifyListeners();
+  }
+
+  /// 为字幕预留空间
+  bool _safeArea = true;
+  bool get safeArea => _safeArea;
+  set safeArea(bool safeArea) {
+    _safeArea = safeArea;
+    notifyListeners();
+  }
 
   void setPlaybackSpeed(double speed) {
     videoPlayerController.setPlaybackSpeed(speed);
@@ -636,6 +743,43 @@ class ChewieController extends ChangeNotifier {
     if (fullScreenByDefault) {
       videoPlayerController.addListener(_fullScreenListener);
     }
+
+    videoPlayerController.addListener(_onVideoProgress);
+  }
+
+  int _lastPosition = 0; // 记录上一次的进度
+
+  void _onVideoProgress() {
+    final currentPosition = videoPlayerController.value.position.inSeconds;
+
+    // 检测是否回退了进度
+    if (currentPosition < _lastPosition) {
+      // 重置与当前进度相关的已发送弹幕索引
+      sentDanmakuIndexes.removeWhere((index) {
+        return danmakuContents![index]['time'] >= currentPosition;
+      });
+    }
+    _lastPosition = currentPosition; // 更新上一次的进度
+
+    // 发送弹幕
+    if (danmakuContents != null) {
+      for (int i = 0; i < danmakuContents!.length; i++) {
+        if (!sentDanmakuIndexes.contains(i) &&
+            danmakuContents![i]['time'] <= currentPosition &&
+            danmakuContents![i]['time'] > currentPosition - 2) {
+          _danmakuController.addDanmaku(danmakuContents![i]['content']);
+          sentDanmakuIndexes.add(i);
+        }
+      }
+    }
+
+    // 控制弹幕播放状态
+    final isPlaying = videoPlayerController.value.isPlaying;
+    if (isPlaying) {
+      _danmakuController.resume();
+    } else {
+      _danmakuController.pause();
+    }
   }
 
   void startVolumeSliderTimer() {
@@ -646,14 +790,13 @@ class ChewieController extends ChangeNotifier {
     });
   }
 
-    void startBrightnessSliderTimer() {
+  void startBrightnessSliderTimer() {
     _brightnessSliderTimer?.cancel(); // 取消之前的 Timer
     _brightnessSliderTimer = Timer(Duration(seconds: 5), () {
       showBrightnessSlider = false; // 5 秒后隐藏 Slider
       notifyListeners();
     });
   }
-
 
   Future<void> _fullScreenListener() async {
     if (videoPlayerController.value.isPlaying && !_isFullScreen) {

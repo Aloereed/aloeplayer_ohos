@@ -1,5 +1,6 @@
 dependencies:
   audio_metadata_reader: ^1.1.0
+  canvas_danmaku: ^0.2.6
   chewie:
     path: ./chewie-1.8.5
   cupertino_icons: ^1.0.6
@@ -12,6 +13,11 @@ dependencies:
   simple_gesture_detector: ^0.2.1
   vivysub_utils: ^0.2.0
   webdav_client: null
+  xml: null
+  ns_danmaku: 
+    git: 
+        url: https://github.com/xiaoyaocz/flutter_ns_danmaku.git
+        ref: master
 dependency_overrides:
   audio_service:
     git:
@@ -96,4 +102,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 1.0.0-beta+11
+version: 1.0.1-beta+12

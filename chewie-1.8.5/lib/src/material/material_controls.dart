@@ -14,6 +14,7 @@ import 'package:chewie/src/notifiers/index.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
+import 'package:ns_danmaku/ns_danmaku.dart';
 
 class MaterialControls extends StatefulWidget {
   const MaterialControls({
@@ -38,11 +39,13 @@ class _MaterialControlsState extends State<MaterialControls>
   Timer? _initTimer;
   late var _subtitlesPosition = Duration.zero;
   bool _subtitleOn = true;
+  bool _danmakuOn = true;
   Timer? _showAfterExpandCollapseTimer;
   bool _dragging = false;
   bool _displayTapped = false;
   Timer? _bufferingDisplayTimer;
   bool _displayBufferingIndicator = false;
+  bool _showSettings = false; // 控制悬浮框的显示
 
   final barHeight = 48.0 * 1.5;
   final marginSize = 5.0;
@@ -92,11 +95,42 @@ class _MaterialControlsState extends State<MaterialControls>
                     )
               else
                 _buildHitArea(),
+              Visibility(
+                visible: _danmakuOn,
+                child: Positioned.fill(
+                  child: DanmakuScreen(
+                    key: chewieController.danmuKey,
+                    createdController: (DanmakuController e) {
+                      chewieController.danmakuController = e;
+                    },
+                    option: DanmakuOption(
+                      opacity: chewieController.opacity,
+                      fontSize: chewieController.fontSize,
+                      fontWeight: chewieController.fontWeight,
+                      duration: chewieController.duration,
+                      showStroke: chewieController.showStroke,
+                      massiveMode: chewieController.massiveMode,
+                      hideScroll: chewieController.hideScroll,
+                      hideTop: chewieController.hideTop,
+                      hideBottom: chewieController.hideBottom,
+                      safeArea: chewieController.safeArea,
+                    ),
+                  ),
+                ),
+              ),
+              // 悬浮设置框
+              if (_showSettings)
+                Positioned(
+                  bottom: 50, // 悬浮框显示在按钮上方
+                  left: 0,
+                  child: _buildSettingsPopup(),
+                ),
               _buildActionBar(),
               Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
-                  if (_subtitleOn&&(chewieController.subtitle?.isNotEmpty ?? false))
+                  if (_subtitleOn &&
+                      (chewieController.subtitle?.isNotEmpty ?? false))
                     Transform.translate(
                       offset: Offset(
                         0.0,
@@ -153,6 +187,7 @@ class _MaterialControlsState extends State<MaterialControls>
           child: Row(
             children: [
               _buildSubtitleToggle(),
+              _buildDanmakuToggle(),
               if (chewieController.showOptions) _buildOptionsButton(),
             ],
           ),
@@ -214,7 +249,7 @@ class _MaterialControlsState extends State<MaterialControls>
   }
 
   Widget _buildSubtitles(BuildContext context, Subtitles subtitles) {
-    if (!_subtitleOn||!(chewieController.subtitle?.isNotEmpty ?? false)) {
+    if (!_subtitleOn || !(chewieController.subtitle?.isNotEmpty ?? false)) {
       return const SizedBox();
     }
     final currentSubtitle = subtitles.getByPosition(_subtitlesPosition);
@@ -245,6 +280,249 @@ class _MaterialControlsState extends State<MaterialControls>
           textAlign: TextAlign.center,
         ),
       ),
+    );
+  }
+
+  Widget _buildDanmukuSettingsButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showSettings = !_showSettings; // 切换悬浮框的显示状态
+        });
+      },
+      child: Stack(
+        children: [
+          // 弹幕设置按钮
+          AnimatedOpacity(
+            opacity: notifier.hideStuff ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 300),
+            child: ClipRect(
+              child: Container(
+                height: 40,
+                padding: const EdgeInsets.only(left: 6.0),
+                child: const Icon(
+                  Icons.settings,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建悬浮设置框
+  Widget _buildSettingsPopup() {
+    return Container(
+      width: 300, // 增加宽度以容纳两列
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Stack(
+        children: [
+          // 关闭按钮
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 20),
+              onPressed: () {
+                setState(() {
+                  _showSettings = false; // 关闭设置弹窗
+                });
+              },
+            ),
+          ),
+          // 两列布局
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 第一列
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSliderSetting(
+                          label: '透明度',
+                          value:
+                              chewieController.danmakuController.option.opacity,
+                          onChanged: (value) {
+                            setState(() {
+                              chewieController.danmakuController.updateOption(
+                                chewieController.danmakuController.option
+                                    .copyWith(opacity: value),
+                              );
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _buildSliderSetting(
+                          label: '字体大小',
+                          value: chewieController
+                              .danmakuController.option.fontSize,
+                          min: 10,
+                          max: 30,
+                          onChanged: (value) {
+                            setState(() {
+                              chewieController.danmakuController.updateOption(
+                                chewieController.danmakuController.option
+                                    .copyWith(fontSize: value),
+                              );
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _buildSwitchSetting(
+                          label: '显示描边',
+                          value: chewieController
+                              .danmakuController.option.showStroke,
+                          onChanged: (value) {
+                            setState(() {
+                              chewieController.danmakuController.updateOption(
+                                chewieController.danmakuController.option
+                                    .copyWith(showStroke: value),
+                              );
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _buildSwitchSetting(
+                          label: '超量弹幕模式',
+                          value: chewieController
+                              .danmakuController.option.massiveMode,
+                          onChanged: (value) {
+                            setState(() {
+                              chewieController.danmakuController.updateOption(
+                                chewieController.danmakuController.option
+                                    .copyWith(massiveMode: value),
+                              );
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  // 第二列
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSwitchSetting(
+                          label: '隐藏滚动弹幕',
+                          value: chewieController
+                              .danmakuController.option.hideScroll,
+                          onChanged: (value) {
+                            setState(() {
+                              chewieController.danmakuController.updateOption(
+                                chewieController.danmakuController.option
+                                    .copyWith(hideScroll: value),
+                              );
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _buildSwitchSetting(
+                          label: '隐藏顶部弹幕',
+                          value:
+                              chewieController.danmakuController.option.hideTop,
+                          onChanged: (value) {
+                            setState(() {
+                              chewieController.danmakuController.updateOption(
+                                chewieController.danmakuController.option
+                                    .copyWith(hideTop: value),
+                              );
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _buildSwitchSetting(
+                          label: '隐藏底部弹幕',
+                          value: chewieController
+                              .danmakuController.option.hideBottom,
+                          onChanged: (value) {
+                            setState(() {
+                              chewieController.danmakuController.updateOption(
+                                chewieController.danmakuController.option
+                                    .copyWith(hideBottom: value),
+                              );
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _buildSwitchSetting(
+                          label: '启用安全区域',
+                          value: chewieController
+                              .danmakuController.option.safeArea,
+                          onChanged: (value) {
+                            setState(() {
+                              chewieController.danmakuController.updateOption(
+                                chewieController.danmakuController.option
+                                    .copyWith(safeArea: value),
+                              );
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建滑块设置项
+  Widget _buildSliderSetting({
+    required String label,
+    required double value,
+    double min = 0,
+    double max = 1,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white),
+        ),
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  // 构建开关设置项
+  Widget _buildSwitchSetting({
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white),
+        ),
+        const Spacer(),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 
@@ -280,6 +558,10 @@ class _MaterialControlsState extends State<MaterialControls>
                       _buildPosition(iconColor),
                     if (chewieController.allowMuting)
                       _buildMuteButton(controller),
+                    if (_danmakuOn &&
+                        chewieController.danmakuContents != null &&
+                        chewieController.danmakuContents!.length > 0)
+                      _buildDanmukuSettingsButton(context),
                     const Spacer(),
                     if (chewieController.allowFullScreen) _buildExpandButton(),
                   ],
@@ -373,7 +655,7 @@ class _MaterialControlsState extends State<MaterialControls>
 
     return GestureDetector(
       onTap: () {
-        if (true||_latestValue.isPlaying) {
+        if (true || _latestValue.isPlaying) {
           if (_displayTapped) {
             setState(() {
               notifier.hideStuff = true;
@@ -508,9 +790,38 @@ class _MaterialControlsState extends State<MaterialControls>
     );
   }
 
+  Widget _buildDanmakuToggle() {
+    //if don't have subtitle hiden button
+    if (chewieController.danmakuContents == null ||
+        chewieController.danmakuContents?.length == 0) {
+      return const SizedBox();
+    }
+    return GestureDetector(
+      onTap: _onDanmakuTap,
+      child: Container(
+        height: barHeight,
+        color: Colors.transparent,
+        padding: const EdgeInsets.only(
+          left: 12.0,
+          right: 12.0,
+        ),
+        child: Icon(
+          _danmakuOn ? Icons.comment : Icons.comments_disabled,
+          color: _danmakuOn ? Colors.white : Colors.grey[700],
+        ),
+      ),
+    );
+  }
+
   void _onSubtitleTap() {
     setState(() {
       _subtitleOn = !_subtitleOn;
+    });
+  }
+
+  void _onDanmakuTap() {
+    setState(() {
+      _danmakuOn = !_danmakuOn;
     });
   }
 
@@ -527,6 +838,7 @@ class _MaterialControlsState extends State<MaterialControls>
   Future<void> _initialize() async {
     // _subtitleOn = chewieController.subtitle?.isNotEmpty ?? false;
     _subtitleOn = true;
+    _danmakuOn = true;
     controller.addListener(_updateState);
 
     _updateState();

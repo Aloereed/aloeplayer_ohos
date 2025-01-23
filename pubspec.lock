@@ -76,6 +76,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.1.1"
+  canvas_danmaku:
+    dependency: "direct main"
+    description:
+      name: canvas_danmaku
+      sha256: a6761973c72328c3872fa288d0a943bf3675238a30913cf9cd0155d9b7cea9ca
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.2.6"
   characters:
     dependency: transitive
     description:
@@ -569,6 +577,15 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.0.0"
+  ns_danmaku:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: master
+      resolved-ref: "53bc3854d4e2e6f1793e7cb419ecbbe5c7c6048b"
+      url: "https://github.com/xiaoyaocz/flutter_ns_danmaku.git"
+    source: git
+    version: "0.0.9"
   package_info_plus:
     dependency: transitive
     description:
@@ -1180,7 +1197,7 @@ packages:
     source: hosted
     version: "1.1.0"
   xml:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: xml
       sha256: b015a8ad1c488f66851d762d3090a21c600e479dc75e68328c52774040cf9226

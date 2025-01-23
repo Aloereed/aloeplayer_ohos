@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-22 20:34:43
+ * @LastEditTime: 2025-01-22 22:43:55
  * @Description: file content
  */
 /*
@@ -14,6 +14,7 @@
  * 
  */
 import 'package:aloeplayer/privacy_policy.dart';
+import 'package:xml/xml.dart' as xml;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
@@ -45,6 +46,7 @@ import 'theme_provider.dart';
 import 'dart:typed_data';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'volumeview.dart';
+import 'package:ns_danmaku/ns_danmaku.dart';
 
 late MyAudioHandler audioHandler;
 void main() async {
@@ -417,7 +419,58 @@ class MyAudioHandler extends BaseAudioHandler {
   }
 }
 
+int rgbToColor(int rgb) {
+  // 将 RGB 值转换为 ARGB 值，透明度为 0xFF（完全不透明）
+  return 0xFF000000 | rgb;
+}
 
+List<Map<String, dynamic>> parseDanmakuXml(String xmlString) {
+  // 解析 XML 文档
+  final document = xml.XmlDocument.parse(xmlString);
+
+  // 获取所有 <d> 标签
+  final dElements = document.findAllElements('d');
+
+  // 解析每个 <d> 标签并生成 danmakuContents
+  List<Map<String, dynamic>> danmakuContents = [];
+  try {
+    for (var dElement in dElements) {
+      // 获取 p 属性
+      final pAttribute = dElement.getAttribute('p');
+      if (pAttribute == null) continue;
+
+      // 解析 p 属性
+      final pValues = pAttribute.split(',');
+
+      // 获取弹幕内容
+      final content = dElement.text;
+      final type = int.parse(pValues[1]);
+      DanmakuItemType itemType = DanmakuItemType.scroll;
+      if (type == 4)
+        itemType = DanmakuItemType.bottom;
+      else if (type == 5) itemType = DanmakuItemType.top;
+
+      try {
+        // 将数据添加到 danmakuContents
+        danmakuContents.add({
+          'time': double.parse(pValues[0]), // 弹幕时间
+          'content': DanmakuContentItem(content,
+              type: itemType,
+              color: Color(rgbToColor(int.parse(pValues[3])))) // 弹幕内容
+          // 其他属性可以根据需要添加
+        });
+      } catch (e) {
+        print("parse single danmaku xml error");
+      }
+    }
+
+    print("parse danmaku xml done");
+  } catch (e) {
+    print("parse danmaku xml error");
+  }
+
+  return danmakuContents;
+}
 
 class PlayerTab extends StatefulWidget {
   final VoidCallback toggleFullScreen;
@@ -471,6 +524,7 @@ class _PlayerTabState extends State<PlayerTab>
   VolumeExample? _volumeExample;
   List<SubtitleData> _subtitles = []; // 存储所有字幕
   int _currentSubtitleIndex = -1; // 当前启用的字幕索引
+  List<Map<String, dynamic>> _danmakuContents = []; // 存储所有弹幕
   final EventChannel _eventChannel2 = EventChannel('com.example.app/events');
   final EventChannel _eventChannel =
       EventChannel('samples.flutter.dev/volumepluginevent');
@@ -505,7 +559,7 @@ class _PlayerTabState extends State<PlayerTab>
       });
     });
   }
-  
+
   void _onEventOpenuri(dynamic event) {
     if (event is String && event.isNotEmpty) {
       _openUri(event); // 打开URI
@@ -518,6 +572,7 @@ class _PlayerTabState extends State<PlayerTab>
   void _onErrorOpenuri(Object error) {
     print('Error receiving event: $error');
   }
+
   @override
   void initState() async {
     super.initState();
@@ -529,7 +584,9 @@ class _PlayerTabState extends State<PlayerTab>
     // _timer = Timer.periodic(Duration(seconds: 1), (timer) {
     //   _checkAndOpenUriFile();
     // });
-    _eventChannel2.receiveBroadcastStream().listen(_onEventOpenuri, onError: _onErrorOpenuri);
+    _eventChannel2
+        .receiveBroadcastStream()
+        .listen(_onEventOpenuri, onError: _onErrorOpenuri);
     // _setupAudioSession();
     _animeController = AnimationController(
       vsync: this,
@@ -560,8 +617,8 @@ class _PlayerTabState extends State<PlayerTab>
   void didUpdateWidget(PlayerTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.openfile != oldWidget.openfile && widget.openfile.isNotEmpty) {
-      _openUri(widget.openfile,wantFirst: wantFirst);
-      wantFirst=false;
+      _openUri(widget.openfile, wantFirst: wantFirst);
+      wantFirst = false;
     }
   }
 
@@ -574,12 +631,11 @@ class _PlayerTabState extends State<PlayerTab>
         if (uri.isNotEmpty) {
           // await _openUri(uri,wantFirst: true); // 打开URI
           // await _openUri(uri,wantFirst: true); // 打开URI
-          wantFirst=true;
+          wantFirst = true;
           widget.getopenfile(uri);
           // setState(() {
           //   widget.openfile = uri;
           // });
-          
         }
         await file.delete(); // 删除文件
       }
@@ -686,6 +742,11 @@ class _PlayerTabState extends State<PlayerTab>
             onTap: () => _openSRT(),
             iconData: Icons.subtitles,
             title: '打开字幕文件',
+          ),
+          OptionItem(
+            onTap: () => _openDanmaku(),
+            iconData: Icons.comment,
+            title: '打开弹幕文件',
           ),
           OptionItem(
             onTap: () => _selectSubtitle(),
@@ -879,7 +940,7 @@ class _PlayerTabState extends State<PlayerTab>
     if (uri.startsWith('/Photo')) {
       uri = 'file://media' + uri;
     }
-    if(uri.startsWith('file://docs') && !wantFirst){
+    if (uri.startsWith('file://docs') && !wantFirst) {
       // 删除file://docs并解析unicode码
       uri = Uri.decodeFull(uri.substring(11));
     }
@@ -992,7 +1053,6 @@ class _PlayerTabState extends State<PlayerTab>
     if (result != null) {
       PlatformFile file = result.files.first;
       widget.getopenfile(file.path!);
-      
     } else {
       // 用户取消了选择
       print('用户取消了文件选择');
@@ -1230,6 +1290,34 @@ class _PlayerTabState extends State<PlayerTab>
         _currentSubtitleIndex = _subtitles.length - 1;
         _chewieController!.setSubtitle(subtitleData.subtitles!);
       }
+
+      // 更新 UI
+      setState(() {});
+    } else {
+      // 用户取消了选择
+      print('用户取消了文件选择');
+    }
+  }
+
+  Future<void> _openDanmaku() async {
+    // 使用 FilePicker 选择文件
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['xml'],
+    );
+
+    // 检查是否选择了文件
+    if (result != null) {
+      PlatformFile file = result.files.first;
+
+      // 读取文件内容
+      String fileContent = await File(file.path!).readAsString();
+
+      // 创建弹幕列表数据对象
+      _danmakuContents = parseDanmakuXml(fileContent);
+      print("danmu:" + _danmakuContents[0]['time'].toString());
+
+      _chewieController?.setDanmakuContents = _danmakuContents;
 
       // 更新 UI
       setState(() {});

@@ -14,6 +14,11 @@ dependencies:
   provider: ^6.1.2
   video_player: ^2.9.1
   wakelock_plus: ^1.2.8
+  canvas_danmaku: ^0.2.6
+  ns_danmaku: 
+    git: 
+        url: https://github.com/xiaoyaocz/flutter_ns_danmaku.git
+        ref: master
 
 dev_dependencies:
   flutter_test:
