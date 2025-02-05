@@ -14,6 +14,7 @@ import 'package:media_info/media_info.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'webdav.dart';
 import 'settings.dart';
+import 'ffmpegview.dart';
 
 class VideoLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
@@ -444,6 +445,27 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     );
   }
 
+  String convertPathToOhosUri(String path) {
+    String prefix;
+
+    // 判断路径是否以 /Photos 开头
+    if (path.startsWith('/Photos')) {
+      prefix = 'file://media';
+    } else if (path.contains(':')) {
+      prefix = '';
+    } else {
+      prefix = 'file://docs';
+    }
+
+    // 拼接前缀和路径
+    String fullPath = '$prefix$path';
+
+    // 使用 Uri.parse 进行一般的 URI 转换
+    Uri uri = Uri.parse(fullPath);
+
+    return uri.toString();
+  }
+
   Widget _buildVideoCard(File file, {bool isListView = false}) {
     return GestureDetector(
       onTap: () {
@@ -525,6 +547,23 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                     );
                   },
                 ),
+                // 使用FFMpeg播放
+                ListTile(
+                  leading: Icon(Icons.play_arrow, color: Colors.green),
+                  title: Text('使用FFMpeg播放'),
+                  onTap: () {
+                    Navigator.pop(context); // 关闭对话框
+                    var _ffmpegExample = FfmpegExample(initUri: file.path);
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => _ffmpegExample,
+                      ),
+                    );
+                  },
+                ),
+
                 // 抽取内挂字幕到库文件夹
                 ListTile(
                   leading: Icon(Icons.subtitles, color: Colors.grey),
@@ -550,28 +589,29 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                                 Navigator.pop(context); // 关闭对话框
                                 if (await _settingsService
                                     .getExtractAssSubtitle()) {
-                                      if(isFFmpeged){
-                                        showDialog(
-                                          context: context,
-                                          builder: (context) {
-                                            return AlertDialog(
-                                              title: Text('抽取内挂字幕'),
-                                              content: Text('由于当前限制，ASS内挂字幕抽取功能每次只能运行一次，请重启应用或关闭ASS抽取。'),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () {
-                                                    Navigator.pop(context); // 关闭对话框
-                                                  },
-                                                  child: Text('确定',
-                                                      style: TextStyle(
-                                                          color: Colors.blue)),
-                                                ),
-                                              ],
-                                            );
-                                          },
+                                  if (isFFmpeged) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) {
+                                        return AlertDialog(
+                                          title: Text('抽取内挂字幕'),
+                                          content: Text(
+                                              '由于当前限制，ASS内挂字幕抽取功能每次只能运行一次，请重启应用或关闭ASS抽取。'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () {
+                                                Navigator.pop(context); // 关闭对话框
+                                              },
+                                              child: Text('确定',
+                                                  style: TextStyle(
+                                                      color: Colors.blue)),
+                                            ),
+                                          ],
                                         );
-                                        return;
-                                      }
+                                      },
+                                    );
+                                    return;
+                                  }
                                   final _platform = const MethodChannel(
                                       'samples.flutter.dev/ffmpegplugin');
                                   // 调用方法 getBatteryLevel

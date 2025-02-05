@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-23 10:42:25
+ * @LastEditTime: 2025-02-05 11:44:59
  * @Description: file content
  */
 /*
@@ -46,6 +46,7 @@ import 'theme_provider.dart';
 import 'dart:typed_data';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'volumeview.dart';
+import 'ffmpegview.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 
 late MyAudioHandler audioHandler;
@@ -282,7 +283,6 @@ class _HomeScreenState extends State<HomeScreen>
       /// Otherwise if h == w (square video)
       else {
         SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-
       }
     } else {
       // 退出全屏时显示状态栏
@@ -529,7 +529,7 @@ class PlayerTab extends StatefulWidget {
   final VoidCallback toggleFullScreen;
   final bool isFullScreen;
   final Function(String) getopenfile;
-  final Function(int,int) setHomeWH;
+  final Function(int, int) setHomeWH;
   String openfile;
 
   PlayerTab(
@@ -576,7 +576,9 @@ class _PlayerTabState extends State<PlayerTab>
   final SettingsService _settingsService = SettingsService();
   String receivedData = '';
   VolumeViewController? _volumeController;
+  FfmpegViewController? _ffmpegController;
   VolumeExample? _volumeExample;
+  FfmpegExample? _ffmpegExample;
   List<SubtitleData> _subtitles = []; // 存储所有字幕
   int _currentSubtitleIndex = -1; // 当前启用的字幕索引
   List<Map<String, dynamic>> _danmakuContents = []; // 存储所有弹幕
@@ -795,6 +797,11 @@ class _PlayerTabState extends State<PlayerTab>
             title: '打开URL',
           ),
           OptionItem(
+            onTap: () => _ffmpegPlay(),
+            iconData: Icons.play_circle_outlined,
+            title: 'FFMPEG播放',
+          ),
+          OptionItem(
             onTap: () => _openSRT(),
             iconData: Icons.subtitles,
             title: '打开字幕文件',
@@ -882,6 +889,43 @@ class _PlayerTabState extends State<PlayerTab>
         ];
       },
     );
+  }
+
+  String convertPathToOhosUri(String path) {
+    String prefix;
+
+    // 判断路径是否以 /Photos 开头
+    if (path.startsWith('/Photos')) {
+      prefix = 'file://media';
+    } else if(path.contains(':')){
+      prefix = '';
+    } else {
+      prefix = 'file://docs';
+    }
+
+    // 拼接前缀和路径
+    String fullPath = '$prefix$path';
+
+    // 使用 Uri.parse 进行一般的 URI 转换
+    Uri uri = Uri.parse(fullPath);
+
+    return uri.toString();
+  }
+
+  void _ffmpegPlay() {
+    this._ffmpegExample = FfmpegExample(initUri:this.widget.openfile);
+    
+    
+    Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => this._ffmpegExample!,
+              ),
+            );
+    // this._ffmpegController = this._ffmpegExample!.controller;
+    // print("ffmpegcontroller is null?: ${this._ffmpegController == null}");
+    // this._ffmpegController?.sendMessageToOhosView(
+    //     "getMessageFromFlutterView", convertPathToOhosUri(this.widget.openfile));
   }
 
   Future<void> readFileWithRetry(String path) async {
@@ -1013,7 +1057,8 @@ class _PlayerTabState extends State<PlayerTab>
             _totalDuration = _videoController!.value.duration;
             _isAudio = _videoController == null ||
                 _videoController!.value.size.width == 0; // 判断是否为音频文件
-            widget.setHomeWH(_videoController!.value.size.width.toInt(), _videoController!.value.size.height.toInt());
+            widget.setHomeWH(_videoController!.value.size.width.toInt(),
+                _videoController!.value.size.height.toInt());
           });
           _initializeChewieController();
           _videoController?.play();
@@ -1037,7 +1082,8 @@ class _PlayerTabState extends State<PlayerTab>
             _totalDuration = _videoController!.value.duration;
             _isAudio = _videoController == null ||
                 _videoController!.value.size.width == 0; // 判断是否为音频文件
-            widget.setHomeWH(_videoController!.value.size.width.toInt(), _videoController!.value.size.height.toInt());
+            widget.setHomeWH(_videoController!.value.size.width.toInt(),
+                _videoController!.value.size.height.toInt());
           });
           _initializeChewieController();
           _videoController?.play();

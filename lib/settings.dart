@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-01-23 10:54:04
+ * @LastEditTime: 2025-02-05 14:43:18
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
@@ -328,7 +328,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 Text('AloePlayer'),
                 SizedBox(height: 4),
                 Text(
-                    '版本号: 1.0.1。 本版本可打开本地弹幕、打开视频同时加载内挂字幕轨道、转换MP4和删除临时文件。'),
+                    '版本号: 1.0.2。 本版本新增FFmpeg播放。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),
@@ -340,7 +340,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     );
                   },
                   child: Text(
-                    '官网: https://ohos.aloereed.com',
+                    '官网鸿蒙站',
                     style: TextStyle(
                       color: Colors.blue,
                       decoration: TextDecoration.underline,
@@ -358,6 +358,23 @@ class _SettingsTabState extends State<SettingsTab> {
                   },
                   child: Text(
                     '隐私政策',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+                SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () async {
+                    await launchUrl(
+                      Uri.parse(
+                          'https://beian.miit.gov.cn'),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  },
+                  child: Text(
+                    '沪ICP备2025110508号-2A',
                     style: TextStyle(
                       color: Colors.blue,
                       decoration: TextDecoration.underline,

@@ -14,6 +14,7 @@ import 'package:video_player/video_player.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'dart:typed_data';
+import 'package:aloeplayer/ffmpegview.dart';
 
 class AudioLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
@@ -331,6 +332,22 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
           builder: (context) {
             return Wrap(
               children: [
+                // 使用FFMpeg播放
+                ListTile(
+                  leading: Icon(Icons.play_arrow, color: Colors.green),
+                  title: Text('使用FFMpeg播放'),
+                  onTap: () {
+                    Navigator.pop(context); // 关闭对话框
+                    var _ffmpegExample = FfmpegExample(initUri: file.path);
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => _ffmpegExample,
+                      ),
+                    );
+                  },
+                ),
                 ListTile(
                   leading: Icon(Icons.share, color: Colors.blue), // 分享图标
                   title: Text('分享'),
