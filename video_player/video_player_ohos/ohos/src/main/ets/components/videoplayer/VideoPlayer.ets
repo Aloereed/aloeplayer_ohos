@@ -498,7 +498,7 @@ export class VideoPlayer {
                 let mediaSource: media.MediaSource =
                     media.createMediaSourceWithUrl(this.url, this.headers)
                 /// 网络直播视频必须设置之后才能正常缓存
-                let playbackStrategy: media.PlaybackStrategy = {}
+                let playbackStrategy: media.PlaybackStrategy = {preferredHdr:true}
                 // 设置媒体来源和播放策略
                 await this.avPlayer.setMediaSource(
                     mediaSource,
