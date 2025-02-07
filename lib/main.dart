@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-05 11:44:59
+ * @LastEditTime: 2025-02-07 21:17:24
  * @Description: file content
  */
 /*
@@ -1136,7 +1136,7 @@ class _PlayerTabState extends State<PlayerTab>
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
-        '*',
+        'mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,mp3,.flac,.wav,.m4a,.aac,.ogg',
         'mp4',
         'mkv',
         'avi',
@@ -1149,7 +1149,8 @@ class _PlayerTabState extends State<PlayerTab>
         'flac',
         'aac',
         'm4a',
-        'ogg'
+        'ogg',
+        '*'
       ],
     );
 

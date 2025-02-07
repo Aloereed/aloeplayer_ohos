@@ -115,6 +115,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
+        'mp4,.mkv,.avi,.mov,.flv,.wmv,.webm',
         'mp4',
         'mkv',
         'avi',

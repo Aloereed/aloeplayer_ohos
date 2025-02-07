@@ -14,7 +14,8 @@ set(CMAKE_MODULE_PATH ${AKI_ROOT_PATH})
 find_package(Aki REQUIRED)
 include_directories(${NATIVERENDER_ROOT_PATH}
                     ${NATIVERENDER_ROOT_PATH}/include
-                    ${CMAKE_CURRENT_SOURCE_DIR}/FFmpeg/${OHOS_ARCH}/include)
+                    ${CMAKE_CURRENT_SOURCE_DIR}/FFmpeg/${OHOS_ARCH}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/taglib/arm64-v8a/include)
 add_library(avcodec SHARED IMPORTED)
 set_target_properties(avcodec
     PROPERTIES
@@ -44,6 +45,12 @@ add_library(avfilter SHARED IMPORTED)
 set_target_properties(avfilter
         PROPERTIES
         IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/FFmpeg/${OHOS_ARCH}/lib/libavfilter.so)
+add_library(taglib STATIC IMPORTED)
+set_target_properties(taglib
+        PROPERTIES
+        IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/taglib/${OHOS_ARCH}/lib/libtag.a
+        INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/taglib/arm64-v8a/include
+)
 # 创建 fftool 动态链接库
 add_library(fftool SHARED
     cmdutils.c
@@ -67,5 +74,5 @@ target_link_libraries(fftool PUBLIC avcodec avformat avutil avdevice swresample 
 target_include_directories(fftool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_library(entry SHARED main.cpp napi_init.cpp)
-target_link_libraries(entry PUBLIC libace_napi.z.so  libhilog_ndk.z.so fftool Aki::libjsbind)
+target_link_libraries(entry PUBLIC libace_napi.z.so  libhilog_ndk.z.so fftool Aki::libjsbind taglib)
 target_compile_features(entry PRIVATE cxx_std_17)

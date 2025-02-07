@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-05 14:43:18
+ * @LastEditTime: 2025-02-07 21:12:24
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
@@ -328,7 +328,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 Text('AloePlayer'),
                 SizedBox(height: 4),
                 Text(
-                    '版本号: 1.0.2。 本版本新增FFmpeg播放。'),
+                    '版本号: 1.0.4。 本版本添加音频标签编辑器，修复了一些已知问题。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),

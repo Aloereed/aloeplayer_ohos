@@ -34,6 +34,7 @@ import { taskpool } from '@kit.ArkTS';
 import { common , Want } from '@kit.AbilityKit';
 import { FfmpegFactory } from './FfmpegFactory';
 import { audio } from '@kit.AudioKit';
+import libAddon from 'libentry.so'
 // import testNapi from 'libentry.so';
 import { FFMpegUtils, FFmpegCommandOptions } from './FFmpegUtils';
 
@@ -77,6 +78,85 @@ export default class FfmpegPlugin implements FlutterPlugin {
             break;
           case "openFileManager":
             that.api.openFileManager(result);
+            break;
+          case "getTitle":
+            console.info("gettitle start");
+            that.api.getTitle(call.argument("filename") as string, result);
+            break;
+          case "setTitle":
+            that.api.setTitle(call.argument("filename") as string, call.argument("value") as string, result);
+            break;
+          case "getArtist":
+            that.api.getArtist(call.argument("filename") as string, result);
+            break;
+          case "setArtist":
+            that.api.setArtist(call.argument("filename") as string, call.argument("value") as string, result);
+            break;
+          case "getAlbum":
+            that.api.getAlbum(call.argument("filename") as string, result);
+            break;
+          case "setAlbum":
+            that.api.setAlbum(call.argument("filename") as string, call.argument("value") as string, result);
+            break;
+          case "getYear":
+            that.api.getYear(call.argument("filename") as string, result);
+            break;
+          case "setYear":
+            that.api.setYear(call.argument("filename") as string, call.argument("value") as number, result);
+            break;
+          case "getTrack":
+            that.api.getTrack(call.argument("filename") as string, result);
+            break;
+          case "setTrack":
+            that.api.setTrack(call.argument("filename") as string, call.argument("value") as number, result);
+            break;
+          case "getDisc":
+            that.api.getDisc(call.argument("filename") as string, result);
+            break;
+          case "setDisc":
+            that.api.setDisc(call.argument("filename") as string, call.argument("value") as number, result);
+            break;
+          case "getGenre":
+            that.api.getGenre(call.argument("filename") as string, result);
+            break;
+          case "setGenre":
+            that.api.setGenre(call.argument("filename") as string, call.argument("value") as string, result);
+            break;
+          case "getAlbumArtist":
+            that.api.getAlbumArtist(call.argument("filename") as string, result);
+            break;
+          case "setAlbumArtist":
+            that.api.setAlbumArtist(call.argument("filename") as string, call.argument("value") as string, result);
+            break;
+          case "getComposer":
+            that.api.getComposer(call.argument("filename") as string, result);
+            break;
+          case "setComposer":
+            that.api.setComposer(call.argument("filename") as string, call.argument("value") as string, result);
+            break;
+          case "getLyricist":
+            that.api.getLyricist(call.argument("filename") as string, result);
+            break;
+          case "setLyricist":
+            that.api.setLyricist(call.argument("filename") as string, call.argument("value") as string, result);
+            break;
+          case "getComment":
+            that.api.getComment(call.argument("filename") as string, result);
+            break;
+          case "setComment":
+            that.api.setComment(call.argument("filename") as string, call.argument("value") as string, result);
+            break;
+          case "getLyrics":
+            that.api.getLyrics(call.argument("filename") as string, result);
+            break;
+          case "setLyrics":
+            that.api.setLyrics(call.argument("filename") as string, call.argument("value") as string, result);
+            break;
+          case "getCover":
+            that.api.getCover(call.argument("filename") as string, result);
+            break;
+          case "setCover":
+            that.api.setCover(call.argument("filename") as string, call.argument("value") as string, result);
             break;
           case "callEvent":
             that.eventSink?.success("Success at " + new Date());
@@ -184,7 +264,7 @@ async function StartExtractAss(command: string,typ:string,output:string): Promis
       console.error('Failed to execute FFmpeg command:', error);
     }
 
-  // testNapi.getsrt(command);
+  // testNthat.api.getsrt(command);
 }
 @Concurrent
 async function StartExtractSrt(command: string,typ:string): Promise<void> {
@@ -248,7 +328,7 @@ async function StartExtractAssOld(command: string,typ:string,output:string): Pro
       console.error('Failed to execute FFmpeg command:', error);
     }
 
-  // testNapi.getsrt(command);
+  // testNthat.api.getsrt(command);
 }
 @Concurrent
 async function StartExtractSrtOld(command: string,typ:string): Promise<void> {
@@ -320,7 +400,7 @@ async function StartToMp4(command: string): Promise<void> {
       console.error('Failed to execute FFmpeg command:', error);
     }
 
-  // testNapi.getsrt(command);
+  // testNthat.api.getsrt(command);
 }
 class FfmpegApi {
   private task1: taskpool.Task | undefined;
@@ -479,4 +559,265 @@ class FfmpegApi {
     }
     Log.i(TAG, "openFileManager finish");
   }
+
+  getTitle(filename: string, result: MethodResult) {
+    console.log("getTitle start");
+    libAddon.getTitle(filename).then((title: string) => {
+      console.log("getTitle end: "+title);
+      result.success(title);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get title", error);
+    });
+  }
+
+  setTitle(filename: string, title: string, result: MethodResult) {
+      libAddon.setTitle(filename, title).then(() => {
+          console.log("setTitle end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set title", error);
+        });
+  }
+
+
+    getArtist(filename: string, result: MethodResult) {
+        console.log("getArtist start");
+        libAddon.getArtist(filename).then((artist: string) => {
+          console.log("getArtist end: " + artist);
+          result.success(artist);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get artist", error);
+        });
+    }
+
+    setArtist(filename: string, artist: string, result: MethodResult) {
+        console.log("setArtist start");
+        libAddon.setArtist(filename, artist).then(() => {
+          console.log("setArtist end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set artist", error);
+        });
+    }
+
+    getAlbum(filename: string, result: MethodResult) {
+        console.log("getAlbum start");
+        libAddon.getAlbum(filename).then((album: string) => {
+          console.log("getAlbum end: " + album);
+          result.success(album);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get album", error);
+        });
+    }
+
+    setAlbum(filename: string, album: string, result: MethodResult) {
+        console.log("setAlbum start");
+        libAddon.setAlbum(filename, album).then(() => {
+          console.log("setAlbum end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set album", error);
+        });
+    }
+
+    getYear(filename: string, result: MethodResult) {
+        console.log("getYear start");
+        libAddon.getYear(filename).then((year: number) => {
+          console.log("getYear end: " + year);
+          result.success(year);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get year", error);
+        });
+    }
+
+    setYear(filename: string, year: number, result: MethodResult) {
+        console.log("setYear start");
+        libAddon.setYear(filename, year).then(() => {
+          console.log("setYear end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set year", error);
+        });
+    }
+
+    getTrack(filename: string, result: MethodResult) {
+        console.log("getTrack start");
+        libAddon.getTrack(filename).then((track: number) => {
+          console.log("getTrack end: " + track);
+          result.success(track);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get track", error);
+        });
+    }
+
+    setTrack(filename: string, track: number, result: MethodResult) {
+        console.log("setTrack start");
+        libAddon.setTrack(filename, track).then(() => {
+          console.log("setTrack end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set track", error);
+        });
+    }
+
+    getDisc(filename: string, result: MethodResult) {
+        console.log("getDisc start");
+        libAddon.getDisc(filename).then((disc: number) => {
+          console.log("getDisc end: " + disc);
+          result.success(disc);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get disc", error);
+        });
+    }
+
+    setDisc(filename: string, disc: number, result: MethodResult) {
+        console.log("setDisc start");
+        libAddon.setDisc(filename, disc).then(() => {
+          console.log("setDisc end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set disc", error);
+        });
+    }
+
+    getGenre(filename: string, result: MethodResult) {
+        console.log("getGenre start");
+        libAddon.getGenre(filename).then((genre: string) => {
+          console.log("getGenre end: " + genre);
+          result.success(genre);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get genre", error);
+        });
+    }
+
+    setGenre(filename: string, genre: string, result: MethodResult) {
+        console.log("setGenre start");
+        libAddon.setGenre(filename, genre).then(() => {
+          console.log("setGenre end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set genre", error);
+        });
+    }
+
+    getAlbumArtist(filename: string, result: MethodResult) {
+        console.log("getAlbumArtist start");
+        libAddon.getAlbumArtist(filename).then((albumArtist: string) => {
+          console.log("getAlbumArtist end: " + albumArtist);
+          result.success(albumArtist);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get album artist", error);
+        });
+    }
+
+    setAlbumArtist(filename: string, albumArtist: string, result: MethodResult) {
+        console.log("setAlbumArtist start");
+        libAddon.setAlbumArtist(filename, albumArtist).then(() => {
+          console.log("setAlbumArtist end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set album artist", error);
+        });
+    }
+
+    getComposer(filename: string, result: MethodResult) {
+        console.log("getComposer start");
+        libAddon.getComposer(filename).then((composer: string) => {
+          console.log("getComposer end: " + composer);
+          result.success(composer);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get composer", error);
+        });
+    }
+
+    setComposer(filename: string, composer: string, result: MethodResult) {
+        console.log("setComposer start");
+        libAddon.setComposer(filename, composer).then(() => {
+          console.log("setComposer end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set composer", error);
+        });
+    }
+
+    getLyricist(filename: string, result: MethodResult) {
+        console.log("getLyricist start");
+        libAddon.getLyricist(filename).then((lyricist: string) => {
+          console.log("getLyricist end: " + lyricist);
+          result.success(lyricist);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get lyricist", error);
+        });
+    }
+
+    setLyricist(filename: string, lyricist: string, result: MethodResult) {
+        console.log("setLyricist start");
+        libAddon.setLyricist(filename, lyricist).then(() => {
+          console.log("setLyricist end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set lyricist", error);
+        });
+    }
+
+    getComment(filename: string, result: MethodResult) {
+        console.log("getComment start");
+        libAddon.getComment(filename).then((comment: string) => {
+          console.log("getComment end: " + comment);
+          result.success(comment);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get comment", error);
+        });
+    }
+
+    setComment(filename: string, comment: string, result: MethodResult) {
+        console.log("setComment start");
+        libAddon.setComment(filename, comment).then(() => {
+          console.log("setComment end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set comment", error);
+        });
+    }
+
+    getLyrics(filename: string, result: MethodResult) {
+        console.log("getLyrics start");
+        libAddon.getLyrics(filename).then((lyrics: string) => {
+          console.log("getLyrics end: " + lyrics);
+          result.success(lyrics);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get lyrics", error);
+        });
+    }
+
+    setLyrics(filename: string, lyrics: string, result: MethodResult) {
+        console.log("setLyrics start");
+        libAddon.setLyrics(filename, lyrics).then(() => {
+          console.log("setLyrics end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set lyrics", error);
+        });
+    }
+
+    getCover(filename: string, result: MethodResult) {
+        console.log("getCover start");
+        libAddon.getCover(filename).then((cover: string) => {
+          console.log("getCover end: " + cover);
+          result.success(cover);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to get cover", error);
+        });
+    }
+
+    setCover(filename: string, coverBase64: string, result: MethodResult) {
+        console.log("setCover start");
+        libAddon.setCover(filename, coverBase64).then(() => {
+          console.log("setCover end");
+          result.success(null);
+        }).catch((error: Error) => {
+          result.error("UNAVAILABLE", "Failed to set cover", error);
+        });
+    }
+
 }
