@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-07 21:12:24
+ * @LastEditTime: 2025-02-09 21:11:51
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,6 +19,8 @@ class SettingsService {
   static const String _backgroundPlayKey = 'background_play';
   static const String _autoLoadSubtitleKey = 'auto_load_subtitle';
   static const String _extractAssSubtitleKey = 'extract_ass_subtitle';
+  static const String _useFfmpegForPlayKey = 'use_ffmpeg_for_play';
+  static const String _autoFfmpegAfterVpFailed = 'auto_ffmpeg_after_vp_failed';
   Future<void> saveSubtitleFontSize(double fontSize) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_fontSizeKey, fontSize);
@@ -60,6 +62,19 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_extractAssSubtitleKey) ?? false; // 默认值为false
   }
+
+  Future<void> saveUseFfmpegForPlay(bool useFfmpeg) async{
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_useFfmpegForPlayKey, useFfmpeg);
+  }
+
+  Future<bool> getUseFfmpegForPlay() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_useFfmpegForPlayKey) ?? false; // 默认值为false
+  }
+
+
+
   // 清除缓存 递归删除“/data/storage/el2/base/haps/entry/cache/”下的所有文件
 
   Future<void> deleteCacheDirectory(String path) async {
@@ -207,6 +222,31 @@ class _SettingsTabState extends State<SettingsTab> {
               },
             ),
           ),
+          // 添加一个设置，是否使用FFmpeg作为播放内核
+          ListTile(
+            title: Text('使用FFmpeg软解播放（测试）'),
+            subtitle: Text('默认情况下，播放器使用系统内置的播放器播放音视频。设置后新播放有效。使用软解播放可以打开系统能力不支持的媒体文件，但可能会导致播放器卡顿和功能缺失。'),
+            trailing: FutureBuilder<bool>(
+              future: _settingsService.getUseFfmpegForPlay(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Switch(
+                    value: snapshot.data!,
+                    onChanged: (value) {
+                      _settingsService.saveUseFfmpegForPlay(value);
+                      setState(() {});
+                    },
+                    activeColor: Colors.blue, // 设置滑块的颜色为蓝色
+                    activeTrackColor:
+                        Colors.blue.withOpacity(0.5), // 设置滑轨的颜色为半透明蓝色
+                  );
+                } else {
+                  return const CircularProgressIndicator();
+                }
+              },
+            ),
+          ),
+            
           // 添加一个设置，是否默认后台播放(使用_settingsService)
           ListTile(
             title: Text('默认后台播放'),
@@ -328,7 +368,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 Text('AloePlayer'),
                 SizedBox(height: 4),
                 Text(
-                    '版本号: 1.0.4。 本版本添加音频标签编辑器，修复了一些已知问题。'),
+                    '版本号: 1.0.4。 本版本支持可选FFmpeg作为默认解码器，添加音频标签编辑器，修复了一些已知问题。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),
@@ -386,7 +426,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 SizedBox(height: 8),
                 Text('1. 长按: 三倍速播放'),
                 SizedBox(height: 4),
-                Text('2. 双击播放界面左侧、右侧、中间: 快退、快进10秒、全屏，或者使用左右滑动来快退、快进'),
+                Text('2. 双击播放界面左侧、右侧、中间: 快退、快进10秒、切换播放暂停，或者使用左右滑动来快退、快进'),
                 SizedBox(height: 4),
                 Text('3. 上下滑动: 靠左侧增减亮度，靠右侧增减音量，'),
                 SizedBox(height: 4),

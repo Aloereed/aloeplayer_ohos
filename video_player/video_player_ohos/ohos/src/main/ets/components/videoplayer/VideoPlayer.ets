@@ -566,7 +566,7 @@ export class VideoPlayer {
                         break
                     case AvplayerStatus.PREPARED:
                         this.avPlayer.videoScaleType = 0
-                        this.avPlayer.audioInterruptMode = this.interruptMode
+                        this.avPlayer.audioInterruptMode = audio.InterruptMode.SHARE_MODE
                         this.setVideoSize()
                         this.sendInitialized()
                         this.duration = this.avPlayer.duration

@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-19 13:47:39
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-05 13:14:23
+ * @LastEditTime: 2025-02-09 17:10:06
  * @Description: file content
  */
 /*
@@ -70,6 +70,7 @@ class _FfmpegOhosViewState extends State<FfmpegOhosView> {
 class FfmpegViewController {
   final MethodChannel _channel;
   final StreamController<String> _controller = StreamController<String>();
+  int currentPosition=0;
 
   FfmpegViewController._(
     this._channel,
@@ -81,6 +82,12 @@ class FfmpegViewController {
             // 从native端获取数据
             final result = call.arguments as String;
             _controller.sink.add(result);
+            break;
+          case 'getCurrentPosition':
+            // 从native端获取数据
+            final result = call.arguments as int;
+            print("get current position from ohos:" + result.toString());
+            currentPosition = result;
             break;
         }
       },
@@ -97,12 +104,20 @@ class FfmpegViewController {
       message,
     );
   }
+  Future<int?> sendMessageToOhosViewInt(String method,String message) async {
+    print("sending message to ohos:" + message);
+    await _channel.invokeMethod<int>(
+      method,
+      message,
+    );
+  }
 }
 
 class FfmpegExample extends StatefulWidget {
   FfmpegExample({Key? key,required this.initUri}) : super(key: key);
   FfmpegViewController? _controller;
   String initUri = '';
+  int currentPosition=0;
   FfmpegViewController? get controller => _controller;
   @override
   State<FfmpegExample> createState() => _FfmpegExampleState();
@@ -117,6 +132,7 @@ class _FfmpegExampleState extends State<FfmpegExample> {
       //接收到来自OHOS端的数据
       setState(() {
         receivedData = '来自ohos的数据：$data';
+        widget.currentPosition = int.parse(data);
       });
     });
     widget._controller?.sendMessageToOhosView("getMessageFromFlutterView",initUri);

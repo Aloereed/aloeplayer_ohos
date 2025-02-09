@@ -100,7 +100,9 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
               child: AspectRatio(
                 aspectRatio: chewieController.aspectRatio ??
                     chewieController.videoPlayerController.value.aspectRatio,
-                child: VideoPlayer(chewieController.videoPlayerController),
+                child: !chewieController.ffmpeg!
+                    ? VideoPlayer(chewieController.videoPlayerController)
+                    : Container(color: Colors.transparent),
               ),
             ),
           ),
@@ -146,6 +148,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
           child: AspectRatio(
               aspectRatio: calculateAspectRatio(context),
               child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
                 onLongPress: () {
                   // 记录当前的播放速率
                   chewieController.previousPlaybackSpeed =

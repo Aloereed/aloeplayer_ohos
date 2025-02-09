@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-07 21:17:24
+ * @LastEditTime: 2025-02-09 21:06:01
  * @Description: file content
  */
 /*
@@ -21,7 +21,7 @@ import 'package:wakelock/wakelock.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:chewie/chewie.dart';
+import 'package:aloeplayer/chewie-1.8.5/lib/chewie.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:path_provider/path_provider.dart';
@@ -46,7 +46,7 @@ import 'theme_provider.dart';
 import 'dart:typed_data';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'volumeview.dart';
-import 'ffmpegview.dart';
+import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 
 late MyAudioHandler audioHandler;
@@ -375,6 +375,7 @@ class _HomeScreenState extends State<HomeScreen>
                 _selectedIndex = index;
               });
             },
+            toggleFullScreen: (){},
           ),
           AudioLibraryTab(
             getopenfile: _getopenfile,
@@ -383,6 +384,7 @@ class _HomeScreenState extends State<HomeScreen>
                 _selectedIndex = index;
               });
             },
+            toggleFullScreen: (){},
           ),
           SettingsTab(),
         ],
@@ -582,6 +584,8 @@ class _PlayerTabState extends State<PlayerTab>
   List<SubtitleData> _subtitles = []; // 存储所有字幕
   int _currentSubtitleIndex = -1; // 当前启用的字幕索引
   List<Map<String, dynamic>> _danmakuContents = []; // 存储所有弹幕
+  bool _useFfmpegForPlay = false;
+  bool _initVpWhenFfmpeg = false;
   final EventChannel _eventChannel2 = EventChannel('com.example.app/events');
   final EventChannel _eventChannel =
       EventChannel('samples.flutter.dev/volumepluginevent');
@@ -657,6 +661,8 @@ class _PlayerTabState extends State<PlayerTab>
 // 调用方法 getBatteryLevel
     _systemMaxVolume =
         ((await _platform.invokeMethod<int>('getMaxVolume')) ?? 15).toDouble();
+    // _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
+    // _ffmpegExample = FfmpegExample(initUri: '');
   }
 
   void _onVolumeChanged(dynamic volume) {
@@ -748,10 +754,14 @@ class _PlayerTabState extends State<PlayerTab>
     );
   }
 
-  void _initializeChewieController() {
+  Future<void> _initializeChewieController() async {
     _volumeController = _volumeExample?.controller;
+
     _chewieController = ChewieController(
+      ffmpeg: _useFfmpegForPlay,
+      sendToFfmpegPlayer: _ffmpegExample,
       videoPlayerController: _videoController!,
+      allowMuting: !_useFfmpegForPlay,
       autoPlay: true,
       looping: _isLooping,
       showControls: _showControls,
@@ -795,11 +805,6 @@ class _PlayerTabState extends State<PlayerTab>
             onTap: () => _showUrlDialog(context),
             iconData: Icons.link,
             title: '打开URL',
-          ),
-          OptionItem(
-            onTap: () => _ffmpegPlay(),
-            iconData: Icons.play_circle_outlined,
-            title: 'FFMPEG播放',
           ),
           OptionItem(
             onTap: () => _openSRT(),
@@ -889,6 +894,7 @@ class _PlayerTabState extends State<PlayerTab>
         ];
       },
     );
+    _chewieController?.setVolume(_useFfmpegForPlay ? 0.0 : 1.0);
   }
 
   String convertPathToOhosUri(String path) {
@@ -897,7 +903,7 @@ class _PlayerTabState extends State<PlayerTab>
     // 判断路径是否以 /Photos 开头
     if (path.startsWith('/Photos')) {
       prefix = 'file://media';
-    } else if(path.contains(':')){
+    } else if (path.contains(':')) {
       prefix = '';
     } else {
       prefix = 'file://docs';
@@ -913,15 +919,14 @@ class _PlayerTabState extends State<PlayerTab>
   }
 
   void _ffmpegPlay() {
-    this._ffmpegExample = FfmpegExample(initUri:this.widget.openfile);
-    
-    
+    this._ffmpegExample = FfmpegExample(initUri: this.widget.openfile,toggleFullScreen: this.widget.toggleFullScreen,);
+
     Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => this._ffmpegExample!,
-              ),
-            );
+      context,
+      MaterialPageRoute(
+        builder: (context) => this._ffmpegExample!,
+      ),
+    );
     // this._ffmpegController = this._ffmpegExample!.controller;
     // print("ffmpegcontroller is null?: ${this._ffmpegController == null}");
     // this._ffmpegController?.sendMessageToOhosView(
@@ -1032,6 +1037,20 @@ class _PlayerTabState extends State<PlayerTab>
     return;
   }
 
+  String convertUriToPath(String uri) {
+    // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
+    if (uri.startsWith('file://media')) {
+      uri = Uri.decodeFull(uri.substring(12));
+    }
+
+    // 删除file://docs并解析unicode码
+    if (uri.startsWith('file://docs')) {
+      uri = Uri.decodeFull(uri.substring(11));
+    }
+
+    return uri;
+  }
+
   Future<void> _openUri(String uri, {bool wantFirst = false}) async {
     // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
     _subtitles.clear();
@@ -1045,26 +1064,41 @@ class _PlayerTabState extends State<PlayerTab>
       uri = Uri.decodeFull(uri.substring(11));
     }
     bool isBgPlay = await _settingsService.getBackgroundPlay();
+    setState(() {
+      _initVpWhenFfmpeg = false;
+    });
+
     if (uri.contains(':')) {
       if (_videoController != null) {
         _videoController?.dispose();
       }
       _videoController = VideoPlayerController.network(uri,
-          videoPlayerOptions:
-              VideoPlayerOptions(allowBackgroundPlayback: isBgPlay))
-        ..initialize().then((_) {
+          videoPlayerOptions: VideoPlayerOptions(
+              allowBackgroundPlayback: isBgPlay, mixWithOthers: true))
+        ..initialize().then((_) async {
           setState(() {
             _totalDuration = _videoController!.value.duration;
             _isAudio = _videoController == null ||
                 _videoController!.value.size.width == 0; // 判断是否为音频文件
             widget.setHomeWH(_videoController!.value.size.width.toInt(),
                 _videoController!.value.size.height.toInt());
+            _initVpWhenFfmpeg = true;
           });
-          _initializeChewieController();
+          await _initializeChewieController();
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
         })
         ..setLooping(_isLooping);
+      _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
+      if (_useFfmpegForPlay) {
+        if (_ffmpegExample == null) {
+          _ffmpegExample =
+              FfmpegExample(initUri: convertUriToPath(widget.openfile),toggleFullScreen: this.widget.toggleFullScreen);
+        }
+        _ffmpegExample?.controller?.sendMessageToOhosView(
+            "newPlay", convertUriToPath(widget.openfile));
+      }
+
       widget.getopenfile(uri);
     } else {
       _videoController?.dispose();
@@ -1077,19 +1111,29 @@ class _PlayerTabState extends State<PlayerTab>
       _videoController = VideoPlayerController.file(File(uri),
           videoPlayerOptions:
               VideoPlayerOptions(allowBackgroundPlayback: isBgPlay))
-        ..initialize().then((_) {
+        ..initialize().then((_) async {
           setState(() {
             _totalDuration = _videoController!.value.duration;
             _isAudio = _videoController == null ||
                 _videoController!.value.size.width == 0; // 判断是否为音频文件
             widget.setHomeWH(_videoController!.value.size.width.toInt(),
                 _videoController!.value.size.height.toInt());
+            _initVpWhenFfmpeg = true;
           });
-          _initializeChewieController();
+          await _initializeChewieController();
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
         })
         ..setLooping(_isLooping);
+      _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
+      if (_useFfmpegForPlay) {
+        if (_ffmpegExample == null) {
+          _ffmpegExample =
+              FfmpegExample(initUri: convertUriToPath(widget.openfile),toggleFullScreen: this.widget.toggleFullScreen);
+        }
+        _ffmpegExample?.controller?.sendMessageToOhosView(
+            "newPlay", convertUriToPath(widget.openfile));
+      }
       String fileName = uri.split('/').last;
       final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
       final cacheDir = await getTemporaryDirectory();
@@ -1894,47 +1938,22 @@ class _PlayerTabState extends State<PlayerTab>
                   ],
                 ),
               ),
-              if ((_videoController != null &&
-                  _videoController!.value.isInitialized))
-                GestureDetector(
-                  // onLongPress: () {
-                  //   if (!_isAudio) {
-                  //     _setPlaybackSpeed(3.0); // 长按三倍速播放
-                  //   }
-                  // },
-                  // onLongPressEnd: (_) {
-                  //   if (!_isAudio) {
-                  //     _setPlaybackSpeed(1.0); // 松开恢复原速
-                  //   }
-                  // },
-                  child: Center(
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // 视频播放器
-                        Visibility(
-                            visible: _chewieController != null &&
-                                _videoController != null &&
-                                _videoController!.value.isInitialized,
-                            // child: FittedBox(
-                            //   fit: BoxFit.contain,
-                            //   child: SizedBox(
-                            //     width: _videoController!.value.size.width,
-                            //     height: _videoController!.value.size.height,
+              if (_useFfmpegForPlay && (_ffmpegExample != null))
+                Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.identity()
+                      ..scale(_isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
+                    child: this._ffmpegExample!),
+              if (_chewieController != null &&
+                  _videoController != null &&
+                  _videoController!.value.isInitialized)
 
-                            //     ),
-                            //   ),
-                            // ),
-                            child: Transform(
-                              alignment: Alignment.center,
-                              transform: Matrix4.identity()
-                                ..scale(_isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
-                              child: Chewie(controller: _chewieController!),
-                            )),
-                      ],
-                    ),
-                  ),
-                ),
+                // 视频播放器
+                Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.identity()
+                      ..scale(_isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
+                    child: Chewie(controller: _chewieController!)),
               if (false && (_showControls || _isAudio))
                 Positioned(
                   bottom: 20,

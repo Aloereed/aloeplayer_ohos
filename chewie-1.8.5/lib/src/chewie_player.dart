@@ -7,6 +7,7 @@ import 'package:chewie/src/models/options_translation.dart';
 import 'package:chewie/src/models/subtitle_model.dart';
 import 'package:chewie/src/notifiers/player_notifier.dart';
 import 'package:chewie/src/player_with_controls.dart';
+import 'package:chewie/src/ffmpegview.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -314,6 +315,8 @@ class ChewieController extends ChangeNotifier {
     this.setSystemVolume,
     this.customToggleFullScreen,
     this.danmakuContents,
+    this.ffmpeg,
+    this.sendToFfmpegPlayer,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
           'The playbackSpeeds values must all be greater than 0',
@@ -373,6 +376,8 @@ class ChewieController extends ChangeNotifier {
     double Function(double)? setSystemVolume,
     Function? customToggleFullScreen,
     List<Map<String, dynamic>>? danmakuContents,
+    bool? ffmpeg,
+    FfmpegExample? sendToFfmpegPlayer,
   }) {
     return ChewieController(
       draggableProgressBar: draggableProgressBar ?? this.draggableProgressBar,
@@ -431,6 +436,8 @@ class ChewieController extends ChangeNotifier {
       customToggleFullScreen:
           customToggleFullScreen ?? this.customToggleFullScreen,
       danmakuContents: danmakuContents ?? this.danmakuContents,
+      ffmpeg: ffmpeg ?? this.ffmpeg,
+      sendToFfmpegPlayer: sendToFfmpegPlayer ?? this.sendToFfmpegPlayer,
     );
   }
 
@@ -439,6 +446,9 @@ class ChewieController extends ChangeNotifier {
   /// If false, the options button in MaterialUI and MaterialDesktopUI
   /// won't be shown.
   final bool showOptions;
+
+  bool? ffmpeg = false;
+  FfmpegExample? sendToFfmpegPlayer; 
 
   /// Pass your translations for the options like:
   /// - PlaybackSpeed
@@ -776,7 +786,7 @@ class ChewieController extends ChangeNotifier {
 
   int _lastPosition = 0; // 记录上一次的进度
 
-  void _onVideoProgress() {
+  void _onVideoProgress() async {
     final currentPosition = videoPlayerController.value.position.inSeconds;
 
     // 检测是否回退了进度
@@ -813,9 +823,20 @@ class ChewieController extends ChangeNotifier {
     final isPlaying = videoPlayerController.value.isPlaying;
     if (isPlaying) {
       _danmakuController.resume();
+      sendToFfmpegPlayer?.controller?.sendMessageToOhosView('resume', '');
     } else {
       _danmakuController.pause();
+      sendToFfmpegPlayer?.controller?.sendMessageToOhosView('pause', '');
     }
+
+    int? kernelTime = sendToFfmpegPlayer?.controller?.currentPosition;
+    int? controllerTime = videoPlayerController.value.position.inMilliseconds;
+    print("kernelTime: $kernelTime, controllerTime: $controllerTime");
+    if(ffmpeg!&&kernelTime != null && controllerTime != null && (controllerTime - kernelTime).abs() > 100) {
+      await videoPlayerController.seekTo(Duration(milliseconds: kernelTime));
+      // seekTo(videoPlayerController.value.position);
+    }
+    sendToFfmpegPlayer?.controller?.sendMessageToOhosView("setSpeed", videoPlayerController.value.playbackSpeed.toString()+"f");
   }
 
   void startVolumeSliderTimer() {
@@ -878,6 +899,7 @@ class ChewieController extends ChangeNotifier {
   }
 
   Future<void> seekTo(Duration moment) async {
+    sendToFfmpegPlayer?.controller?.sendMessageToOhosView("seekTo", moment.inMilliseconds.toString());
     await videoPlayerController.seekTo(moment);
   }
 

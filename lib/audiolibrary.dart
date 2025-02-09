@@ -14,7 +14,7 @@ import 'package:video_player/video_player.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'dart:typed_data';
-import 'package:aloeplayer/ffmpegview.dart';
+import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:flutter/services.dart';
 
 class AudioMetadata {
@@ -472,8 +472,9 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
 class AudioLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
   final Function(int) changeTab;
+  final Function toggleFullScreen;
 
-  AudioLibraryTab({required this.getopenfile, required this.changeTab});
+  AudioLibraryTab({required this.getopenfile, required this.changeTab, required this.toggleFullScreen});
 
   @override
   _AudioLibraryTabState createState() => _AudioLibraryTabState();
@@ -787,21 +788,21 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
             return Wrap(
               children: [
                 // 使用FFMpeg播放
-                ListTile(
-                  leading: Icon(Icons.play_arrow, color: Colors.green),
-                  title: Text('使用FFMpeg播放'),
-                  onTap: () {
-                    Navigator.pop(context); // 关闭对话框
-                    var _ffmpegExample = FfmpegExample(initUri: file.path);
+                // ListTile(
+                //   leading: Icon(Icons.play_arrow, color: Colors.green),
+                //   title: Text('使用FFMpeg独立播放'),
+                //   onTap: () {
+                //     Navigator.pop(context); // 关闭对话框
+                //     var _ffmpegExample = FfmpegExample(initUri: file.path,toggleFullScreen: this.widget.toggleFullScreen);
 
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => _ffmpegExample,
-                      ),
-                    );
-                  },
-                ),
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (context) => _ffmpegExample,
+                //       ),
+                //     );
+                //   },
+                // ),
                 ListTile(
                   leading: Icon(Icons.edit, color: Colors.green), // 编辑图标
                   title: Text('元信息修改'),

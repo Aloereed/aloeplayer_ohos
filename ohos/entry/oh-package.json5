@@ -25,7 +25,7 @@
     "screen": "file:../har/screen.har",
     "libentry.so": "file:./src/main/cpp/types/libentry",
     "@ohos/aki": "^1.2.15",
-    "@ohos/ijkplayer": "^2.0.5"
+    "@ohos/ijkplayer": "2.0.6-rc.5"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

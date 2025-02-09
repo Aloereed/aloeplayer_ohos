@@ -14,13 +14,14 @@ import 'package:media_info/media_info.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'webdav.dart';
 import 'settings.dart';
-import 'ffmpegview.dart';
+import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 
 class VideoLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
   final Function(int) changeTab;
+  final Function toggleFullScreen;
 
-  VideoLibraryTab({required this.getopenfile, required this.changeTab});
+  VideoLibraryTab({required this.getopenfile, required this.changeTab, required this.toggleFullScreen});
 
   @override
   _VideoLibraryTabState createState() => _VideoLibraryTabState();
@@ -549,21 +550,21 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                   },
                 ),
                 // 使用FFMpeg播放
-                ListTile(
-                  leading: Icon(Icons.play_arrow, color: Colors.green),
-                  title: Text('使用FFMpeg播放'),
-                  onTap: () {
-                    Navigator.pop(context); // 关闭对话框
-                    var _ffmpegExample = FfmpegExample(initUri: file.path);
+                // ListTile(
+                //   leading: Icon(Icons.play_arrow, color: Colors.green),
+                //   title: Text('使用FFMpeg独立播放'),
+                //   onTap: () {
+                //     Navigator.pop(context); // 关闭对话框
+                //     var _ffmpegExample = FfmpegExample(initUri: file.path,toggleFullScreen: this.widget.toggleFullScreen);
 
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => _ffmpegExample,
-                      ),
-                    );
-                  },
-                ),
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (context) => _ffmpegExample,
+                //       ),
+                //     );
+                //   },
+                // ),
 
                 // 抽取内挂字幕到库文件夹
                 ListTile(

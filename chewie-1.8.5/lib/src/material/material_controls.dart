@@ -83,6 +83,7 @@ class _MaterialControlsState extends State<MaterialControls>
         _cancelAndRestartTimer();
       },
       child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
         onTap: () => _cancelAndRestartTimer(),
         child: AbsorbPointer(
           absorbing: notifier.hideStuff,
