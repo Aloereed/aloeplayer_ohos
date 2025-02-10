@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:aloeplayer/chewie-1.8.5/lib/src/center_play_button.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/center_seek_button.dart';
@@ -244,6 +245,7 @@ class _MaterialControlsState extends State<MaterialControls>
             await showModalBottomSheet<OptionItem>(
               context: context,
               isScrollControlled: true,
+              backgroundColor: Colors.transparent,
               useRootNavigator: chewieController.useRootNavigator,
               builder: (context) => OptionsDialog(
                 options: options,
@@ -562,73 +564,83 @@ class _MaterialControlsState extends State<MaterialControls>
     );
   }
 
-  AnimatedOpacity _buildBottomBar(
-    BuildContext context,
-  ) {
+  AnimatedOpacity _buildBottomBar(BuildContext context) {
     final iconColor = Theme.of(context).textTheme.labelLarge!.color;
     final bool isFinished = (_latestValue.position >= _latestValue.duration) &&
         _latestValue.duration.inSeconds > 0;
     final bool showPlayButton =
         widget.showPlayButton && !_dragging && !notifier.hideStuff;
+
     return AnimatedOpacity(
       opacity: notifier.hideStuff ? 0.0 : 1.0,
       duration: const Duration(milliseconds: 300),
-      child: Container(
-        height: barHeight + (chewieController.isFullScreen ? 10.0 : 0),
-        padding: EdgeInsets.only(
-          left: 20,
-          bottom: !chewieController.isFullScreen ? 10.0 : 0,
-        ),
-        child: SafeArea(
-          top: false,
-          bottom: chewieController.isFullScreen,
-          minimum: chewieController.controlsSafeAreaMinimum,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    SmallPlayButton(
-                      backgroundColor: Colors.black54,
-                      // iconColor: Colors.white,
-                      isFinished: isFinished,
-                      isPlaying: controller.value.isPlaying,
-                      show: showPlayButton,
-                      onPressed: _playPause,
-                    ),
-                    if (chewieController.isLive)
-                      const Expanded(child: Text('LIVE'))
-                    else
-                      _buildPosition(iconColor),
-                    if (chewieController.allowMuting)
-                      _buildMuteButton(controller),
-                    if (_danmakuOn &&
-                        chewieController.danmakuContents != null &&
-                        chewieController.danmakuContents!.length > 0)
-                      _buildDanmukuSettingsButton(context),
-                    const Spacer(),
-                    if (chewieController.allowFullScreen) _buildExpandButton(),
-                  ],
-                ),
-              ),
-              SizedBox(
-                height: chewieController.isFullScreen ? 15.0 : 0,
-              ),
-              if (!chewieController.isLive)
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.only(right: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16.0), // 圆角效果
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), // 高斯模糊效果
+          child: Container(
+            color: Colors.black.withOpacity(0.3), // 背景透明效果
+            height: barHeight +
+                (chewieController.isFullScreen ? 10.0 : 0) +
+                20, // 增加高度
+            padding: EdgeInsets.only(
+              left: 20,
+              top: 10, // 增加顶部内边距
+              bottom: !chewieController.isFullScreen ? 10.0 : 0,
+            ),
+            child: SafeArea(
+              top: false,
+              bottom: chewieController.isFullScreen,
+              minimum: chewieController.controlsSafeAreaMinimum,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
                     child: Row(
-                      children: [
-                        _buildProgressBar(),
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: <Widget>[
+                        SmallPlayButton(
+                          backgroundColor: Colors.black54,
+                          // iconColor: Colors.white,
+                          isFinished: isFinished,
+                          isPlaying: controller.value.isPlaying,
+                          show: showPlayButton,
+                          onPressed: _playPause,
+                        ),
+                        if (chewieController.isLive)
+                          const Expanded(child: Text('LIVE'))
+                        else
+                          _buildPosition(iconColor),
+                        if (chewieController.allowMuting)
+                          _buildMuteButton(controller),
+                        if (_danmakuOn &&
+                            chewieController.danmakuContents != null &&
+                            chewieController.danmakuContents!.length > 0)
+                          _buildDanmukuSettingsButton(context),
+                        const Spacer(),
+                        if (chewieController.allowFullScreen)
+                          _buildExpandButton(),
                       ],
                     ),
                   ),
-                ),
-            ],
+                  SizedBox(
+                    height: chewieController.isFullScreen ? 15.0 : 0,
+                  ),
+                  if (!chewieController.isLive)
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.only(right: 20),
+                        child: Row(
+                          children: [
+                            _buildProgressBar(),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -661,13 +673,13 @@ class _MaterialControlsState extends State<MaterialControls>
               child: Stack(
                 children: <Widget>[
                   // 黑色描边图标
-                  Icon(
-                    _latestValue.volume > 0
-                        ? Icons.volume_up
-                        : Icons.volume_off,
-                    color: Colors.black,
-                    size: 26.0, // 可以根据需要调整大小
-                  ),
+                  // Icon(
+                  //   _latestValue.volume > 0
+                  //       ? Icons.volume_up
+                  //       : Icons.volume_off,
+                  //   color: Colors.black,
+                  //   size: 26.0, // 可以根据需要调整大小
+                  // ),
                   // 白色图标
                   Icon(
                     _latestValue.volume > 0
@@ -700,13 +712,13 @@ class _MaterialControlsState extends State<MaterialControls>
               child: Stack(
             children: <Widget>[
               // 黑色描边图标
-              Icon(
-                chewieController.isFullScreen
-                    ? Icons.fullscreen_exit
-                    : Icons.fullscreen,
-                color: Colors.black,
-                size: 26.0, // 描边图标稍微大一点
-              ),
+              // Icon(
+              //   chewieController.isFullScreen
+              //       ? Icons.fullscreen_exit
+              //       : Icons.fullscreen,
+              //   color: Colors.black,
+              //   size: 26.0, // 描边图标稍微大一点
+              // ),
               // 白色图标
               Icon(
                 chewieController.isFullScreen
@@ -829,28 +841,28 @@ class _MaterialControlsState extends State<MaterialControls>
               fontSize: 14.0,
               color: Colors.white.withOpacity(.75),
               fontWeight: FontWeight.normal,
-              shadows: [
-                Shadow(
-                  color: Colors.black, // 描边颜色
-                  offset: Offset(-1, -1), // 描边偏移量
-                  blurRadius: 1, // 描边模糊半径
-                ),
-                Shadow(
-                  color: Colors.black,
-                  offset: Offset(1, -1),
-                  blurRadius: 1,
-                ),
-                Shadow(
-                  color: Colors.black,
-                  offset: Offset(-1, 1),
-                  blurRadius: 1,
-                ),
-                Shadow(
-                  color: Colors.black,
-                  offset: Offset(1, 1),
-                  blurRadius: 1,
-                ),
-              ],
+              // shadows: [
+              //   Shadow(
+              //     color: Colors.black, // 描边颜色
+              //     offset: Offset(-1, -1), // 描边偏移量
+              //     blurRadius: 1, // 描边模糊半径
+              //   ),
+              //   Shadow(
+              //     color: Colors.black,
+              //     offset: Offset(1, -1),
+              //     blurRadius: 1,
+              //   ),
+              //   Shadow(
+              //     color: Colors.black,
+              //     offset: Offset(-1, 1),
+              //     blurRadius: 1,
+              //   ),
+              //   Shadow(
+              //     color: Colors.black,
+              //     offset: Offset(1, 1),
+              //     blurRadius: 1,
+              //   ),
+              // ],
             ),
           )
         ],
@@ -858,28 +870,28 @@ class _MaterialControlsState extends State<MaterialControls>
           fontSize: 14.0,
           color: Colors.white,
           fontWeight: FontWeight.bold,
-          shadows: [
-            Shadow(
-              color: Colors.black, // 描边颜色
-              offset: Offset(-1, -1), // 描边偏移量
-              blurRadius: 1, // 描边模糊半径
-            ),
-            Shadow(
-              color: Colors.black,
-              offset: Offset(1, -1),
-              blurRadius: 1,
-            ),
-            Shadow(
-              color: Colors.black,
-              offset: Offset(-1, 1),
-              blurRadius: 1,
-            ),
-            Shadow(
-              color: Colors.black,
-              offset: Offset(1, 1),
-              blurRadius: 1,
-            ),
-          ],
+          // shadows: [
+          //   Shadow(
+          //     color: Colors.black, // 描边颜色
+          //     offset: Offset(-1, -1), // 描边偏移量
+          //     blurRadius: 1, // 描边模糊半径
+          //   ),
+          //   Shadow(
+          //     color: Colors.black,
+          //     offset: Offset(1, -1),
+          //     blurRadius: 1,
+          //   ),
+          //   Shadow(
+          //     color: Colors.black,
+          //     offset: Offset(-1, 1),
+          //     blurRadius: 1,
+          //   ),
+          //   Shadow(
+          //     color: Colors.black,
+          //     offset: Offset(1, 1),
+          //     blurRadius: 1,
+          //   ),
+          // ],
         ),
       ),
     );

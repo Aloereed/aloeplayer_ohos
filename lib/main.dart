@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-09 21:06:01
+ * @LastEditTime: 2025-02-10 15:52:49
  * @Description: file content
  */
 /*
@@ -796,16 +796,16 @@ class _PlayerTabState extends State<PlayerTab>
       },
       additionalOptions: (context) {
         return <OptionItem>[
-          OptionItem(
-            onTap: _openFile,
-            iconData: Icons.open_in_browser,
-            title: '打开文件',
-          ),
-          OptionItem(
-            onTap: () => _showUrlDialog(context),
-            iconData: Icons.link,
-            title: '打开URL',
-          ),
+          // OptionItem(
+          //   onTap: _openFile,
+          //   iconData: Icons.open_in_browser,
+          //   title: '打开文件',
+          // ),
+          // OptionItem(
+          //   onTap: () => _showUrlDialog(context),
+          //   iconData: Icons.link,
+          //   title: '打开URL',
+          // ),
           OptionItem(
             onTap: () => _openSRT(),
             iconData: Icons.subtitles,
@@ -831,26 +831,26 @@ class _PlayerTabState extends State<PlayerTab>
                     : Icons.fullscreen,
             title: '切换全屏',
           ),
-          OptionItem(
-            onTap: () async {
-              double nextVolume = _systemVolume + 0.01;
+//           OptionItem(
+//             onTap: () async {
+//               double nextVolume = _systemVolume + 0.01;
 
-// 确保音量不超过最大音量
-              if (nextVolume > _systemMaxVolume) {
-                nextVolume = _systemMaxVolume;
-              }
+// // 确保音量不超过最大音量
+//               if (nextVolume > _systemMaxVolume) {
+//                 nextVolume = _systemMaxVolume;
+//               }
 
-// 确保音量不小于 0
-              if (nextVolume < 0) {
-                nextVolume = 0;
-              }
+// // 确保音量不小于 0
+//               if (nextVolume < 0) {
+//                 nextVolume = 0;
+//               }
 
-              _volumeController?.sendMessageToOhosView(
-                  'getMessageFromFlutterView2', nextVolume.toString());
-            },
-            iconData: Icons.volume_up,
-            title: '音量调节',
-          ),
+//               _volumeController?.sendMessageToOhosView(
+//                   'getMessageFromFlutterView2', nextVolume.toString());
+//             },
+//             iconData: Icons.volume_up,
+//             title: '音量调节',
+//           ),
           OptionItem(
             onTap: () {
               setState(() {
@@ -995,7 +995,7 @@ class _PlayerTabState extends State<PlayerTab>
                       index: e.number,
                       start: Duration(milliseconds: e.start),
                       end: Duration(milliseconds: e.end),
-                      text: e.text,
+                      text: e.text.replaceAll('\\N', '\n'),
                     ),
                   )
                   .toList();
@@ -1425,7 +1425,7 @@ class _PlayerTabState extends State<PlayerTab>
                 index: e.number,
                 start: Duration(milliseconds: e.start),
                 end: Duration(milliseconds: e.end),
-                text: e.text,
+                text: e.text.replaceAll('\\N', '\n'),
               ),
             )
             .toList();
