@@ -2,7 +2,7 @@
  * @Author:
  * @Date: 2025-01-21 20:39:36
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-07 20:47:42
+ * @LastEditTime: 2025-02-11 13:43:02
  * @Description: file content
  */
 #include "utils.hpp"
@@ -10,6 +10,7 @@
 extern "C" {
 #include <libavutil/log.h>
 #include <libavutil/error.h>
+#include <libavformat/avformat.h>
 }
 #include <vector>
 #include <string>
@@ -36,6 +37,34 @@ std::string toUTF8(const std::wstring &wstr) {
     return converter.to_bytes(wstr);
 }
 
+int64_t get_video_duration(const std::string& file_path) {
+    // 初始化libavformat，并注册所有的muxers/demuxers
+    // av_register_all();
+
+    AVFormatContext* format_ctx = nullptr;
+
+    // 打开视频文件
+    if (avformat_open_input(&format_ctx, file_path.c_str(), nullptr, nullptr) != 0) {
+        std::cerr << "无法打开视频文件: " << file_path << std::endl;
+        return -1;
+    }
+
+    // 获取流信息
+    if (avformat_find_stream_info(format_ctx, nullptr) < 0) {
+        std::cerr << "无法获取流信息" << std::endl;
+        avformat_close_input(&format_ctx);
+        return -1;
+    }
+
+    // 获取视频时长（以微秒为单位）
+    int64_t duration = format_ctx->duration;
+
+    // 关闭视频文件
+    avformat_close_input(&format_ctx);
+
+    // 将微秒转换为毫秒
+    return duration / 1000;
+}
 std::wstring fromUTF8(const std::string &str) {
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     return converter.from_bytes(str);
@@ -867,6 +896,7 @@ JSBIND_GLOBAL() {
     JSBIND_PFUNCTION(executeFFmpegCommandAPP);
     JSBIND_PFUNCTION(executeFFmpegCommandAPP2);
     JSBIND_FUNCTION(showLog);
+    JSBIND_FUNCTION(get_video_duration);
     JSBIND_PFUNCTION(getTitle);
     JSBIND_PFUNCTION(setTitle);
     JSBIND_PFUNCTION(getArtist);

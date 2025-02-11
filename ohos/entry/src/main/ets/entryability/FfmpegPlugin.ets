@@ -76,6 +76,9 @@ export default class FfmpegPlugin implements FlutterPlugin {
           case "getFfmpegPermission":
             that.api.getFfmpegPermission(result);
             break;
+          case "getVideoDurationMs":
+            that.api.getVideoDurationMs(result, call.argument("path") as string);
+            break;
           case "openFileManager":
             that.api.openFileManager(result);
             break;
@@ -537,7 +540,15 @@ class FfmpegApi {
     }
     Log.i(TAG, "getFfmpegPermission finish");
   }
-
+  getVideoDurationMs(result: MethodResult, path: string) {
+    let duration = 0;
+    try {
+      duration = libAddon.get_video_duration(path);
+      result.success(duration);
+    } catch (error) {
+      result.error("UNAVAILABLE", "Failed to get video duration", error);
+    }
+  }
   openFileManager(result: MethodResult) {
     let context = getContext(this) as common.UIAbilityContext;
     let uri = 'Open FE.';

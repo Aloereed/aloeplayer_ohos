@@ -1,3 +1,10 @@
+/*
+ * @Author: 
+ * @Date: 2025-01-19 10:54:22
+ * @LastEditors: 
+ * @LastEditTime: 2025-02-11 16:08:50
+ * @Description: file content
+ */
 // Copyright 2013 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -41,6 +48,12 @@ class PositionMessage {
   PositionMessage(this.textureId, this.position);
   int textureId;
   int position;
+}
+
+class AudioTracksMessage {
+  AudioTracksMessage(this.textureId, this.audioTracks);
+  int textureId;
+  List<String> audioTracks;
 }
 
 class CreateMessage {

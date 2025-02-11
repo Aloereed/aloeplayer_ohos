@@ -119,6 +119,26 @@ class OhosVideoPlayer extends VideoPlayerPlatform {
     return Duration(milliseconds: response.position);
   }
 
+  @override 
+  Future<List<String>> getAudioTracks(int textureId) async {
+    print("start send to ohos getAudioTracks"); 
+    final MethodChannel _channel = MethodChannel('samples.flutter.dev/videoplayerplugin');
+    final String? response = await _channel.invokeMethod<String>('getAudioTracks', {"tid":textureId});
+    print("response from ohos getAudioTracks: $response");
+    // split the response string by ";"
+  
+    List<String> audioTracks = (response??'').split(";");
+    return audioTracks;
+  }
+
+  @override
+  Future<void> setAudioTrack(int textureId, String audioTrack) async {
+    print("start send to ohos setAudioTrack"); 
+    final MethodChannel _channel = MethodChannel('samples.flutter.dev/videoplayerplugin');
+    await _channel.invokeMethod<String>('setAudioTrack', {"tid":textureId, "track": audioTrack});
+    print("response from ohos setAudioTrack: ");
+  }
+
   @override
   Stream<VideoEvent> videoEventsFor(int textureId) {
     return _eventChannelFor(textureId)

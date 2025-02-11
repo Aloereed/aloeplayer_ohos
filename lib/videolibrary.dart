@@ -21,18 +21,28 @@ class VideoLibraryTab extends StatefulWidget {
   final Function(int) changeTab;
   final Function toggleFullScreen;
 
-  VideoLibraryTab({required this.getopenfile, required this.changeTab, required this.toggleFullScreen});
+  VideoLibraryTab(
+      {required this.getopenfile,
+      required this.changeTab,
+      required this.toggleFullScreen});
 
   @override
   _VideoLibraryTabState createState() => _VideoLibraryTabState();
 }
 
-class _VideoLibraryTabState extends State<VideoLibraryTab> {
+class _VideoLibraryTabState extends State<VideoLibraryTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final String _videoDirPath =
       '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Videos';
   final String _videoDirPathOld = '/data/storage/el2/base/Videos';
   List<File> _videoFiles = [];
+  String _currentPath =
+      '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Videos';
+  List<Directory> _directories = [];
   List<File> _filteredVideoFiles = []; // 用于存储过滤后的视频文件
+  List _filteredItems = []; // 用于存储过滤后的文件和文件夹
   String _searchQuery = ''; // 搜索框的内容
   bool _isGridView = true; // 默认显示Grid视图
   final SettingsService _settingsService = SettingsService();
@@ -41,7 +51,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
   void initState() {
     super.initState();
     _ensureVideoDirectoryExists();
-    _loadVideoFiles();
+    // _loadVideoFiles();
+    _loadItems();
   }
 
   // 确保视频目录存在
@@ -56,57 +67,117 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     }
   }
 
-// 加载视频文件
-  Future<void> _loadVideoFiles() async {
-    final directory = Directory(_videoDirPath);
+// // 加载视频文件
+//   Future<void> _loadVideoFiles() async {
+//     final directory = Directory(_videoDirPath);
+//     List<File> files = [];
+//     if (await directory.exists()) {
+//       files = directory.listSync().whereType<File>().where((file) {
+//         // 获取文件扩展名
+//         String extension = path.extension(file.path).toLowerCase();
+//         // 排除 .srt 和 .ass 文件
+//         return extension != '.srt' &&
+//             extension != '.ass' &&
+//             !file.path.contains('.ux_store');
+//       }).toList();
+//     }
+
+//     final directoryOld = Directory(_videoDirPathOld);
+//     List<File> filesOld = [];
+//     if (await directoryOld.exists()) {
+//       filesOld = directoryOld.listSync().whereType<File>().where((file) {
+//         // 获取文件扩展名
+//         String extension = path.extension(file.path).toLowerCase();
+//         // 排除 .srt 和 .ass 文件
+//         return extension != '.srt' &&
+//             extension != '.ass' &&
+//             extension != '.ux_store';
+//       }).toList();
+//     }
+
+//     // 拼接新旧视频文件
+//     final filesCap = [...files, ...filesOld];
+//     setState(() {
+//       _videoFiles = filesCap;
+//       _filteredVideoFiles = filesCap; // 初始化时显示所有文件
+//     });
+//   }
+
+//   // 根据搜索内容过滤视频文件
+//   void _filterVideoFiles(String query) {
+//     setState(() {
+//       _searchQuery = query;
+//       if (query.isEmpty) {
+//         _filteredVideoFiles = _videoFiles; // 无搜索内容时显示全部
+//       } else {
+//         _filteredVideoFiles = _videoFiles
+//             .where((file) => path
+//                 .basename(file.path)
+//                 .toLowerCase()
+//                 .contains(query.toLowerCase()))
+//             .toList(); // 过滤文件名包含搜索字符串的文件
+//       }
+//     });
+//   }
+
+  Future<void> _loadItems() async {
+    final directory = Directory(_currentPath);
     List<File> files = [];
+    List<Directory> directories = [];
+
     if (await directory.exists()) {
-      files = directory.listSync().whereType<File>().where((file) {
-        // 获取文件扩展名
-        String extension = path.extension(file.path).toLowerCase();
-        // 排除 .srt 和 .ass 文件
-        return extension != '.srt' &&
-            extension != '.ass' &&
-            !file.path.contains('.ux_store');
-      }).toList();
+      final items = directory.listSync();
+      for (var item in items) {
+        if (item is File) {
+          String extension = path.extension(item.path).toLowerCase();
+          // 排除 .srt 和 .ass 文件
+          if (extension != '.srt' &&
+              extension != '.ass' &&
+              !item.path.contains('.ux_store')) {
+            files.add(item);
+          }
+        } else if (item is Directory) {
+          directories.add(item);
+        }
+      }
     }
 
-    final directoryOld = Directory(_videoDirPathOld);
-    List<File> filesOld = [];
-    if (await directoryOld.exists()) {
-      filesOld = directoryOld.listSync().whereType<File>().where((file) {
-        // 获取文件扩展名
-        String extension = path.extension(file.path).toLowerCase();
-        // 排除 .srt 和 .ass 文件
-        return extension != '.srt' &&
-            extension != '.ass' &&
-            extension != '.ux_store';
-      }).toList();
-    }
-
-    // 拼接新旧视频文件
-    final filesCap = [...files, ...filesOld];
     setState(() {
-      _videoFiles = filesCap;
-      _filteredVideoFiles = filesCap; // 初始化时显示所有文件
+      _videoFiles = files;
+      _directories = directories;
+      _filteredItems = [...directories, ...files]; // 初始化时显示所有文件和文件夹
     });
   }
 
-  // 根据搜索内容过滤视频文件
-  void _filterVideoFiles(String query) {
+  void _filterItems(String query) {
     setState(() {
       _searchQuery = query;
       if (query.isEmpty) {
-        _filteredVideoFiles = _videoFiles; // 无搜索内容时显示全部
+        _filteredItems = [..._directories, ..._videoFiles]; // 无搜索内容时显示全部
       } else {
-        _filteredVideoFiles = _videoFiles
-            .where((file) => path
-                .basename(file.path)
+        _filteredItems = [..._directories, ..._videoFiles]
+            .where((item) => path
+                .basename(item.path)
                 .toLowerCase()
                 .contains(query.toLowerCase()))
-            .toList(); // 过滤文件名包含搜索字符串的文件
+            .toList(); // 过滤文件名包含搜索字符串的文件或文件夹
       }
     });
+  }
+
+  void _navigateToDirectory(Directory directory) {
+    setState(() {
+      _currentPath = directory.path;
+    });
+    _loadItems();
+  }
+
+  void _navigateUp() {
+    final parentDirectory = Directory(path.dirname(_currentPath));
+    setState(() {
+      _currentPath = parentDirectory.path;
+    });
+    _loadItems();
   }
 
   // 使用file_picker选择视频文件
@@ -116,14 +187,17 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
-        'mp4,.mkv,.avi,.mov,.flv,.wmv,.webm',
+        'mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,.rmvb,.wmv,.ts',
         'mp4',
         'mkv',
         'avi',
         'mov',
         'flv',
         'wmv',
-        'webm'
+        'webm',
+        'rmvb',
+        'wmv',
+        'ts'
       ], // 允许的视频文件扩展名
       allowMultiple: true, // 支持多选
     );
@@ -145,15 +219,17 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
   Future<void> _pickVideoWithImagePicker() async {
     await _ensureVideoDirectoryExists();
     final picker = ImagePicker();
-    final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
-    if (file != null) {
-      await _copyVideoFile(file);
+    final List<XFile> files = await picker.pickMultipleMedia();
+    for (XFile? file in files) {
+      if (file != null) {
+        await _copyVideoFile(file);
+      }
     }
   }
 
   Future<void> _copyVideoFile(XFile file) async {
     final fileName = path.basename(file.path);
-    final destinationPath = path.join(_videoDirPath, fileName);
+    final destinationPath = path.join(_currentPath, fileName);
     final destinationFile = File(destinationPath);
     bool deleteIfError = true;
     // 显示加载对话框
@@ -223,7 +299,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
       }
       rethrow;
     } finally {
-      _loadVideoFiles();
+      _loadItems();
     }
   }
 
@@ -291,7 +367,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
           await outputStream.close();
           print("文件复制完成: $destinationPath");
           Navigator.of(context).pop(); // 关闭对话框
-          _loadVideoFiles(); // 刷新视频列表
+          _loadItems(); // 刷新视频列表
         },
         onError: (e) {
           print("文件复制失败: $e");
@@ -315,7 +391,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
   // 删除视频文件
   Future<void> _deleteVideoFile(File file) async {
     await file.delete();
-    _loadVideoFiles(); // 刷新视频列表
+    _loadItems(); // 刷新视频列表
   }
 
   // 获取视频缩略图
@@ -331,17 +407,21 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
 
   // 获取视频时长
   Future<Duration> _getVideoDuration(File file) async {
-    // 创建 MediaInfo 实例
-    MediaInfo mediaInfo = MediaInfo();
+    // // 创建 MediaInfo 实例
+    // MediaInfo mediaInfo = MediaInfo();
 
-    // 获取视频文件的元数据
-    Map<String, dynamic> metadata = await mediaInfo.getMediaInfo(file.path);
+    // // 获取视频文件的元数据
+    // Map<String, dynamic> metadata = await mediaInfo.getMediaInfo(file.path);
 
-    // 从元数据中提取视频时长
-    int durationInMilliseconds = metadata['durationMs'];
+    // // 从元数据中提取视频时长
+    // int durationInMilliseconds = metadata['durationMs'];
+    final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
+    // 调用方法 getBatteryLevel
+    final result = await _platform
+        .invokeMethod<int>('getVideoDurationMs', {"path": file.path});
 
     // 将毫秒转换为 Duration 对象
-    Duration duration = Duration(milliseconds: durationInMilliseconds);
+    Duration duration = Duration(milliseconds: result ?? 0);
 
     return duration;
   }
@@ -362,15 +442,25 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return WebDAVDialog(
-            onLoadFiles: _loadVideoFiles,
-            fileExts: ['mp4', 'mkv', 'avi', 'mov', 'flv', 'wmv', 'webm']);
+        return WebDAVDialog(onLoadFiles: _loadItems, fileExts: [
+          'mp4',
+          'mkv',
+          'avi',
+          'mov',
+          'flv',
+          'wmv',
+          'webm',
+          'rmvb',
+          'wmv',
+          'ts'
+        ]);
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       appBar: AppBar(
         title: Container(
@@ -388,7 +478,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                 prefixIcon: Icon(Icons.search),
                 contentPadding: EdgeInsets.symmetric(horizontal: 16),
               ),
-              onChanged: _filterVideoFiles, // 监听搜索框内容变化
+              onChanged: _filterItems, // 监听搜索框内容变化
             ),
           ),
         ),
@@ -401,6 +491,12 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
               });
             },
           ),
+          Visibility(
+              visible: _currentPath != _videoDirPath,
+              child: IconButton(
+                icon: Icon(Icons.arrow_upward),
+                onPressed: _navigateUp,
+              )),
           IconButton(
             icon: Icon(Icons.add),
             onPressed: _pickVideoWithFilePicker,
@@ -415,11 +511,11 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
           ),
           IconButton(
             icon: Icon(Icons.refresh),
-            onPressed: _loadVideoFiles,
+            onPressed: _loadItems,
           ),
         ],
       ),
-      body: _filteredVideoFiles.isEmpty
+      body: _filteredItems.isEmpty
           ? Center(child: Text('暂无视频'))
           : _isGridView
               ? GridView.builder(
@@ -430,17 +526,52 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                     mainAxisSpacing: 8,
                     childAspectRatio: 0.8,
                   ),
-                  itemCount: _filteredVideoFiles.length,
+                  itemCount: _filteredItems.length,
                   itemBuilder: (context, index) {
-                    final file = _filteredVideoFiles[index];
+                    final file = _filteredItems[index];
+                    if (file is Directory) {
+                      return GestureDetector(
+                        onTap: () {
+                          _navigateToDirectory(file);
+                        },
+                        child: Card(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.folder, size: 50),
+                              Text(
+                                path.basename(file.path),
+                                style: TextStyle(fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
                     return _buildVideoCard(file);
                   },
                 )
               : ListView.builder(
                   padding: EdgeInsets.all(8),
-                  itemCount: _filteredVideoFiles.length,
+                  itemCount: _filteredItems.length,
                   itemBuilder: (context, index) {
-                    final file = _filteredVideoFiles[index];
+                    final file = _filteredItems[index];
+                    if (file is Directory) {
+                      return ListTile(
+                        leading: Icon(Icons.folder, color: Colors.blue),
+                        title: Text(
+                          path.basename(file.path),
+                          style: TextStyle(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () {
+                          _navigateToDirectory(file);
+                        },
+                      );
+                    }
                     return _buildVideoCard(file, isListView: true);
                   },
                 ),
@@ -470,341 +601,276 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
 
   Widget _buildVideoCard(File file, {bool isListView = false}) {
     return GestureDetector(
-      onTap: () {
-        widget.getopenfile(file.path); // 更新_openfile状态
-        widget.changeTab(0); // 切换到PlayerTab
-      },
-      onLongPress: () {
-        showModalBottomSheet(
-          context: context,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(15.0),
+        onTap: () {
+          widget.getopenfile(file.path); // 更新_openfile状态
+          widget.changeTab(0); // 切换到PlayerTab
+        },
+        onLongPress: () {
+          showModalBottomSheet(
+            context: context,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(15.0),
+              ),
             ),
-          ),
-          builder: (context) {
-            return Wrap(
-              children: [
-                // 转换为MP4到库文件夹
-                ListTile(
-                  leading: Icon(Icons.file_download, color: Colors.grey),
-                  title: Text('转换为MP4'),
-                  enabled: !isFFmpeged,
-                  onTap: () {
-                    Navigator.pop(context); // 关闭弹窗
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: Text('转换为MP4'),
-                          content: Text('确定要转换该视频为MP4格式吗？'),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context); // 关闭对话框
-                              },
-                              child: Text('取消',
-                                  style: TextStyle(color: Colors.red)),
-                            ),
-                            TextButton(
-                              onPressed: () async {
-                                Navigator.pop(context); // 关闭对话框
-                                final _platform = const MethodChannel(
-                                    'samples.flutter.dev/ffmpegplugin');
-                                // 调用方法 getBatteryLevel
-                                final result = await _platform
-                                    .invokeMethod<String>(
-                                        'tomp4', {"path": file.path});
-                                setState(() {
-                                  isFFmpeged = true;
-                                });
-
-                                showDialog(
-                                  context: context,
-                                  builder: (context) {
-                                    return AlertDialog(
-                                      title: Text('转换为MP4'),
-                                      content: Text(
-                                          '视频转换为MP4格式已启动，请保持前台运行，并自行到库文件夹检查结果。'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () {
-                                            Navigator.pop(context); // 关闭对话框
-                                          },
-                                          child: Text('确定',
-                                              style: TextStyle(
-                                                  color: Colors.blue)),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
-                              },
-                              child: Text('确定',
-                                  style: TextStyle(color: Colors.blue)),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                ),
-                // 使用FFMpeg播放
-                // ListTile(
-                //   leading: Icon(Icons.play_arrow, color: Colors.green),
-                //   title: Text('使用FFMpeg独立播放'),
-                //   onTap: () {
-                //     Navigator.pop(context); // 关闭对话框
-                //     var _ffmpegExample = FfmpegExample(initUri: file.path,toggleFullScreen: this.widget.toggleFullScreen);
-
-                //     Navigator.push(
-                //       context,
-                //       MaterialPageRoute(
-                //         builder: (context) => _ffmpegExample,
-                //       ),
-                //     );
-                //   },
-                // ),
-
-                // 抽取内挂字幕到库文件夹
-                ListTile(
-                  leading: Icon(Icons.subtitles, color: Colors.grey),
-                  title: Text('抽取内挂字幕'),
-                  onTap: () {
-                    Navigator.pop(context); // 关闭弹窗
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: Text('抽取内挂字幕'),
-                          content: Text('确定要抽取该视频的内挂字幕吗？'),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context); // 关闭对话框
-                              },
-                              child: Text('取消',
-                                  style: TextStyle(color: Colors.red)),
-                            ),
-                            TextButton(
-                              onPressed: () async {
-                                Navigator.pop(context); // 关闭对话框
-                                if (await _settingsService
-                                    .getExtractAssSubtitle()) {
-                                  if (isFFmpeged) {
-                                    showDialog(
-                                      context: context,
-                                      builder: (context) {
-                                        return AlertDialog(
-                                          title: Text('抽取内挂字幕'),
-                                          content: Text(
-                                              '由于当前限制，ASS内挂字幕抽取功能每次只能运行一次，请重启应用或关闭ASS抽取。'),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () {
-                                                Navigator.pop(context); // 关闭对话框
-                                              },
-                                              child: Text('确定',
-                                                  style: TextStyle(
-                                                      color: Colors.blue)),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                    return;
-                                  }
+            builder: (context) {
+              return Wrap(
+                children: [
+                  // 转换为MP4到库文件夹
+                  ListTile(
+                    leading: Icon(Icons.file_download, color: Colors.grey),
+                    title: Text('转换为MP4'),
+                    enabled: !isFFmpeged,
+                    onTap: () {
+                      Navigator.pop(context); // 关闭弹窗
+                      showDialog(
+                        context: context,
+                        builder: (context) {
+                          return AlertDialog(
+                            title: Text('转换为MP4'),
+                            content: Text('确定要转换该视频为MP4格式吗？'),
+                            actions: [
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context); // 关闭对话框
+                                },
+                                child: Text('取消',
+                                    style: TextStyle(color: Colors.red)),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  Navigator.pop(context); // 关闭对话框
                                   final _platform = const MethodChannel(
                                       'samples.flutter.dev/ffmpegplugin');
                                   // 调用方法 getBatteryLevel
                                   final result = await _platform
-                                      .invokeMethod<String>('getsrt',
-                                          {"path": file.path, "type": "ass"});
+                                      .invokeMethod<String>(
+                                          'tomp4', {"path": file.path});
                                   setState(() {
                                     isFFmpeged = true;
                                   });
-                                } else {
-                                  final _platform = const MethodChannel(
-                                      'samples.flutter.dev/ffmpegplugin');
-                                  // 调用方法 getBatteryLevel
-                                  final result = await _platform
-                                      .invokeMethod<String>('getsrtold',
-                                          {"path": file.path, "type": "ass"});
-                                }
 
-                                showDialog(
-                                  context: context,
-                                  builder: (context) {
-                                    return AlertDialog(
-                                      title: Text('抽取内挂字幕'),
-                                      content: Text('内挂字幕抽取已启动，请自行到库文件夹检查结果。'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () {
-                                            Navigator.pop(context); // 关闭对话框
-                                          },
-                                          child: Text('确定',
-                                              style: TextStyle(
-                                                  color: Colors.blue)),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
-                              },
-                              child: Text('确定',
-                                  style: TextStyle(color: Colors.blue)),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.share, color: Colors.blue), // 分享图标
-                  title: Text('分享'),
-                  onTap: () {
-                    Navigator.pop(context); // 关闭弹窗
-                    Share.shareXFiles([XFile(file.path)]); // 使用 SharePlus 分享
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.delete, color: Colors.red), // 删除图标
-                  title: Text('删除'),
-                  onTap: () {
-                    Navigator.pop(context); // 关闭弹窗
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: Text('删除视频'),
-                          content: Text('确定要删除该视频吗？'),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context); // 关闭对话框
-                              },
-                              child: Text('取消',
-                                  style: TextStyle(color: Colors.red)),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                _deleteVideoFile(file); // 调用删除方法
-                                Navigator.pop(context); // 关闭对话框
-                              },
-                              child: Text('删除',
-                                  style: TextStyle(color: Colors.blue)),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                ),
-              ],
-            );
-          },
-        );
-      },
-      child: FutureBuilder(
-        future: Future.wait([
-          _getVideoThumbnail(file),
-          _getVideoDuration(file),
-        ]),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Card(
-              child: isListView
-                  ? ListTile(
-                      title: Text(
-                        path.basename(file.path),
-                        style: TextStyle(fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text('加载中...'),
-                      leading: CircularProgressIndicator(),
-                    )
-                  : Column(
-                      children: [
-                        Expanded(
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                path.basename(file.path),
-                                style: TextStyle(fontSize: 12),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                '时长: 正在加载...',
-                                style: TextStyle(fontSize: 10),
-                              ),
-                              Text(
-                                '大小: ${_getFileSize(file)}',
-                                style: TextStyle(fontSize: 10),
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) {
+                                      return AlertDialog(
+                                        title: Text('转换为MP4'),
+                                        content: Text(
+                                            '视频转换为MP4格式已启动，请保持前台运行，并自行到库文件夹检查结果。'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.pop(context); // 关闭对话框
+                                            },
+                                            child: Text('确定',
+                                                style: TextStyle(
+                                                    color: Colors.blue)),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
+                                child: Text('确定',
+                                    style: TextStyle(color: Colors.blue)),
                               ),
                             ],
-                          ),
-                        ),
-                      ],
-                    ),
-            );
-          }
-          final thumbnail = snapshot.data?[0] as Uint8List?;
-          final duration = snapshot.data?[1] as Duration?;
-          return Card(
-            child: isListView
-                ? ListTile(
-                    leading: thumbnail != null
-                        ? Image.memory(thumbnail, fit: BoxFit.cover, width: 64)
-                        : Icon(Icons.video_library, size: 50),
-                    title: Text(
-                      path.basename(file.path),
-                      style: TextStyle(fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '时长: ${duration?.inMinutes}:${duration?.inSeconds.remainder(60)}',
-                          style: TextStyle(fontSize: 10),
-                        ),
-                        Text(
-                          '大小: ${_getFileSize(file)}',
-                          style: TextStyle(fontSize: 10),
-                        ),
-                      ],
-                    ),
-                  )
-                : Column(
-                    children: [
-                      Expanded(
-                        child: thumbnail != null
-                            ? Image.memory(thumbnail, fit: BoxFit.cover)
-                            : Icon(Icons.video_library, size: 50),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Column(
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  // 使用FFMpeg播放
+                  // ListTile(
+                  //   leading: Icon(Icons.play_arrow, color: Colors.green),
+                  //   title: Text('使用FFMpeg独立播放'),
+                  //   onTap: () {
+                  //     Navigator.pop(context); // 关闭对话框
+                  //     var _ffmpegExample = FfmpegExample(initUri: file.path,toggleFullScreen: this.widget.toggleFullScreen);
+
+                  //     Navigator.push(
+                  //       context,
+                  //       MaterialPageRoute(
+                  //         builder: (context) => _ffmpegExample,
+                  //       ),
+                  //     );
+                  //   },
+                  // ),
+
+                  // 抽取内挂字幕到库文件夹
+                  ListTile(
+                    leading: Icon(Icons.subtitles, color: Colors.grey),
+                    title: Text('抽取内挂字幕'),
+                    onTap: () {
+                      Navigator.pop(context); // 关闭弹窗
+                      showDialog(
+                        context: context,
+                        builder: (context) {
+                          return AlertDialog(
+                            title: Text('抽取内挂字幕'),
+                            content: Text('确定要抽取该视频的内挂字幕吗？'),
+                            actions: [
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context); // 关闭对话框
+                                },
+                                child: Text('取消',
+                                    style: TextStyle(color: Colors.red)),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  Navigator.pop(context); // 关闭对话框
+                                  if (await _settingsService
+                                      .getExtractAssSubtitle()) {
+                                    if (isFFmpeged) {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) {
+                                          return AlertDialog(
+                                            title: Text('抽取内挂字幕'),
+                                            content: Text(
+                                                '由于当前限制，ASS内挂字幕抽取功能每次只能运行一次，请重启应用或关闭ASS抽取。'),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () {
+                                                  Navigator.pop(
+                                                      context); // 关闭对话框
+                                                },
+                                                child: Text('确定',
+                                                    style: TextStyle(
+                                                        color: Colors.blue)),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      );
+                                      return;
+                                    }
+                                    final _platform = const MethodChannel(
+                                        'samples.flutter.dev/ffmpegplugin');
+                                    // 调用方法 getBatteryLevel
+                                    final result = await _platform
+                                        .invokeMethod<String>('getsrt',
+                                            {"path": file.path, "type": "ass"});
+                                    setState(() {
+                                      isFFmpeged = true;
+                                    });
+                                  } else {
+                                    final _platform = const MethodChannel(
+                                        'samples.flutter.dev/ffmpegplugin');
+                                    // 调用方法 getBatteryLevel
+                                    final result = await _platform
+                                        .invokeMethod<String>('getsrtold',
+                                            {"path": file.path, "type": "ass"});
+                                  }
+
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) {
+                                      return AlertDialog(
+                                        title: Text('抽取内挂字幕'),
+                                        content:
+                                            Text('内挂字幕抽取已启动，请自行到库文件夹检查结果。'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.pop(context); // 关闭对话框
+                                            },
+                                            child: Text('确定',
+                                                style: TextStyle(
+                                                    color: Colors.blue)),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
+                                child: Text('确定',
+                                    style: TextStyle(color: Colors.blue)),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.share, color: Colors.blue), // 分享图标
+                    title: Text('分享'),
+                    onTap: () {
+                      Navigator.pop(context); // 关闭弹窗
+                      Share.shareXFiles([XFile(file.path)]); // 使用 SharePlus 分享
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.delete, color: Colors.red), // 删除图标
+                    title: Text('删除'),
+                    onTap: () {
+                      Navigator.pop(context); // 关闭弹窗
+                      showDialog(
+                        context: context,
+                        builder: (context) {
+                          return AlertDialog(
+                            title: Text('删除视频'),
+                            content: Text('确定要删除该视频吗？'),
+                            actions: [
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context); // 关闭对话框
+                                },
+                                child: Text('取消',
+                                    style: TextStyle(color: Colors.red)),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  _deleteVideoFile(file); // 调用删除方法
+                                  Navigator.pop(context); // 关闭对话框
+                                },
+                                child: Text('删除',
+                                    style: TextStyle(color: Colors.blue)),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              );
+            },
+          );
+        },
+        child: Card(
+          child: isListView
+              ? ListTile(
+                  leading: FutureBuilder<Uint8List?>(
+                    future: _getVideoThumbnail(file),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return CircularProgressIndicator();
+                      }
+                      if (snapshot.hasError || snapshot.data == null) {
+                        return Icon(Icons.video_library, size: 50);
+                      }
+                      return Image.memory(snapshot.data!,
+                          fit: BoxFit.cover, width: 64);
+                    },
+                  ),
+                  title: Text(
+                    path.basename(file.path),
+                    style: TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: FutureBuilder<Duration?>(
+                    future: _getVideoDuration(file),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              path.basename(file.path),
-                              style: TextStyle(fontSize: 12),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              '时长: ${duration?.inMinutes}:${duration?.inSeconds.remainder(60)}',
+                              '时长: 加载中...',
                               style: TextStyle(fontSize: 10),
                             ),
                             Text(
@@ -812,13 +878,124 @@ class _VideoLibraryTabState extends State<VideoLibraryTab> {
                               style: TextStyle(fontSize: 10),
                             ),
                           ],
-                        ),
-                      ),
-                    ],
+                        );
+                      }
+                      if (snapshot.hasError || snapshot.data == null) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '时长: 未知',
+                              style: TextStyle(fontSize: 10),
+                            ),
+                            Text(
+                              '大小: ${_getFileSize(file)}',
+                              style: TextStyle(fontSize: 10),
+                            ),
+                          ],
+                        );
+                      }
+                      final duration = snapshot.data!;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '时长: ${duration.inMinutes}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}',
+                            style: TextStyle(fontSize: 10),
+                          ),
+                          Text(
+                            '大小: ${_getFileSize(file)}',
+                            style: TextStyle(fontSize: 10),
+                          ),
+                        ],
+                      );
+                    },
                   ),
-          );
-        },
-      ),
-    );
+                )
+              : Column(
+                  children: [
+                    Expanded(
+                      child: FutureBuilder<Uint8List?>(
+                        future: _getVideoThumbnail(file),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          if (snapshot.hasError || snapshot.data == null) {
+                            return Icon(Icons.video_library, size: 50);
+                          }
+                          return Image.memory(snapshot.data!,
+                              fit: BoxFit.cover);
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            path.basename(file.path),
+                            style: TextStyle(fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          FutureBuilder<Duration?>(
+                            future: _getVideoDuration(file),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '时长: 加载中...',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                    Text(
+                                      '大小: ${_getFileSize(file)}',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                  ],
+                                );
+                              }
+                              if (snapshot.hasError || snapshot.data == null) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '时长: 未知',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                    Text(
+                                      '大小: ${_getFileSize(file)}',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                  ],
+                                );
+                              }
+                              final duration = snapshot.data!;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '时长: ${duration.inMinutes}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                  Text(
+                                    '大小: ${_getFileSize(file)}',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+        ));
   }
 }

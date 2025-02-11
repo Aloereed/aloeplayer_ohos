@@ -42,6 +42,12 @@ class PositionMessage {
   int position;
 }
 
+class AudioTracksMessage {
+  AudioTracksMessage(this.textureId, this.audioTracks);
+  int textureId;
+  List<String> audioTracks;
+} 
+
 class CreateMessage {
   CreateMessage({required this.httpHeaders});
   String? asset;

@@ -298,6 +298,45 @@ export class PositionMessage {
     return pigeonResult;
   }
 }
+export class AudioTracksMessage {
+  constructor() {
+  }
+  private textureId: Number = 0;
+
+  public getTextureId(): Number {
+    return this.textureId;
+  }
+
+  public setTextureId(setterArg: Number): void{
+    this.textureId = setterArg;
+  }
+
+  private audioTracks: Array<string> = new Array<string>();
+
+  public getAudioTracks(): Array<string> {
+    return this.audioTracks;
+  } 
+
+  public setAudioTracks(setterArg: Array<string>): void {
+    this.audioTracks = setterArg;
+  }
+
+  toList(): Array<Object> {
+    let toListResult: Array<Object> = new Array<Object>();
+    toListResult[0] = this.textureId;
+    toListResult[1] = this.audioTracks;
+    return toListResult;
+  }
+
+  static fromList(list: Array<Object>): AudioTracksMessage {
+    let pigeonResult: AudioTracksMessage = new AudioTracksMessage();
+    let textureId = list[0] as Number ?? 0;
+    pigeonResult.setTextureId(textureId);
+    let audioTracks = list[1] as Array<string> ?? [];
+    pigeonResult.setAudioTracks(audioTracks);
+    return pigeonResult;
+  }
+}
 
 export class TextureMessage {
 

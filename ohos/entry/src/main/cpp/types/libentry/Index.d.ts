@@ -7,6 +7,7 @@ export class JSBind{
 }
 export const executeFFmpegCommandAPP:(a:string,b:number,c:any)=>any;
 export const executeFFmpegCommandAPP2:(a:string,b:number,c:any)=>any;
+export const get_video_duration:(a:string)=>any;
 // 读取元信息
 export const getTitle: (filename: string) => any;
 export const getArtist: (filename: string) => any;

@@ -310,7 +310,6 @@ class AudioMetadata {
   }
 }
 
-
 class AudioInfoEditor extends StatefulWidget {
   final String filePath;
 
@@ -361,10 +360,12 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
       _artistController.text = await AudioMetadata.getArtist(filename);
       _albumController.text = await AudioMetadata.getAlbum(filename);
       _yearController.text = (await AudioMetadata.getYear(filename)).toString();
-      _trackController.text = (await AudioMetadata.getTrack(filename)).toString();
+      _trackController.text =
+          (await AudioMetadata.getTrack(filename)).toString();
       _discController.text = (await AudioMetadata.getDisc(filename)).toString();
       _genreController.text = await AudioMetadata.getGenre(filename);
-      _albumArtistController.text = await AudioMetadata.getAlbumArtist(filename);
+      _albumArtistController.text =
+          await AudioMetadata.getAlbumArtist(filename);
       _composerController.text = await AudioMetadata.getComposer(filename);
       _lyricistController.text = await AudioMetadata.getLyricist(filename);
       _commentController.text = await AudioMetadata.getComment(filename);
@@ -474,18 +475,28 @@ class AudioLibraryTab extends StatefulWidget {
   final Function(int) changeTab;
   final Function toggleFullScreen;
 
-  AudioLibraryTab({required this.getopenfile, required this.changeTab, required this.toggleFullScreen});
+  AudioLibraryTab(
+      {required this.getopenfile,
+      required this.changeTab,
+      required this.toggleFullScreen});
 
   @override
   _AudioLibraryTabState createState() => _AudioLibraryTabState();
 }
 
-class _AudioLibraryTabState extends State<AudioLibraryTab> {
+class _AudioLibraryTabState extends State<AudioLibraryTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final String _audioDirPath =
       '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Audios';
   final String _audioDirPathOld = '/data/storage/el2/base/Audios';
   List<File> _audioFiles = [];
-  List<File> _filteredAudioFiles = []; // 用于存储过滤后的音频文件
+  // List<File> _filteredItems = []; // 用于存储过滤后的音频文件
+  String _currentPath =
+      '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Audios';
+  List<Directory> _directories = [];
+  List _filteredItems = []; // 用于存储过滤后的文件和文件夹
   String _searchQuery = ''; // 搜索框的内容
   bool _isGridView = true; // 是否以网格视图显示
 
@@ -493,7 +504,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
   void initState() {
     super.initState();
     _ensureAudioDirectoryExists();
-    _loadAudioFiles();
+    _loadItems();
   }
 
   // 确保音频目录存在
@@ -508,33 +519,101 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
     }
   }
 
-  // 加载音频文件
-  Future<void> _loadAudioFiles() async {
-    final directory = Directory(_audioDirPath);
+  // // 加载音频文件
+  // Future<void> _loadItems() async {
+  //   final directory = Directory(_audioDirPath);
+  //   List<File> files = [];
+  //   if (await directory.exists()) {
+  //     files = directory.listSync().whereType<File>().toList();
+  //   }
+  //   final directoryOld = Directory(_audioDirPathOld);
+  //   List<File> filesOld = [];
+  //   if (await directoryOld.exists()) {
+  //     filesOld = directoryOld.listSync().whereType<File>().toList();
+  //   }
+  //   // 拼接新旧音频文件
+  //   final filesCap = [...files, ...filesOld];
+  //   setState(() {
+  //     _audioFiles = filesCap;
+  //     _filteredItems = filesCap; // 初始化时显示所有文件
+  //   });
+  // }
+  Future<void> _loadItems() async {
+    final directory = Directory(_currentPath);
     List<File> files = [];
+    List<Directory> directories = [];
+
     if (await directory.exists()) {
-      files = directory.listSync().whereType<File>().toList();
+      final items = directory.listSync();
+      for (var item in items) {
+        if (item is File) {
+          String extension = path.extension(item.path).toLowerCase();
+          // 排除 .srt 和 .ass 文件
+          if (extension != '.srt' &&
+              extension != '.ass' &&
+              !item.path.contains('.ux_store')) {
+            files.add(item);
+          }
+        } else if (item is Directory) {
+          directories.add(item);
+        }
+      }
     }
-    final directoryOld = Directory(_audioDirPathOld);
-    List<File> filesOld = [];
-    if (await directoryOld.exists()) {
-      filesOld = directoryOld.listSync().whereType<File>().toList();
-    }
-    // 拼接新旧音频文件
-    final filesCap = [...files, ...filesOld];
+
     setState(() {
-      _audioFiles = filesCap;
-      _filteredAudioFiles = filesCap; // 初始化时显示所有文件
+      _audioFiles = files;
+      _directories = directories;
+      _filteredItems = [...directories, ...files]; // 初始化时显示所有文件和文件夹
     });
+  }
+
+  void _filterItems(String query) {
+    setState(() {
+      _searchQuery = query;
+      if (query.isEmpty) {
+        _filteredItems = [..._directories, ..._audioFiles]; // 无搜索内容时显示全部
+      } else {
+        _filteredItems = [..._directories, ..._audioFiles]
+            .where((item) => path
+                .basename(item.path)
+                .toLowerCase()
+                .contains(query.toLowerCase()))
+            .toList(); // 过滤文件名包含搜索字符串的文件或文件夹
+      }
+    });
+  }
+
+  void _navigateToDirectory(Directory directory) {
+    setState(() {
+      _currentPath = directory.path;
+    });
+    _loadItems();
+  }
+
+  void _navigateUp() {
+    final parentDirectory = Directory(path.dirname(_currentPath));
+    setState(() {
+      _currentPath = parentDirectory.path;
+    });
+    _loadItems();
   }
 
   void _openWebDavFileManager(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return WebDAVDialog(
-            onLoadFiles: _loadAudioFiles,
-            fileExts: ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg']);
+        return WebDAVDialog(onLoadFiles: _loadItems, fileExts: [
+          'mp3',
+          'flac',
+          'wav',
+          'm4a',
+          'aac',
+          'ogg',
+          'aiff',
+          'tak',
+          'dsf',
+          'wma'
+        ]);
       },
     );
   }
@@ -544,9 +623,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
     setState(() {
       _searchQuery = query;
       if (query.isEmpty) {
-        _filteredAudioFiles = _audioFiles; // 无搜索内容时显示全部
+        _filteredItems = _audioFiles; // 无搜索内容时显示全部
       } else {
-        _filteredAudioFiles = _audioFiles
+        _filteredItems = _audioFiles
             .where((file) => path
                 .basename(file.path)
                 .toLowerCase()
@@ -563,13 +642,17 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
-        'mp3,.flac,.wav,.m4a,.aac,.ogg',
+        'mp3,.flac,.wav,.m4a,.aac,.ogg,.aiff,.tak,.dsf,.wma',
         'mp3',
         'wav',
         'flac',
         'aac',
         'm4a',
-        'ogg'
+        'ogg',
+        'aiff',
+        'tak',
+        'dsf',
+        'wma'
       ], // 允许的视频文件扩展名
       allowMultiple: true, // 支持多选
     );
@@ -591,7 +674,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
 
   Future<void> _copyAudioFile(XFile file) async {
     final fileName = path.basename(file.path);
-    final destinationPath = path.join(_audioDirPath, fileName);
+    final destinationPath = path.join(_currentPath, fileName);
     final destinationFile = File(destinationPath);
     bool deleteIfError = true;
     // 显示加载对话框
@@ -662,14 +745,14 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
       }
       rethrow;
     } finally {
-      _loadAudioFiles();
+      _loadItems();
     }
   }
 
   // 删除音频文件
   Future<void> _deleteAudioFile(File file) async {
     await file.delete();
-    _loadAudioFiles(); // 刷新音频列表
+    _loadItems(); // 刷新音频列表
   }
 
   // 获取音频缩略图
@@ -680,8 +763,16 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
 
   // 获取音频时长
   Future<Duration> _getAudioDuration(File file) async {
-    final metadata = readMetadata(file, getImage: false);
-    return metadata.duration ?? Duration.zero;
+    // final metadata = readMetadata(file, getImage: false);
+    // return metadata.duration ?? Duration.zero;
+    final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
+    // 调用方法 getBatteryLevel
+    final result = await _platform
+        .invokeMethod<int>('getVideoDurationMs', {"path": file.path});
+
+    // 将毫秒转换为 Duration 对象
+    Duration duration = Duration(milliseconds: result ?? 0);
+    return duration;
   }
 
   // 获取文件大小
@@ -698,6 +789,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       appBar: AppBar(
         title: Container(
@@ -715,7 +807,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
                 prefixIcon: Icon(Icons.search),
                 contentPadding: EdgeInsets.symmetric(horizontal: 16),
               ),
-              onChanged: _filterAudioFiles, // 监听搜索框内容变化
+              onChanged: _filterItems, // 监听搜索框内容变化
             ),
           ),
         ),
@@ -728,6 +820,12 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
               });
             },
           ),
+          Visibility(
+              visible: _currentPath != _audioDirPath,
+              child: IconButton(
+                icon: Icon(Icons.arrow_upward),
+                onPressed: _navigateUp,
+              )),
           IconButton(
             icon: Icon(Icons.add),
             onPressed: _pickAudioWithFilePicker,
@@ -738,11 +836,11 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
           ),
           IconButton(
             icon: Icon(Icons.refresh),
-            onPressed: _loadAudioFiles,
+            onPressed: _loadItems,
           ),
         ],
       ),
-      body: _filteredAudioFiles.isEmpty
+      body: _filteredItems.isEmpty
           ? Center(child: Text('暂无音频'))
           : _isGridView
               ? GridView.builder(
@@ -753,17 +851,52 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
                     mainAxisSpacing: 8,
                     childAspectRatio: 0.8,
                   ),
-                  itemCount: _filteredAudioFiles.length,
+                  itemCount: _filteredItems.length,
                   itemBuilder: (context, index) {
-                    final file = _filteredAudioFiles[index];
+                    final file = _filteredItems[index];
+                    if (file is Directory) {
+                      return GestureDetector(
+                        onTap: () {
+                          _navigateToDirectory(file);
+                        },
+                        child: Card(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.folder, size: 50),
+                              Text(
+                                path.basename(file.path),
+                                style: TextStyle(fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
                     return _buildAudioCard(file);
                   },
                 )
               : ListView.builder(
                   padding: EdgeInsets.all(8),
-                  itemCount: _filteredAudioFiles.length,
+                  itemCount: _filteredItems.length,
                   itemBuilder: (context, index) {
-                    final file = _filteredAudioFiles[index];
+                    final file = _filteredItems[index];
+                    if (file is Directory) {
+                      return ListTile(
+                        leading: Icon(Icons.folder, color: Colors.blue),
+                        title: Text(
+                          path.basename(file.path),
+                          style: TextStyle(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () {
+                          _navigateToDirectory(file);
+                        },
+                      );
+                    }
                     return _buildAudioCard(file, isListView: true);
                   },
                 ),
@@ -863,75 +996,67 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
           },
         );
       },
-      child: FutureBuilder(
-        future: Future.wait([
-          _getAudioThumbnail(file),
-          _getAudioDuration(file),
-        ]),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Card(
-              child: isListView
-                  ? ListTile(
-                      title: Text(
-                        path.basename(file.path),
-                        style: TextStyle(fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text('加载中...'),
-                      leading: CircularProgressIndicator(),
-                    )
-                  : Column(
-                      children: [
-                        Expanded(
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                path.basename(file.path),
-                                style: TextStyle(fontSize: 12),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                '时长: 正在加载...',
-                                style: TextStyle(fontSize: 10),
-                              ),
-                              Text(
-                                '大小: ${_getFileSize(file)}',
-                                style: TextStyle(fontSize: 10),
-                              ),
-                            ],
+      child: Card(
+        child: isListView
+            ? ListTile(
+                leading: FutureBuilder<Uint8List?>(
+                  future: _getAudioThumbnail(file),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return CircularProgressIndicator();
+                    }
+                    if (snapshot.hasError || snapshot.data == null) {
+                      return Icon(Icons.video_library, size: 50);
+                    }
+                    return Image.memory(snapshot.data!,
+                        fit: BoxFit.cover, width: 64);
+                  },
+                ),
+                title: Text(
+                  path.basename(file.path),
+                  style: TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: FutureBuilder<Duration?>(
+                  future: _getAudioDuration(file),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '时长: 加载中...',
+                            style: TextStyle(fontSize: 10),
                           ),
-                        ),
-                      ],
-                    ),
-            );
-          }
-          final thumbnail = snapshot.data?[0] as Uint8List?;
-          final duration = snapshot.data?[1] as Duration?;
-          return Card(
-            child: isListView
-                ? ListTile(
-                    leading: thumbnail != null
-                        ? Image.memory(thumbnail, fit: BoxFit.cover, width: 64)
-                        : Icon(Icons.video_library, size: 50),
-                    title: Text(
-                      path.basename(file.path),
-                      style: TextStyle(fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Column(
+                          Text(
+                            '大小: ${_getFileSize(file)}',
+                            style: TextStyle(fontSize: 10),
+                          ),
+                        ],
+                      );
+                    }
+                    if (snapshot.hasError || snapshot.data == null) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '时长: 未知',
+                            style: TextStyle(fontSize: 10),
+                          ),
+                          Text(
+                            '大小: ${_getFileSize(file)}',
+                            style: TextStyle(fontSize: 10),
+                          ),
+                        ],
+                      );
+                    }
+                    final duration = snapshot.data!;
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '时长: ${duration?.inMinutes}:${duration?.inSeconds.remainder(60)}',
+                          '时长: ${duration.inMinutes}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}',
                           style: TextStyle(fontSize: 10),
                         ),
                         Text(
@@ -939,41 +1064,93 @@ class _AudioLibraryTabState extends State<AudioLibraryTab> {
                           style: TextStyle(fontSize: 10),
                         ),
                       ],
+                    );
+                  },
+                ),
+              )
+            : Column(
+                children: [
+                  Expanded(
+                    child: FutureBuilder<Uint8List?>(
+                      future: _getAudioThumbnail(file),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Center(child: CircularProgressIndicator());
+                        }
+                        if (snapshot.hasError || snapshot.data == null) {
+                          return Icon(Icons.video_library, size: 50);
+                        }
+                        return Image.memory(snapshot.data!, fit: BoxFit.cover);
+                      },
                     ),
-                  )
-                : Column(
-                    children: [
-                      Expanded(
-                        child: thumbnail != null
-                            ? Image.memory(thumbnail, fit: BoxFit.cover)
-                            : Icon(Icons.video_library, size: 50),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              path.basename(file.path),
-                              style: TextStyle(fontSize: 12),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              '时长: ${duration?.inMinutes}:${duration?.inSeconds.remainder(60)}',
-                              style: TextStyle(fontSize: 10),
-                            ),
-                            Text(
-                              '大小: ${_getFileSize(file)}',
-                              style: TextStyle(fontSize: 10),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ),
-          );
-        },
+                  Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          path.basename(file.path),
+                          style: TextStyle(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        FutureBuilder<Duration?>(
+                          future: _getAudioDuration(file),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '时长: 加载中...',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                  Text(
+                                    '大小: ${_getFileSize(file)}',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                ],
+                              );
+                            }
+                            if (snapshot.hasError || snapshot.data == null) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '时长: 未知',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                  Text(
+                                    '大小: ${_getFileSize(file)}',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                ],
+                              );
+                            }
+                            final duration = snapshot.data!;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '时长: ${duration.inMinutes}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                                Text(
+                                  '大小: ${_getFileSize(file)}',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }

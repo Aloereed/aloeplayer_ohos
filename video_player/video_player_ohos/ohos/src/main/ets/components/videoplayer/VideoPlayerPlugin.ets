@@ -12,12 +12,13 @@ import Log from '@ohos/flutter_ohos/src/main/ets/util/Log';
 import { TextureRegistry } from '@ohos/flutter_ohos/src/main/ets/view/TextureRegistry';
 import { VideoPlayerApi } from './VideoPlayerApi';
 import { VideoPlayerApiImpl } from './VideoPlayerApiImpl';
-
+import { MethodCall, MethodChannel, MethodResult } from '@ohos/flutter_ohos';
 const TAG: string = "VideoPlayerPlugin";
 export class VideoPlayerPlugin implements FlutterPlugin, AbilityAware {
   private pluginBinding: FlutterPluginBinding | null = null;
   private videoPlayerApi: VideoPlayerApiImpl | null = null;
   private flutterState: FlutterState | null = null;
+  private channel?: MethodChannel;
 
   getUniqueClassName(): string {
     return TAG;
@@ -27,6 +28,28 @@ export class VideoPlayerPlugin implements FlutterPlugin, AbilityAware {
     this.pluginBinding = binding;
     Log.i(TAG, "VideoPlayer onAttachedToEngine");
     this.flutterState = new FlutterState(this.pluginBinding.getBinaryMessenger(), this.pluginBinding.getTextureRegistry());
+    this.channel = new MethodChannel(binding.getBinaryMessenger(), "samples.flutter.dev/videoplayerplugin");
+    let that = this;
+    this.channel.setMethodCallHandler({
+      onMethodCall(call: MethodCall, result: MethodResult) {
+        switch (call.method) {
+          case "getAudioTracks":
+            let tracks = that.videoPlayerApi?.naiveAudioTracks(call.argument("tid") as number)
+            result.success(tracks);
+            break;
+          case "setAudioTrack":
+            that.videoPlayerApi?.naiveSetAudioTrack(call.argument("tid") as number, call.argument("track") as string)
+            result.success(null);
+            break;
+          case "callEvent":
+            break;
+            break;
+          default:
+            result.notImplemented();
+            break;
+        }
+      }
+    })
   }
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
@@ -36,6 +59,7 @@ export class VideoPlayerPlugin implements FlutterPlugin, AbilityAware {
       this.videoPlayerApi.detach();
       this.videoPlayerApi = null;
     }
+    this.channel?.setMethodCallHandler(null);
   }
 
   onAttachedToAbility(binding: AbilityPluginBinding): void {

@@ -72,6 +72,8 @@ dependency_overrides:
     path: ./video_player/video_player
   video_player_ohos:
     path: ./video_player/video_player_ohos
+  video_player_platform_interface:
+    path: ./video_player/video_player_platform_interface
   video_thumbnail_ohos:
     git:
       path: ohos
@@ -102,4 +104,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 1.0.4+16
+version: 1.0.5+17

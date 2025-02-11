@@ -133,6 +133,32 @@ class PositionMessage {
   }
 }
 
+class AudioTracksMessage {
+  AudioTracksMessage({
+    required this.textureId,
+    required this.audioTracks,
+  });
+
+  int textureId;
+
+  List<String> audioTracks;
+
+  Object encode() {
+    return <Object?>[
+      textureId,
+      audioTracks,
+    ];
+  }
+
+  static AudioTracksMessage decode(Object result) {
+    result as List<Object?>;
+    return AudioTracksMessage(
+      textureId: result[0]! as int,
+      audioTracks: result[1]! as List<String>,
+    );
+  }
+}
+
 class CreateMessage {
   CreateMessage({
     this.asset,
@@ -221,7 +247,11 @@ class _OhosVideoPlayerApiCodec extends StandardMessageCodec {
     } else if (value is VolumeMessage) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else {
+    } else if (value is AudioTracksMessage) {
+      buffer.putUint8(135);
+      writeValue(buffer, value.encode());
+    }
+    else {
       super.writeValue(buffer, value);
     }
   }
@@ -243,6 +273,8 @@ class _OhosVideoPlayerApiCodec extends StandardMessageCodec {
         return TextureMessage.decode(readValue(buffer)!);
       case 134:
         return VolumeMessage.decode(readValue(buffer)!);
+      case 135:
+        return AudioTracksMessage.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -444,6 +476,33 @@ class OhosVideoPlayerApi {
       );
     } else {
       return (replyList[0] as PositionMessage?)!;
+    }
+  }
+
+  Future<AudioTracksMessage> audioTracks(TextureMessage arg_msg) async {
+    final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.OhosVideoPlayerApi.audioTracks', codec,
+        binaryMessenger: _binaryMessenger);
+    final List<Object?>? replyList =
+        await channel.send(<Object?>[arg_msg]) as List<Object?>?;
+    if (replyList == null) {
+      throw PlatformException(
+        code: 'channel-error',
+        message: 'Unable to establish connection on channel.',
+      );
+    } else if (replyList.length > 1) {
+      throw PlatformException(
+        code: replyList[0]! as String,
+        message: replyList[1] as String?,
+        details: replyList[2],
+      );
+    } else if (replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (replyList[0] as AudioTracksMessage?)!;
     }
   }
 

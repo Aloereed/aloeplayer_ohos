@@ -1,5 +1,5 @@
 import StandardMessageCodec from '@ohos/flutter_ohos/src/main/ets/plugin/common/StandardMessageCodec';
-import { CreateMessage, LoopingMessage, MixWithOthersMessage, PlaybackSpeedMessage, PositionMessage,
+import { CreateMessage, LoopingMessage, MixWithOthersMessage, PlaybackSpeedMessage, PositionMessage, AudioTracksMessage,
   TextureMessage,
   VolumeMessage
 } from './Messages';
@@ -34,9 +34,12 @@ export class VideoPlayerApiCodec extends StandardMessageCodec {
       case 134:
         let res6 =  VolumeMessage.fromList(super.readValue(buffer) as Array<ESObject>);
         return res6;
-      default:
-        let res7: ESObject = super.readValueOfType(type, buffer);
+      case 135:
+        let res7 =  AudioTracksMessage.fromList(super.readValue(buffer) as Array<ESObject>);
         return res7;
+      default:
+        let res8: ESObject = super.readValueOfType(type, buffer);
+        return res8;
     }
   }
 
@@ -62,7 +65,11 @@ export class VideoPlayerApiCodec extends StandardMessageCodec {
     } else if (value instanceof VolumeMessage) {
       stream.writeInt8(-122);
       return this.writeValue(stream, (value as VolumeMessage).toList());
-    } else {
+    } else if (value instanceof AudioTracksMessage) {
+      stream.writeInt8(-121);
+      return this.writeValue(stream, (value as AudioTracksMessage).toList());
+    }
+    else {
       return super.writeValue(stream, value);
     }
   }

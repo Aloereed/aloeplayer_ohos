@@ -12,6 +12,7 @@ import { CreateMessage, LoopingMessage,
   MixWithOthersMessage,
   PlaybackSpeedMessage,
   PositionMessage,
+  AudioTracksMessage,
   TextureMessage, VolumeMessage,
   wrapError } from './Messages';
 import { PlayerModel } from './PlayerModel';
@@ -232,6 +233,65 @@ export class VideoPlayerApiImpl {
     this.AudioFocus = arg.getMixWithOthers();
   }
 
+  audioTracks(arg: TextureMessage): AudioTracksMessage {
+    let videoPlayer = this.videoPlayers.get(arg.getTextureId().toString());
+    Log.d(TAG, "audioTracks, id=" + arg.getTextureId() + ", videoPlayer=" + videoPlayer);
+    let audioTracksMessage = new AudioTracksMessage();
+    let audioTrackIndexs: Array<string> = [];
+    if (videoPlayer.avPlayer == null) {
+      console.error("audioTracks videoPlayer is null");
+      return audioTracksMessage;
+    }
+    videoPlayer.avPlayer.getTrackDescription((error: BusinessError, arrList: Array<media.MediaDescription>) => {
+      if (arrList != null) {
+        for (let i = 0; i < arrList.length; i++) {
+            // 获取音频轨道列表
+            audioTrackIndexs.push(arrList[i][media.MediaDescriptionKey.MD_KEY_TRACK_INDEX].toString());
+        }
+      } else {
+        console.error(`audio getTrackDescription fail, error:${error}`);
+      }
+    });
+
+    audioTracksMessage.setTextureId(arg.getTextureId());
+    audioTracksMessage.setAudioTracks(audioTrackIndexs ?? []);
+    return audioTracksMessage;
+  }
+
+  naiveAudioTracks(arg: number): string {
+    let videoPlayer = this.videoPlayers.get(arg.toString());
+    // Log.d(TAG, "audioTracks, id=" + arg.getTextureId() + ", videoPlayer=" + videoPlayer);
+    // let audioTracksMessage = new AudioTracksMessage();
+    let audioTrackIndexs: string = '';
+    if (videoPlayer.avPlayer == null) {
+      console.error("audioTracks videoPlayer is null");
+      return audioTrackIndexs;
+    }
+    videoPlayer.avPlayer.getTrackDescription((error: BusinessError, arrList: Array<media.MediaDescription>) => {
+      if (arrList != null) {
+        for (let i = 0; i < arrList.length; i++) {
+            // 获取音频轨道列表
+            audioTrackIndexs=audioTrackIndexs+arrList[i][media.MediaDescriptionKey.MD_KEY_TRACK_INDEX].toString()+";";
+            console.info(`audioTracks index: ${arrList[i][media.MediaDescriptionKey.MD_KEY_TRACK_INDEX]}`);
+        }
+      } else {
+        console.error(`audio getTrackDescription fail, error:${error}`);
+      }
+    });
+
+    return audioTrackIndexs;
+  }
+
+  naiveSetAudioTrack(arg: number, track: string) {
+    let videoPlayer = this.videoPlayers.get(arg.toString());
+    console.info(`setAudioTrack, id=${arg}, track=${track}`);
+    if (videoPlayer.avPlayer == null) {
+      console.error("setAudioTrack videoPlayer is null");
+      return;
+    }
+    videoPlayer.avPlayer.selectTrack(parseInt(track));
+  }
+
   setup(binaryMessenger: BinaryMessenger): void {
     let api = this;
     if (this.flutterState == null) {
@@ -437,6 +497,25 @@ export class VideoPlayerApiImpl {
           try {
             api.setMixWithOthers(mixWithOthersMsg);
             wrapped.push(new TextureMessage());
+            reply.reply(wrapped);
+          } catch (err) {
+            let wrappedError = wrapError(err);
+            reply.reply(wrappedError);
+          }
+        }
+      });
+    }
+    {
+      const channel: BasicMessageChannel<Object> = new BasicMessageChannel<Object>(
+        binaryMessenger, "dev.flutter.pigeon.OhosVideoPlayerApi.audioTracks", VideoPlayerApiCodec.INSTANCE);
+      channel.setMessageHandler({
+        onMessage(msg: Object, reply: Reply<Object>): void {
+          let wrapped = new Array<Object>();
+          let args = msg as Array<Object>;
+          let textureMsg = args[0] as TextureMessage;
+          try {
+            let audioTracksMessage: AudioTracksMessage = api.audioTracks(textureMsg);
+            wrapped.push(audioTracksMessage);
             reply.reply(wrapped);
           } catch (err) {
             let wrappedError = wrapError(err);

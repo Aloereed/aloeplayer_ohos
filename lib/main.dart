@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-10 15:52:49
+ * @LastEditTime: 2025-02-11 17:18:30
  * @Description: file content
  */
 /*
@@ -13,6 +13,8 @@
  * @Description: file content
  * 
  */
+import 'dart:ui';
+
 import 'package:aloeplayer/privacy_policy.dart';
 import 'package:xml/xml.dart' as xml;
 import 'package:flutter/material.dart';
@@ -218,6 +220,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
+  final PageController _pageController = PageController();
   int videoHeight = 0;
   int videoWidth = 0;
   bool _isFullScreen = false;
@@ -291,6 +294,14 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<bool> _onWillPop() async {
+    if (_isFullScreen) {
+      _toggleFullScreen();
+      return false; // 阻止退出程序
+    }
+    return true; // 允许退出程序
+  }
+
   void _getopenfile(String openfile) {
     setState(() {
       _openfile = openfile;
@@ -356,71 +367,91 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          PlayerTab(
-            key: ValueKey(_openfile), // 使用_openfile作为Key
-            toggleFullScreen: _toggleFullScreen,
-            isFullScreen: _isFullScreen,
-            getopenfile: _getopenfile,
-            openfile: _openfile, // 传递_openfile
-            setHomeWH: setHomeWH,
-          ),
-          VideoLibraryTab(
-            getopenfile: _getopenfile,
-            changeTab: (index) {
+    return WillPopScope(
+        onWillPop: _onWillPop,
+        child: Scaffold(
+          body: PageView(
+            controller: _pageController,
+            onPageChanged: (index) {
               setState(() {
                 _selectedIndex = index;
               });
             },
-            toggleFullScreen: (){},
+            children: [
+              PlayerTab(
+                key: ValueKey(_openfile),
+                toggleFullScreen: _toggleFullScreen,
+                isFullScreen: _isFullScreen,
+                getopenfile: _getopenfile,
+                openfile: _openfile,
+                setHomeWH: setHomeWH,
+              ),
+              VideoLibraryTab(
+                getopenfile: _getopenfile,
+                changeTab: (index) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                  _pageController.animateToPage(
+                    index,
+                    duration: Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+                toggleFullScreen: () {},
+              ),
+              AudioLibraryTab(
+                getopenfile: _getopenfile,
+                changeTab: (index) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                  _pageController.animateToPage(
+                    index,
+                    duration: Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+                toggleFullScreen: () {},
+              ),
+              SettingsTab(),
+            ],
           ),
-          AudioLibraryTab(
-            getopenfile: _getopenfile,
-            changeTab: (index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
-            toggleFullScreen: (){},
-          ),
-          SettingsTab(),
-        ],
-      ),
-      bottomNavigationBar: _isFullScreen
-          ? null
-          : BottomNavigationBar(
-              currentIndex: _selectedIndex,
-              onTap: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              items: [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.play_arrow),
-                  label: '播放器',
+          bottomNavigationBar: _isFullScreen
+              ? null
+              : BottomNavigationBar(
+                  currentIndex: _selectedIndex,
+                  onTap: (index) {
+                    setState(() {
+                      _selectedIndex = index;
+                    });
+                    _pageController.animateToPage(
+                      index,
+                      duration: Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  },
+                  items: [
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.play_arrow),
+                      label: '播放器',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.video_library),
+                      label: '视频库',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.library_music),
+                      label: '音频库',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.settings),
+                      label: '设置',
+                    ),
+                  ],
+                  type: BottomNavigationBarType.fixed,
                 ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.video_library),
-                  label: '视频库',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.library_music),
-                  label: '音频库',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.settings),
-                  label: '设置',
-                ),
-              ],
-              // selectedItemColor: Theme.of(context).colorScheme.primary,
-              // unselectedItemColor: Theme.of(context).colorScheme.onSurface,
-              type: BottomNavigationBarType.fixed,
-            ),
-    );
+        ));
   }
 }
 
@@ -547,7 +578,9 @@ class PlayerTab extends StatefulWidget {
 }
 
 class _PlayerTabState extends State<PlayerTab>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   VideoPlayerController? _videoController;
   double _volume = 1.0;
   double _systemVolume = 7.5;
@@ -685,6 +718,58 @@ class _PlayerTabState extends State<PlayerTab>
     }
   }
 
+  Future<void> _openAudioTrackDialog() async {
+    if(_videoController == null)
+      return;
+    print('打开音轨列表');
+    Fluttertoast.showToast(msg: '打开音轨列表...');
+
+    print('获取音轨列表...');
+    List<String> audioTracks = await _videoController!.getAudioTracks();
+    print('音轨列表: $audioTracks');
+
+    // 如果音轨列表为空，则默认显示 0, 1, 2, 3, 4, 5
+    // if (audioTracks.isEmpty) {
+      audioTracks = ['0', '1', '2', '3', '4', '5'];
+    // }
+
+    String? selectedTrack = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('选择音轨'),
+          content: SingleChildScrollView(
+            child: Column(
+              children: [
+                  const Text(
+                    '选择非音频轨道可能会导致错误。0一般为视频轨。然后是音频轨。其他轨道可能是字幕轨道。',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ListBody(
+                  children: audioTracks.map((track) {
+                    return ListTile(
+                      title: Text(track),
+                      onTap: () {
+                        Navigator.of(context).pop(track); // 返回选中的音轨
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selectedTrack != null) {
+      // 在这里处理选中的音轨
+      print('选中的音轨: $selectedTrack');
+      // 你可以在这里调用 _videoController.setAudioTrack(selectedTrack) 来设置音轨
+       _videoController?.setAudioTrack(selectedTrack);
+    }
+  }
+
   Future<void> _checkAndOpenUriFile() async {
     try {
       final file = File('/data/storage/el2/base/openuri.txt'); // 构建文件路径
@@ -729,26 +814,69 @@ class _PlayerTabState extends State<PlayerTab>
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('输入 URL'),
-          content: TextField(
-            controller: urlController,
-            decoration: InputDecoration(hintText: "请输入音视频 URL"),
+          backgroundColor: Colors.transparent, // 设置对话框背景为透明
+          contentPadding: EdgeInsets.zero, // 去掉默认的内边距
+          content: ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0), // 高斯模糊
+              child: Container(
+                color: Colors.black.withOpacity(0.8), // 半透明黑色背景
+                padding: EdgeInsets.all(16), // 添加内边距
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, // 让 Column 包裹内容
+                  children: [
+                    Text(
+                      '输入 URL',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    SizedBox(height: 16), // 添加间距
+                    TextField(
+                      controller: urlController,
+                      decoration: InputDecoration(
+                        hintText: "请输入音视频 URL",
+                        hintStyle: TextStyle(color: Colors.grey),
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.lightBlue),
+                        ),
+                      ),
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    SizedBox(height: 16), // 添加间距
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end, // 按钮右对齐
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            _openUri(urlController.text);
+                          },
+                          child: Text(
+                            '确认',
+                            style: TextStyle(color: Colors.lightBlue),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
+                          child: Text(
+                            '取消',
+                            style: TextStyle(color: Colors.lightBlue),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _openUri(urlController.text); // 调用 _openUri 方法
-              },
-              child: Text('确认', style: TextStyle(color: Colors.lightBlue)),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('取消', style: TextStyle(color: Colors.lightBlue)),
-            ),
-          ],
         );
       },
     );
@@ -818,8 +946,13 @@ class _PlayerTabState extends State<PlayerTab>
           ),
           OptionItem(
             onTap: () => _selectSubtitle(),
-            iconData: Icons.subtitles_sharp,
+            iconData: Icons.closed_caption,
             title: '选择字幕轨道',
+          ),
+          OptionItem(
+            onTap: () => _openAudioTrackDialog(),
+            iconData: Icons.volume_up_sharp,
+            title: '选择音频轨道（非FFMpeg）',
           ),
           OptionItem(
             onTap: () {
@@ -919,7 +1052,10 @@ class _PlayerTabState extends State<PlayerTab>
   }
 
   void _ffmpegPlay() {
-    this._ffmpegExample = FfmpegExample(initUri: this.widget.openfile,toggleFullScreen: this.widget.toggleFullScreen,);
+    this._ffmpegExample = FfmpegExample(
+      initUri: this.widget.openfile,
+      toggleFullScreen: this.widget.toggleFullScreen,
+    );
 
     Navigator.push(
       context,
@@ -1092,8 +1228,9 @@ class _PlayerTabState extends State<PlayerTab>
       _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
       if (_useFfmpegForPlay) {
         if (_ffmpegExample == null) {
-          _ffmpegExample =
-              FfmpegExample(initUri: convertUriToPath(widget.openfile),toggleFullScreen: this.widget.toggleFullScreen);
+          _ffmpegExample = FfmpegExample(
+              initUri: convertUriToPath(widget.openfile),
+              toggleFullScreen: this.widget.toggleFullScreen);
         }
         _ffmpegExample?.controller?.sendMessageToOhosView(
             "newPlay", convertUriToPath(widget.openfile));
@@ -1128,8 +1265,9 @@ class _PlayerTabState extends State<PlayerTab>
       _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
       if (_useFfmpegForPlay) {
         if (_ffmpegExample == null) {
-          _ffmpegExample =
-              FfmpegExample(initUri: convertUriToPath(widget.openfile),toggleFullScreen: this.widget.toggleFullScreen);
+          _ffmpegExample = FfmpegExample(
+              initUri: convertUriToPath(widget.openfile),
+              toggleFullScreen: this.widget.toggleFullScreen);
         }
         _ffmpegExample?.controller?.sendMessageToOhosView(
             "newPlay", convertUriToPath(widget.openfile));
@@ -1180,7 +1318,7 @@ class _PlayerTabState extends State<PlayerTab>
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
-        'mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,mp3,.flac,.wav,.m4a,.aac,.ogg',
+        'mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,mp3,.flac,.wav,.m4a,.aac,.ogg,.rmvb,.wmv,.ts,.m3u8,.m3u,.wma,.ape,.aiff,.dsf,.tak',
         'mp4',
         'mkv',
         'avi',
@@ -1194,6 +1332,16 @@ class _PlayerTabState extends State<PlayerTab>
         'aac',
         'm4a',
         'ogg',
+        'rmvb',
+        'wmv',
+        'ts',
+        'm3u8',
+        'm3u',
+        'wma',
+        'ape',
+        'aiff',
+        'dsf',
+        'tak',
         '*'
       ],
     );
@@ -1634,6 +1782,7 @@ class _PlayerTabState extends State<PlayerTab>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
         appBar: widget.isFullScreen
             ? null

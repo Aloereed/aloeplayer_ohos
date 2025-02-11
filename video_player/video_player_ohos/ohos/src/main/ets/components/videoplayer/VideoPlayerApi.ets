@@ -3,6 +3,7 @@ import { CreateMessage, LoopingMessage,
   MixWithOthersMessage,
   PlaybackSpeedMessage,
   PositionMessage,
+  AudioTracksMessage,
   TextureMessage, VolumeMessage } from './Messages';
 import { FlutterState } from './VideoPlayerPlugin';
 
@@ -30,4 +31,6 @@ export interface  VideoPlayerApi {
   setMixWithOthers(arg: MixWithOthersMessage): void;
 
   setUp(flutterState: FlutterState): void;
+
+  audioTracks(arg: TextureMessage): AudioTracksMessage;
 }
