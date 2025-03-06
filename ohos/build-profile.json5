@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "storePassword": "0000001C2794050D7B7E35DBE4DB287D173573CB783880D671FD24A46895DBF482731ECDC19D8BF1EDDB141A",
-          "certpath": "D:/ZHENGSHU/aloeplayer.cer",
+          "storePassword": "0000001C45E2AC9F1C13F8AFA0787AF4ED886C4D40E13AE84F7A6FC3F65A1BD9D66F96313A191E9EA1353317",
+          "certpath": "C:/Users/huzheng/OneDrive/研三上学期/aloeplayer.cer",
           "keyAlias": "aloeplayer",
-          "keyPassword": "0000001CED434F8E5EA82AD460535B1F7BCE2BA958F08795114939E95904764A1A292211038362764BD22247",
-          "profile": "D:/ZHENGSHU/aloeplayerRelease.p7b",
+          "keyPassword": "0000001C2F9C5A1928DD16F1B281C472D144573CA81AB87FFCABF37019A1F0937BC9D3D3C08BB5A2166BD179",
+          "profile": "C:/Users/huzheng/OneDrive/研三上学期/aloeplayerRelease.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "D:/ZHENGSHU/aloeplayer.p12"
+          "storeFile": "C:/Users/huzheng/OneDrive/研三上学期/aloeplayer.p12"
         }
       }
     ],
@@ -19,7 +19,7 @@
       {
         "name": "default",
         "signingConfig": "default",
-        "compatibleSdkVersion": "5.0.0(12)",
+        "compatibleSdkVersion": "5.0.1(13)",
         "runtimeOS": "HarmonyOS"
       }
     ]

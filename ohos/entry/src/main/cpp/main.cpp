@@ -2,7 +2,7 @@
  * @Author:
  * @Date: 2025-01-21 20:39:36
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-11 13:43:02
+ * @LastEditTime: 2025-02-19 15:25:01
  * @Description: file content
  */
 #include "utils.hpp"
@@ -11,6 +11,7 @@ extern "C" {
 #include <libavutil/log.h>
 #include <libavutil/error.h>
 #include <libavformat/avformat.h>
+#include <ass/ass.h>
 }
 #include <vector>
 #include <string>
@@ -31,17 +32,24 @@ extern "C" {
 #include <locale>
 #include <codecvt>
 
+#include <iostream>
+#include <cstdio>
+#include <cstdlib>
+#include <cstdarg>
+
+#include <png.h>
+
 std::string type_audio = "normal";
 std::string toUTF8(const std::wstring &wstr) {
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     return converter.to_bytes(wstr);
 }
 
-int64_t get_video_duration(const std::string& file_path) {
+int64_t get_video_duration(const std::string &file_path) {
     // 初始化libavformat，并注册所有的muxers/demuxers
     // av_register_all();
 
-    AVFormatContext* format_ctx = nullptr;
+    AVFormatContext *format_ctx = nullptr;
 
     // 打开视频文件
     if (avformat_open_input(&format_ctx, file_path.c_str(), nullptr, nullptr) != 0) {
@@ -890,6 +898,215 @@ void setCover(const std::string &filename, const std::string &base64Data) {
 }
 
 
+// typedef struct image_s {
+//     int width, height, stride;
+//     unsigned char *buffer;      // RGBA32
+// } image_t;
+
+// ASS_Library *ass_library;
+// ASS_Renderer *ass_renderer;
+// ASS_Track *track;
+
+// const std::string base64_chars =
+//              "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+//              "abcdefghijklmnopqrstuvwxyz"
+//              "0123456789+/";
+
+// std::string base64_encode(const std::vector<unsigned char>& data) {
+//     std::string encoded;
+//     int i = 0;
+//     unsigned char char_array_3[3];
+//     unsigned char char_array_4[4];
+
+//     for (const auto& byte : data) {
+//         char_array_3[i++] = byte;
+//         if (i == 3) {
+//             char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
+//             char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
+//             char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
+//             char_array_4[3] = char_array_3[2] & 0x3f;
+
+//             for (i = 0; i < 4; i++) {
+//                 encoded += base64_chars[char_array_4[i]];
+//             }
+//             i = 0;
+//         }
+//     }
+
+//     if (i > 0) {
+//         for (int j = i; j < 3; j++) {
+//             char_array_3[j] = '\0';
+//         }
+
+//         char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
+//         char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
+//         char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
+//         char_array_4[3] = char_array_3[2] & 0x3f;
+
+//         for (int j = 0; j < i + 1; j++) {
+//             encoded += base64_chars[char_array_4[j]];
+//         }
+
+//         while (i++ < 3) {
+//             encoded += '=';
+//         }
+//     }
+
+//     return encoded;
+// }
+
+// void msg_callback(int level, const char *fmt, va_list va, void *data)
+// {
+//     if (level > 6)
+//         return;
+//     std::cout << "libass: ";
+//     std::vfprintf(stdout, fmt, va);
+//     std::cout << std::endl;
+// }
+
+// static image_t *gen_image(int width, int height)
+// {
+//     image_t *img = new image_t;
+//     img->width = width;
+//     img->height = height;
+//     img->stride = width * 4;
+//     img->buffer = new unsigned char[height * width * 4]();
+//     return img;
+// }
+
+// static void blend_single(image_t * frame, ASS_Image *img)
+// {
+//     unsigned char r = img->color >> 24;
+//     unsigned char g = (img->color >> 16) & 0xFF;
+//     unsigned char b = (img->color >> 8) & 0xFF;
+//     unsigned char a = 255 - (img->color & 0xFF);
+
+//     unsigned char *src = img->bitmap;
+//     unsigned char *dst = frame->buffer + img->dst_y * frame->stride + img->dst_x * 4;
+
+//     for (int y = 0; y < img->h; ++y) {
+//         for (int x = 0; x < img->w; ++x) {
+//             unsigned k = ((unsigned) src[x]) * a;
+//             // For high-quality output consider using dithering instead;
+//             // this static offset results in biased rounding but is faster
+//             unsigned rounding_offset = 255 * 255 / 2;
+//             // If the original frame is not in premultiplied alpha, convert it beforehand or adjust
+//             // the blending code. For fully-opaque output frames there's no difference either way.
+//             dst[x * 4 + 0] = (k *   r + (255 * 255 - k) * dst[x * 4 + 0] + rounding_offset) / (255 * 255);
+//             dst[x * 4 + 1] = (k *   g + (255 * 255 - k) * dst[x * 4 + 1] + rounding_offset) / (255 * 255);
+//             dst[x * 4 + 2] = (k *   b + (255 * 255 - k) * dst[x * 4 + 2] + rounding_offset) / (255 * 255);
+//             dst[x * 4 + 3] = (k * 255 + (255 * 255 - k) * dst[x * 4 + 3] + rounding_offset) / (255 * 255);
+//         }
+//         src += img->stride;
+//         dst += frame->stride;
+//     }
+// }
+
+// static void blend(image_t * frame, ASS_Image *img)
+// {
+//     int cnt = 0;
+//     while (img) {
+//         blend_single(frame, img);
+//         ++cnt;
+//         img = img->next;
+//     }
+//     OH_LOG_ERROR(LOG_APP, "%{public}d images blended", cnt);
+
+//     // Convert from pre-multiplied to straight alpha
+//     // (not needed for fully-opaque output)
+//     for (int y = 0; y < frame->height; y++) {
+//         unsigned char *row = frame->buffer + y * frame->stride;
+//         for (int x = 0; x < frame->width; x++) {
+//             const unsigned char alpha = row[4 * x + 3];
+//             if (alpha) {
+//                 // For each color channel c:
+//                 //   c = c / (255.0 / alpha)
+//                 // but only using integers and a biased rounding offset
+//                 const uint32_t offs = (uint32_t) 1 << 15;
+//                 uint32_t inv = ((uint32_t) 255 << 16) / alpha + 1;
+//                 row[x * 4 + 0] = (row[x * 4 + 0] * inv + offs) >> 16;
+//                 row[x * 4 + 1] = (row[x * 4 + 1] * inv + offs) >> 16;
+//                 row[x * 4 + 2] = (row[x * 4 + 2] * inv + offs) >> 16;
+//             }
+//         }
+//     }
+// }
+
+// static std::string write_png_to_string(image_t *img)
+// {
+//     std::vector<unsigned char> buffer;
+//     png_structp png_ptr = NULL;
+//     png_infop info_ptr = NULL;
+//     png_byte **volatile row_pointers = NULL;
+
+//     // Create a custom write function to write to the buffer
+//     auto write_data = [](png_structp png_ptr, png_bytep data, png_size_t length) {
+//         std::vector<unsigned char> *buffer = static_cast<std::vector<unsigned char>*>(png_get_io_ptr(png_ptr));
+//         buffer->insert(buffer->end(), data, data + length);
+//     };
+
+//     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+//     if (!png_ptr) {
+//         OH_LOG_ERROR(LOG_APP, "PNG Error creating write struct!" );
+//         return "";
+//     }
+
+//     info_ptr = png_create_info_struct(png_ptr);
+//     if (!info_ptr) {
+//         OH_LOG_ERROR(LOG_APP,  "PNG Error creating info struct!");
+//         png_destroy_write_struct(&png_ptr, NULL);
+//         return "";
+//     }
+
+//     row_pointers = new png_byte*[img->height];
+//     for (int k = 0; k < img->height; k++)
+//         row_pointers[k] = img->buffer + img->stride * k;
+
+//     if (setjmp(png_jmpbuf(png_ptr))) {
+//         OH_LOG_ERROR(LOG_APP,  "PNG unknown error!" );
+//         delete[] row_pointers;
+//         png_destroy_write_struct(&png_ptr, &info_ptr);
+//         return "";
+//     }
+
+//     png_set_write_fn(png_ptr, &buffer, write_data, NULL);
+//     png_set_compression_level(png_ptr, 9);
+
+//     png_set_IHDR(png_ptr, info_ptr, img->width, img->height,
+//                  8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
+//                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+//     png_write_info(png_ptr, info_ptr);
+
+//     png_write_image(png_ptr, row_pointers);
+//     png_write_end(png_ptr, info_ptr);
+
+//     delete[] row_pointers;
+//     png_destroy_write_struct(&png_ptr, &info_ptr);
+
+//     return base64_encode(buffer);
+// }
+
+// 初始化 libass 的函数
+extern "C" {
+#include "asstest.h"
+}
+bool init_libass(const std::string &assFilePath, int frame_w = 1280, int frame_h = 720) {
+    int result = initassinner(assFilePath.c_str(), frame_w, frame_h);
+    return result == 1 ? true : false;
+}
+
+// 获取指定时间的 PNG 数据的函数
+std::string get_png_data_at_time(int milliseconds, int frame_w = 1280, int frame_h = 720) {
+    std::string pngData = getPng(milliseconds, frame_w, frame_h);
+
+    return pngData;
+}
+
+// 释放资源的函数
+void cleanup_libass() { cleanupinner(); }
+
+
 JSBIND_ADDON(entry)
 
 JSBIND_GLOBAL() {
@@ -923,4 +1140,7 @@ JSBIND_GLOBAL() {
     JSBIND_PFUNCTION(setLyrics);
     JSBIND_PFUNCTION(getCover);
     JSBIND_PFUNCTION(setCover);
+    JSBIND_PFUNCTION(init_libass);
+    JSBIND_PFUNCTION(get_png_data_at_time);
+    JSBIND_FUNCTION(cleanup_libass);
 }

@@ -317,6 +317,10 @@ class ChewieController extends ChangeNotifier {
     this.danmakuContents,
     this.ffmpeg,
     this.sendToFfmpegPlayer,
+    this.playNextItem,
+    this.playPreviousItem,
+    this.closePlaylist,
+    this.openPlaylist,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
           'The playbackSpeeds values must all be greater than 0',
@@ -378,6 +382,10 @@ class ChewieController extends ChangeNotifier {
     List<Map<String, dynamic>>? danmakuContents,
     bool? ffmpeg,
     FfmpegExample? sendToFfmpegPlayer,
+    Function? playNextItem,
+    Function? playPreviousItem,
+    Function? closePlaylist,
+    Function? openPlaylist,
   }) {
     return ChewieController(
       draggableProgressBar: draggableProgressBar ?? this.draggableProgressBar,
@@ -438,6 +446,10 @@ class ChewieController extends ChangeNotifier {
       danmakuContents: danmakuContents ?? this.danmakuContents,
       ffmpeg: ffmpeg ?? this.ffmpeg,
       sendToFfmpegPlayer: sendToFfmpegPlayer ?? this.sendToFfmpegPlayer,
+      playNextItem: playNextItem?? this.playNextItem,
+      playPreviousItem: playPreviousItem?? this.playPreviousItem,
+      closePlaylist: closePlaylist?? this.closePlaylist,
+      openPlaylist: openPlaylist?? this.openPlaylist,
     );
   }
 
@@ -449,6 +461,11 @@ class ChewieController extends ChangeNotifier {
 
   bool? ffmpeg = false;
   FfmpegExample? sendToFfmpegPlayer; 
+
+  Function? playNextItem;
+  Function? playPreviousItem;
+  Function? closePlaylist;
+  Function? openPlaylist;
 
   /// Pass your translations for the options like:
   /// - PlaybackSpeed

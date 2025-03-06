@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-11 17:18:30
+ * @LastEditTime: 2025-03-06 14:44:45
  * @Description: file content
  */
 /*
@@ -13,7 +13,9 @@
  * @Description: file content
  * 
  */
+import 'dart:convert';
 import 'dart:ui';
+import 'dart:ui' as ui;
 
 import 'package:aloeplayer/privacy_policy.dart';
 import 'package:xml/xml.dart' as xml;
@@ -50,6 +52,7 @@ import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'volumeview.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
+import 'package:dart_libass/dart_libass.dart';
 
 late MyAudioHandler audioHandler;
 void main() async {
@@ -599,7 +602,7 @@ class _PlayerTabState extends State<PlayerTab>
   bool _showVolumeSlider = false;
   Timer? _volumeSliderTimer;
   Timer? _timer;
-  bool _isLooping = false;
+  int _isLooping = 0;
   double _previousPlaybackSpeed = 1.0; // 用于存储长按之前的播放速率
   double _swipeDistance = 0.0;
   ChewieController? _chewieController;
@@ -617,8 +620,15 @@ class _PlayerTabState extends State<PlayerTab>
   List<SubtitleData> _subtitles = []; // 存储所有字幕
   int _currentSubtitleIndex = -1; // 当前启用的字幕索引
   List<Map<String, dynamic>> _danmakuContents = []; // 存储所有弹幕
+  List<Map<String, String>> _playlist = [];
   bool _useFfmpegForPlay = false;
   bool _initVpWhenFfmpeg = false;
+  DartLibass? _assRenderer;
+  File? _assFile;
+  bool _assInit = false;
+  File? _assFontFile;
+  bool _showPlaylist = false;
+  bool _usePlaylist = true;
   final EventChannel _eventChannel2 = EventChannel('com.example.app/events');
   final EventChannel _eventChannel =
       EventChannel('samples.flutter.dev/volumepluginevent');
@@ -656,7 +666,7 @@ class _PlayerTabState extends State<PlayerTab>
 
   void _onEventOpenuri(dynamic event) {
     if (event is String && event.isNotEmpty) {
-      _openUri(event); // 打开URI
+      _openUri(event, wantFirst: true); // 打开URI
       setState(() {
         widget.openfile = event;
       });
@@ -678,6 +688,7 @@ class _PlayerTabState extends State<PlayerTab>
     // _timer = Timer.periodic(Duration(seconds: 1), (timer) {
     //   _checkAndOpenUriFile();
     // });
+    _usePlaylist = await _settingsService.getUsePlaylist();
     _eventChannel2
         .receiveBroadcastStream()
         .listen(_onEventOpenuri, onError: _onErrorOpenuri);
@@ -719,8 +730,7 @@ class _PlayerTabState extends State<PlayerTab>
   }
 
   Future<void> _openAudioTrackDialog() async {
-    if(_videoController == null)
-      return;
+    if (_videoController == null) return;
     print('打开音轨列表');
     Fluttertoast.showToast(msg: '打开音轨列表...');
 
@@ -730,7 +740,7 @@ class _PlayerTabState extends State<PlayerTab>
 
     // 如果音轨列表为空，则默认显示 0, 1, 2, 3, 4, 5
     // if (audioTracks.isEmpty) {
-      audioTracks = ['0', '1', '2', '3', '4', '5'];
+    audioTracks = ['0', '1', '2', '3', '4', '5'];
     // }
 
     String? selectedTrack = await showDialog<String>(
@@ -741,10 +751,10 @@ class _PlayerTabState extends State<PlayerTab>
           content: SingleChildScrollView(
             child: Column(
               children: [
-                  const Text(
-                    '选择非音频轨道可能会导致错误。0一般为视频轨。然后是音频轨。其他轨道可能是字幕轨道。',
-                    style: TextStyle(color: Colors.red),
-                  ),
+                const Text(
+                  '选择非音频轨道可能会导致错误。0一般为视频轨。然后是音频轨。其他轨道可能是字幕轨道。',
+                  style: TextStyle(color: Colors.red),
+                ),
                 ListBody(
                   children: audioTracks.map((track) {
                     return ListTile(
@@ -766,7 +776,7 @@ class _PlayerTabState extends State<PlayerTab>
       // 在这里处理选中的音轨
       print('选中的音轨: $selectedTrack');
       // 你可以在这里调用 _videoController.setAudioTrack(selectedTrack) 来设置音轨
-       _videoController?.setAudioTrack(selectedTrack);
+      _videoController?.setAudioTrack(selectedTrack);
     }
   }
 
@@ -882,8 +892,40 @@ class _PlayerTabState extends State<PlayerTab>
     );
   }
 
+  void _checkIfVideoFinished() {
+    if (_videoController == null) return;
+    if ((_videoController!.value.position.inMilliseconds >=
+            _videoController!.value.duration.inMilliseconds - 100) ||
+        (_videoController!.value.position == Duration.zero &&
+            !_videoController!.value.isPlaying)) {
+      // 视频播放完毕
+      _handleVideoFinished();
+    }
+  }
+
+  void _handleVideoFinished() {
+    switch (_isLooping) {
+      case 0:
+        // 播放完停止
+        // setState(() {
+        //   _isPlaying = false;
+        // });
+        break;
+      case 1:
+        // 列表循环（需要手动切换到下一项）
+        _playNextItem();
+        break;
+      case 2:
+        // 单曲循环
+        // _videoController!.seekTo(Duration.zero); // 回到视频开头
+        // _videoController!.play(); // 重新播放
+        break;
+    }
+  }
+
   Future<void> _initializeChewieController() async {
     _volumeController = _volumeExample?.controller;
+    _videoController!.addListener(_checkIfVideoFinished);
 
     _chewieController = ChewieController(
       ffmpeg: _useFfmpegForPlay,
@@ -891,11 +933,15 @@ class _PlayerTabState extends State<PlayerTab>
       videoPlayerController: _videoController!,
       allowMuting: !_useFfmpegForPlay,
       autoPlay: true,
-      looping: _isLooping,
+      looping: _isLooping == 2,
       showControls: _showControls,
       allowFullScreen: true,
       zoomAndPan: true,
       customToggleFullScreen: widget.toggleFullScreen,
+      playNextItem: _usePlaylist ? _playNextItem : null,
+      playPreviousItem: _usePlaylist ? _playPreviousItem : null,
+      closePlaylist: _closePlaylist,
+      openPlaylist: _openPlaylist,
       optionsTranslation: OptionsTranslation(
         playbackSpeedButtonText: '播放速率',
         subtitlesButtonText: '字幕',
@@ -949,11 +995,12 @@ class _PlayerTabState extends State<PlayerTab>
             iconData: Icons.closed_caption,
             title: '选择字幕轨道',
           ),
-          OptionItem(
-            onTap: () => _openAudioTrackDialog(),
-            iconData: Icons.volume_up_sharp,
-            title: '选择音频轨道（非FFMpeg）',
-          ),
+          if (!_useFfmpegForPlay)
+            OptionItem(
+              onTap: () => _openAudioTrackDialog(),
+              iconData: Icons.volume_up_sharp,
+              title: '选择音频轨道',
+            ),
           OptionItem(
             onTap: () {
               _chewieController?.toggleFullScreen();
@@ -996,13 +1043,25 @@ class _PlayerTabState extends State<PlayerTab>
           OptionItem(
             onTap: () {
               setState(() {
-                _isLooping = !_isLooping;
-                _videoController?.setLooping(_isLooping);
+                // 切换循环模式
+                _isLooping = (_isLooping + 1) % 3; // 0 -> 1 -> 2 -> 0
+                // 更新视频控制器的循环模式
+                _videoController
+                    ?.setLooping(_isLooping == 2); // 只有单曲循环时设置为 true
               });
             },
-            iconData: _isLooping ? Icons.repeat_one : Icons.repeat,
-            title: _isLooping ? '取消单曲循环' : '单曲循环',
+            iconData: _isLooping == 0
+                ? Icons.stop
+                : _isLooping == 1
+                    ? Icons.repeat
+                    : Icons.repeat_one,
+            title: _isLooping == 0
+                ? '播放完当前媒体停止'
+                : _isLooping == 1
+                    ? '列表循环'
+                    : '单曲循环',
           ),
+
           OptionItem(
             onTap: () {
               setState(() {
@@ -1187,9 +1246,99 @@ class _PlayerTabState extends State<PlayerTab>
     return uri;
   }
 
+  void _getPlaylist(String path) {
+    //提取文件夹路径
+    _playlist.clear();
+    if (!_usePlaylist) {
+      return;
+    }
+    if (path.contains('//')) {
+      _playlist.add({
+        'name': path,
+        'path': path,
+      });
+      return;
+    }
+    String folderPath = path.substring(0, path.lastIndexOf('/'));
+    List<String> excludeExts = ['ux_store', 'srt', 'ass', 'jpg'];
+    // 如果文件夹位于 /storage/Users/currentUser/Download/com.aloereed.aloeplayer/下，打开该文件夹
+    if (folderPath.startsWith(
+        '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/')) {
+      final directory = Directory(folderPath);
+      // 提取文件夹下所有文件（不包括子文件夹）
+      List<FileSystemEntity> files = directory.listSync();
+      // 把<文件名, 文件路径>添加到_playlist中
+      for (FileSystemEntity file in files) {
+        if (file is File) {
+          if (excludeExts.contains(file.path.split('.').last)) {
+            continue;
+          }
+          _playlist.add({
+            'name': file.path.split('/').last,
+            'path': file.path,
+          });
+        }
+      }
+      // 按照文件名排序
+      setState(() {
+        _playlist.sort((a, b) => a['name']!.compareTo(b['name']!));
+      });
+      // 打印playlist
+      print("Playlist: ${_playlist}");
+    } else {
+      _playlist.add({
+        'name': path.split('/').last,
+        'path': path,
+      });
+    }
+  }
+
+  void _closePlaylist() {
+    setState(() {
+      _showPlaylist = false;
+    });
+  }
+
+  void _openPlaylist() {
+    setState(() {
+      _showPlaylist = true;
+    });
+  }
+
+  void _playNextItem() {
+    if (_playlist.isEmpty || _playlist.length == 1) {
+      return;
+    }
+    // 获取当前播放项的索引
+    int currentIndex =
+        _playlist.indexWhere((item) => item['path'] == widget.openfile);
+    // 如果当前播放项是最后一项，播放第一项
+    if (currentIndex == _playlist.length - 1) {
+      widget.getopenfile(_playlist[0]['path']!);
+    } else {
+      widget.getopenfile(_playlist[currentIndex + 1]['path']!);
+    }
+  }
+
+  void _playPreviousItem() {
+    if (_playlist.isEmpty || _playlist.length == 1) {
+      return;
+    }
+    // 获取当前播放项的索引
+    int currentIndex =
+        _playlist.indexWhere((item) => item['path'] == widget.openfile);
+    // 如果当前播放项是第一项，播放最后一项
+    if (currentIndex == 0) {
+      widget.getopenfile(_playlist[_playlist.length - 1]['path']!);
+    } else {
+      widget.getopenfile(_playlist[currentIndex - 1]['path']!);
+    }
+  }
+
   Future<void> _openUri(String uri, {bool wantFirst = false}) async {
     // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
     _subtitles.clear();
+    _playlist.clear();
     _currentSubtitleIndex = -1;
     coverData = null;
     if (uri.startsWith('/Photo')) {
@@ -1223,8 +1372,13 @@ class _PlayerTabState extends State<PlayerTab>
           await _initializeChewieController();
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
+          final needToFullscreen =
+              await _settingsService.getAutoFullscreenBeginPlay();
+          if (needToFullscreen) {
+            if (!widget.isFullScreen) widget.toggleFullScreen();
+          }
         })
-        ..setLooping(_isLooping);
+        ..setLooping(_isLooping == 2);
       _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
       if (_useFfmpegForPlay) {
         if (_ffmpegExample == null) {
@@ -1260,8 +1414,13 @@ class _PlayerTabState extends State<PlayerTab>
           await _initializeChewieController();
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
+          final needToFullscreen =
+              await _settingsService.getAutoFullscreenBeginPlay();
+          if (needToFullscreen) {
+            if (!widget.isFullScreen) widget.toggleFullScreen();
+          }
         })
-        ..setLooping(_isLooping);
+        ..setLooping(_isLooping == 2);
       _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
       if (_useFfmpegForPlay) {
         if (_ffmpegExample == null) {
@@ -1272,6 +1431,7 @@ class _PlayerTabState extends State<PlayerTab>
         _ffmpegExample?.controller?.sendMessageToOhosView(
             "newPlay", convertUriToPath(widget.openfile));
       }
+      _getPlaylist(uri);
       String fileName = uri.split('/').last;
       final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
       final cacheDir = await getTemporaryDirectory();
@@ -1533,6 +1693,125 @@ class _PlayerTabState extends State<PlayerTab>
         milliseconds: ((seconds - seconds.toInt()) * 1000).toInt());
   }
 
+  Future<File> getAssetAsFile(String assetPath) async {
+    // 读取 assets 文件内容
+    final byteData = await rootBundle.load(assetPath);
+
+    // 获取临时目录
+    final tempDir = await getTemporaryDirectory();
+
+    // 创建临时文件
+    final tempFile = File('${tempDir.path}/${assetPath.split('/').last}');
+
+    // 将 assets 文件内容写入临时文件
+    await tempFile.writeAsBytes(byteData.buffer.asUint8List());
+
+    return tempFile;
+  }
+
+  Future<ui.Image> getEmptyImage() async {
+    // 返回一个 1x1 的透明图像
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint()..color = Colors.transparent;
+    canvas.drawRect(Rect.fromLTWH(0, 0, 1, 1), paint);
+    final picture = recorder.endRecording();
+    return picture.toImage(1, 1);
+  }
+
+  Future<ui.Image> getAssFrame(int time) async {
+    print("getAssFrame start");
+    if (_assFile == null ||
+        _videoController == null ||
+        !_videoController!.value.isInitialized) return await getEmptyImage();
+    final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
+    // final initAssRenderSuccess =
+    //     await _platform.invokeMethod<bool>('initLibass', {
+    //   "assFilename": _assFile!.path,
+    //   "width": _videoController!.value.size.width.toInt(),
+    //   "height": _videoController!.value.size.height.toInt()
+    // });
+    if (_assInit) {
+      String img = await _platform.invokeMethod<String>('getPngDataAtTime', {
+            "time": time,
+            "width": _videoController!.value.size.width.toInt(),
+            "height": _videoController!.value.size.height.toInt()
+          }) ??
+          "";
+      print("AssImage:" + img);
+      // 1. 将 String 转换为 Uint8List
+      Uint8List bytes = base64Decode(img);
+
+      // 2. 使用 MemoryImage 加载字节数据
+      final Completer<ui.Image> completer = Completer();
+      ImageProvider imageProvider = MemoryImage(bytes);
+
+      // 3. 将 ImageProvider 转换为 ui.Image
+      imageProvider.resolve(ImageConfiguration()).addListener(
+        ImageStreamListener((ImageInfo info, bool _) {
+          completer.complete(info.image);
+        }),
+      );
+
+      return completer.future;
+    }
+    return await getEmptyImage();
+  }
+
+// 初始化ASS渲染器的方法
+  void _initAssRenderer() async {
+    if (_assFile == null ||
+        _videoController == null ||
+        !_videoController!.value.isInitialized) return;
+    _assFontFile = await getAssetAsFile('Assets/Montserrat-Bold.ttf');
+
+    _assRenderer = DartLibass(
+      subtitle: _assFile!,
+      defaultFont: _assFontFile!, // 需要准备默认字体
+      defaultFamily: 'Montserrat-Bold',
+      width: _videoController!.value.size.width.toInt(),
+      height: _videoController!.value.size.height.toInt(),
+      fonts: [_assFontFile!],
+    );
+    final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
+    print("ASS: start init libass");
+    // 调用方法 getBatteryLevel
+    final initAssRenderSuccess =
+        await _platform.invokeMethod<bool>('initLibass', {
+      "assFilename": _assFile!.path,
+      "width": _videoController!.value.size.width.toInt(),
+      "height": _videoController!.value.size.height.toInt()
+    });
+    await _assRenderer!.init();
+    // bool initAssRenderSuccess = true;
+    if (initAssRenderSuccess ?? false) {
+      print("Assrendered init done");
+      _assInit = true;
+
+      // String img = await _platform.invokeMethod<String>('getPngDataAtTime', {
+      //       "time": 1000,
+      //       "width": _videoController!.value.size.width.toInt(),
+      //       "height": _videoController!.value.size.height.toInt()
+      //     }) ??
+      //     "NullImage";
+      // print("AssImage:" + img);
+      final img = await getAssFrame(125000);
+      // final img = _assRenderer!.getFrame(125000);
+      ByteData? pngBytes = await img.toByteData(format: ui.ImageByteFormat.png);
+      print("Byte: " + pngBytes.toString());
+      File('/storage/Users/currentUser/Download/com.aloereed.aloeplayer/test.png')
+          .writeAsBytesSync(
+        pngBytes!.buffer.asUint8List(
+          pngBytes.offsetInBytes,
+          pngBytes.lengthInBytes,
+        ),
+      );
+    } else {
+      _assInit = false;
+      print("Assrendered init failed");
+    }
+  }
+
   Future<void> _openSRT() async {
     // 使用 FilePicker 选择文件
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -1556,6 +1835,11 @@ class _PlayerTabState extends State<PlayerTab>
 
       // 解析字幕内容
       if (subtitleData.extension == 'ass') {
+        // 保存原始ass文件
+        _assFile = File(file.path!);
+        // 初始化渲染器
+        // _initAssRenderer();
+        // 仍然保留转换逻辑用于普通显示
         subtitleData.subtitles = await ass2srt(fileContent);
       } else if (subtitleData.extension == 'lrc') {
         subtitleData.subtitles = parseLrcToSubtitles(fileContent);
@@ -1780,6 +2064,37 @@ class _PlayerTabState extends State<PlayerTab>
     }
   }
 
+  Widget _buildAssOverlay() {
+    if (_assInit == false || _videoController == null) return Container();
+
+    return Positioned.fill(
+      child: FutureBuilder<Duration>(
+        future: _videoController!.position
+            .then((duration) => duration ?? Duration.zero),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return Container();
+
+          return FutureBuilder<ui.Image?>(
+            future: getAssFrame(snapshot.data!.inMilliseconds)
+                .then((image) => image as ui.Image?)
+                .catchError((error) {
+              print('Error fetching frame: $error');
+              return null; // 返回 null 以处理错误
+            }),
+            builder: (context, imageSnapshot) {
+              if (!imageSnapshot.hasData) return Container();
+
+              return RawImage(
+                image: imageSnapshot.data,
+                fit: BoxFit.contain,
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -1787,9 +2102,17 @@ class _PlayerTabState extends State<PlayerTab>
         appBar: widget.isFullScreen
             ? null
             : AppBar(
-                title: widget.openfile == ''
-                    ? Text('AloePlayer播放器')
-                    : Text('当前文件：' + widget.openfile),
+                title: GestureDetector(
+                    onLongPress: () {
+                      setState(() {
+                        _showPlaylist = !_showPlaylist;
+                      });
+                    },
+                    child: widget.openfile == ''
+                        ? Text('AloePlayer播放器')
+                        : SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Text('当前文件：' + widget.openfile))),
                 actions: [
                   IconButton(
                     icon: Icon(Icons.open_in_browser),
@@ -2087,154 +2410,240 @@ class _PlayerTabState extends State<PlayerTab>
                   ],
                 ),
               ),
-              if (_useFfmpegForPlay && (_ffmpegExample != null))
-                Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()
-                      ..scale(_isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
-                    child: this._ffmpegExample!),
-              if (_chewieController != null &&
-                  _videoController != null &&
-                  _videoController!.value.isInitialized)
-
-                // 视频播放器
-                Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()
-                      ..scale(_isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
-                    child: Chewie(controller: _chewieController!)),
-              if (false && (_showControls || _isAudio))
-                Positioned(
-                  bottom: 20,
-                  left: 20,
-                  right: 20,
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          // 已播放时长/总时长
-                          Text(
-                            '${_formatDuration(_currentPosition)}/${_formatDuration(_totalDuration)}',
-                            style: TextStyle(
-                              color:
-                                  Theme.of(context).textTheme.bodyLarge?.color,
-                            ),
+              Row(
+                children: [
+                  // 播放器部分（ffmpeg 和 Chewie 堆叠在一起）
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        if (_useFfmpegForPlay && (_ffmpegExample != null))
+                          Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()
+                              ..scale(_isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
+                            child: this._ffmpegExample!,
                           ),
-                          Expanded(
-                            child: Slider(
-                              value: _currentPosition.inSeconds.toDouble(),
-                              min: 0,
-                              max: _totalDuration.inSeconds.toDouble(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _currentPosition =
-                                      Duration(seconds: value.toInt());
-                                });
-                                _videoController?.seekTo(_currentPosition);
-                              },
-                            ),
+                        if (_chewieController != null &&
+                            _videoController != null &&
+                            _videoController!.value.isInitialized)
+                          Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()
+                              ..scale(_isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
+                            child: Chewie(controller: _chewieController!),
                           ),
-                          // 音量按钮和悬浮音量控制条
-                          Stack(
-                            children: [
-                              GestureDetector(
-                                onLongPress: () {
-                                  // 如果音量不为0设置静音
-                                  if (_volume != 0) {
-                                    setState(() {
-                                      _lastVolume = _volume;
-                                      _volume = 0;
-                                      _videoController?.setVolume(_volume);
-                                    });
-                                  } else {
-                                    // 如果音量为0恢复上次音量
-                                    setState(() {
-                                      _volume = _lastVolume;
-                                      _videoController?.setVolume(_volume);
-                                    });
-                                  }
-                                },
-                                child: IconButton(
-                                  icon: Icon(
-                                    _volume == 0
-                                        ? Icons.volume_off
-                                        : Icons.volume_up,
+                      ],
+                    ),
+                  ),
+                  // 播放列表部分
+                  if (_showPlaylist)
+                    GestureDetector(
+                      onTap: () {
+                        // 点击任意地方关闭播放列表
+                        setState(() {
+                          _showPlaylist = false;
+                        });
+                      },
+                      onHorizontalDragEnd: (details) => setState(() {
+                        _showPlaylist = false;
+                      }),
+                      child: Container(
+                        width: 200, // 播放列表宽度
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.7), // 半透明背景
+                          borderRadius: BorderRadius.circular(8), // 圆角
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 播放列表内容
+                            if (_playlist.isEmpty || _playlist.length == 1)
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: Text(
+                                    '播放列表为空或只有一个文件',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                    ),
                                   ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _showVolumeSlider = !_showVolumeSlider;
-                                    });
-                                    _startVolumeSliderTimer();
-                                  },
                                 ),
                               )
-                            ],
-                          ),
-                        ],
+                            else
+                              Expanded(
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  itemCount: _playlist.length,
+                                  itemBuilder: (context, index) {
+                                    final item = _playlist[index];
+                                    final isCurrentFile =
+                                        item['path'] == widget.openfile;
+                                    return ListTile(
+                                      title: Text(
+                                        item['name']!,
+                                        style: TextStyle(
+                                          color: isCurrentFile
+                                              ? Colors.blue
+                                              : Colors.white,
+                                          fontWeight: isCurrentFile
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      onTap: () {
+                                        // 点击播放列表项的逻辑
+                                        // 例如：_playFile(item['path']);
+                                        if (item['path'] != widget.openfile) {
+                                          setState(() {
+                                            widget.getopenfile(item['path']!);
+                                            // _openUri(item['path']!);
+                                            _showPlaylist = false;
+                                          });
+                                        }
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.open_in_browser),
-                            onPressed: _openFile,
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.link),
-                            onPressed: () => _showUrlDialog(context),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                                _isPlaying ? Icons.pause : Icons.play_arrow),
-                            onPressed: _togglePlayPause,
-                          ),
-                          IconButton(
-                            icon: Icon(_isMirrored
-                                ? Icons.flip
-                                : Icons.flip_camera_android),
-                            onPressed: () {
-                              setState(() {
-                                _isMirrored = !_isMirrored; // 切换镜像状态
-                              });
-                            },
-                          ),
-                          IconButton(
-                            icon: Icon(widget.isFullScreen
-                                ? Icons.fullscreen_exit
-                                : Icons.fullscreen),
-                            onPressed: widget.toggleFullScreen,
-                          ),
-                          PopupMenuButton<double>(
-                            icon: Icon(Icons.speed),
-                            itemBuilder: (context) => [
-                              PopupMenuItem(value: 0.5, child: Text('0.5x')),
-                              PopupMenuItem(value: 0.75, child: Text('0.75x')),
-                              PopupMenuItem(value: 1.0, child: Text('1.0x')),
-                              PopupMenuItem(value: 1.25, child: Text('1.25x')),
-                              PopupMenuItem(value: 1.5, child: Text('1.5x')),
-                              PopupMenuItem(value: 1.75, child: Text('1.75x')),
-                              PopupMenuItem(value: 2.0, child: Text('2.0x')),
-                              PopupMenuItem(value: 3.0, child: Text('3.0x')),
-                            ],
-                            onSelected: _setPlaybackSpeed,
-                          ),
-                          IconButton(
-                            icon: Icon(
-                                _isLooping ? Icons.repeat_one : Icons.repeat),
-                            onPressed: () {
-                              setState(() {
-                                _isLooping = !_isLooping;
-                                _videoController?.setLooping(_isLooping);
-                              });
-                            },
-                          ),
+                    ),
+                ],
+              ),
+              // if (false && (_showControls || _isAudio))
+              //   Positioned(
+              //     bottom: 20,
+              //     left: 20,
+              //     right: 20,
+              //     child: Column(
+              //       children: [
+              //         Row(
+              //           children: [
+              //             // 已播放时长/总时长
+              //             Text(
+              //               '${_formatDuration(_currentPosition)}/${_formatDuration(_totalDuration)}',
+              //               style: TextStyle(
+              //                 color:
+              //                     Theme.of(context).textTheme.bodyLarge?.color,
+              //               ),
+              //             ),
+              //             Expanded(
+              //               child: Slider(
+              //                 value: _currentPosition.inSeconds.toDouble(),
+              //                 min: 0,
+              //                 max: _totalDuration.inSeconds.toDouble(),
+              //                 onChanged: (value) {
+              //                   setState(() {
+              //                     _currentPosition =
+              //                         Duration(seconds: value.toInt());
+              //                   });
+              //                   _videoController?.seekTo(_currentPosition);
+              //                 },
+              //               ),
+              //             ),
+              //             // 音量按钮和悬浮音量控制条
+              //             Stack(
+              //               children: [
+              //                 GestureDetector(
+              //                   onLongPress: () {
+              //                     // 如果音量不为0设置静音
+              //                     if (_volume != 0) {
+              //                       setState(() {
+              //                         _lastVolume = _volume;
+              //                         _volume = 0;
+              //                         _videoController?.setVolume(_volume);
+              //                       });
+              //                     } else {
+              //                       // 如果音量为0恢复上次音量
+              //                       setState(() {
+              //                         _volume = _lastVolume;
+              //                         _videoController?.setVolume(_volume);
+              //                       });
+              //                     }
+              //                   },
+              //                   child: IconButton(
+              //                     icon: Icon(
+              //                       _volume == 0
+              //                           ? Icons.volume_off
+              //                           : Icons.volume_up,
+              //                     ),
+              //                     onPressed: () {
+              //                       setState(() {
+              //                         _showVolumeSlider = !_showVolumeSlider;
+              //                       });
+              //                       _startVolumeSliderTimer();
+              //                     },
+              //                   ),
+              //                 )
+              //               ],
+              //             ),
+              //           ],
+              //         ),
+              //         Row(
+              //           mainAxisAlignment: MainAxisAlignment.center,
+              //           children: [
+              //             IconButton(
+              //               icon: Icon(Icons.open_in_browser),
+              //               onPressed: _openFile,
+              //             ),
+              //             IconButton(
+              //               icon: Icon(Icons.link),
+              //               onPressed: () => _showUrlDialog(context),
+              //             ),
+              //             IconButton(
+              //               icon: Icon(
+              //                   _isPlaying ? Icons.pause : Icons.play_arrow),
+              //               onPressed: _togglePlayPause,
+              //             ),
+              //             IconButton(
+              //               icon: Icon(_isMirrored
+              //                   ? Icons.flip
+              //                   : Icons.flip_camera_android),
+              //               onPressed: () {
+              //                 setState(() {
+              //                   _isMirrored = !_isMirrored; // 切换镜像状态
+              //                 });
+              //               },
+              //             ),
+              //             IconButton(
+              //               icon: Icon(widget.isFullScreen
+              //                   ? Icons.fullscreen_exit
+              //                   : Icons.fullscreen),
+              //               onPressed: widget.toggleFullScreen,
+              //             ),
+              //             PopupMenuButton<double>(
+              //               icon: Icon(Icons.speed),
+              //               itemBuilder: (context) => [
+              //                 PopupMenuItem(value: 0.5, child: Text('0.5x')),
+              //                 PopupMenuItem(value: 0.75, child: Text('0.75x')),
+              //                 PopupMenuItem(value: 1.0, child: Text('1.0x')),
+              //                 PopupMenuItem(value: 1.25, child: Text('1.25x')),
+              //                 PopupMenuItem(value: 1.5, child: Text('1.5x')),
+              //                 PopupMenuItem(value: 1.75, child: Text('1.75x')),
+              //                 PopupMenuItem(value: 2.0, child: Text('2.0x')),
+              //                 PopupMenuItem(value: 3.0, child: Text('3.0x')),
+              //               ],
+              //               onSelected: _setPlaybackSpeed,
+              //             ),
+              //             IconButton(
+              //               icon: Icon(
+              //                   _isLooping ? Icons.repeat_one : Icons.repeat),
+              //               onPressed: () {
+              //                 setState(() {
+              //                   _isLooping = !_isLooping;
+              //                   _videoController?.setLooping(_isLooping);
+              //                 });
+              //               },
+              //             ),
 
-                          // 静音切换按钮
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+              //             // 静音切换按钮
+              //           ],
+              //         ),
+              //       ],
+              //     ),
+              //   ),
               if (_showVolumeSlider)
                 Positioned(
                   bottom: 100, // 悬浮在音量按钮上方

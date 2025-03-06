@@ -500,6 +500,7 @@ struct ButtonComponent {
     // this.mIjkMediaPlayer.setOptionLong(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", "1")
     // 开启h264与h265硬解码
     // this.mIjkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-all-videos", "1");
+    // this.mIjkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", "1");
     // 屏幕常亮
     this.mIjkMediaPlayer.setScreenOnWhilePlaying(true);
     // 设置超时
@@ -942,6 +943,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
     // this.mIjkMediaPlayer.setOptionLong(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", "1")
     // 开启h264与h265硬解码
     // this.mIjkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-all-videos", "1");
+    // this.mIjkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", "1");
     // 屏幕常亮
     this.mIjkMediaPlayer.setScreenOnWhilePlaying(true);
     // 设置超时

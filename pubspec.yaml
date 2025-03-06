@@ -14,11 +14,14 @@ dependencies:
   vivysub_utils: ^0.2.0
   webdav_client: null
   xml: null
+  marquee: any
   ns_danmaku: 
     git: 
         url: https://github.com/xiaoyaocz/flutter_ns_danmaku.git
         ref: master
 dependency_overrides:
+  dart_libass:
+    path: ./dart_libass-main
   audio_service:
     git:
       path: audio_service
@@ -100,8 +103,11 @@ environment:
   sdk: '>=3.4.0 <4.0.0'
 flutter:
   assets:
-  - Assets/
+  - Assets/10s_silence.wav
+  - Assets/icon.png
+  - Assets/privacy_policy.html
+  - Assets/thanksfor.txt
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 1.0.5+17
+version: 1.1.0+19

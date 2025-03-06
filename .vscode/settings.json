@@ -79,6 +79,8 @@
         "deque": "cpp",
         "regex": "cpp",
         "set": "cpp",
-        "strstream": "cpp"
+        "strstream": "cpp",
+        "codecvt": "cpp",
+        "cstdarg": "cpp"
     }
 }

@@ -161,6 +161,15 @@ export default class FfmpegPlugin implements FlutterPlugin {
           case "setCover":
             that.api.setCover(call.argument("filename") as string, call.argument("value") as string, result);
             break;
+          case "initLibass":
+            that.api.initLibass(call.argument("assFilename") as string, call.argument("width") as number, call.argument("height") as number, result);
+            break;
+          case "getPngDataAtTime":
+            that.api.getPngDataAtTime(call.argument("time") as number, call.argument("width") as number, call.argument("height") as number, result);
+            break;
+          case "cleanupLibass":
+            that.api.cleanupLibass(result);
+            break;
           case "callEvent":
             that.eventSink?.success("Success at " + new Date());
             break;
@@ -829,6 +838,30 @@ class FfmpegApi {
         }).catch((error: Error) => {
           result.error("UNAVAILABLE", "Failed to set cover", error);
         });
+    }
+    // export const init_libass: (assFilename: string, width: number, height: number) => any;
+    // export const get_png_data_at_time: (time: number, width: number, height: number) => any;
+    // export const cleanup_libass: () => any;
+    initLibass(assFilename: string, width: number, height: number, result: MethodResult) {
+      console.warn("initLibass start");
+      libAddon.init_libass(assFilename, width, height).then((isSuccess: boolean) => {
+        console.warn("initLibass end: " + isSuccess);
+        result.success(isSuccess);
+      }).catch((error: Error) => {
+        result.error("UNAVAILABLE", "Failed to init libass", error);
+      });
+    }
+    getPngDataAtTime(time: number, width: number, height: number, result: MethodResult) {
+      libAddon.get_png_data_at_time(time, width, height).then((pngData: string) => {
+        console.warn("Png size:" + pngData.length);
+        result.success(pngData);
+      }).catch((error: Error) => {
+        result.error("UNAVAILABLE", "Failed to get PNG data", error);
+      });
+    }
+    cleanupLibass(result: MethodResult) {
+      libAddon.cleanup_libass();
+      result.success(null);
     }
 
 }

@@ -1,3 +1,4 @@
+import 'package:aloeplayer/settings.dart';
 import 'package:aloeplayer/webdav.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -499,11 +500,14 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   List _filteredItems = []; // 用于存储过滤后的文件和文件夹
   String _searchQuery = ''; // 搜索框的内容
   bool _isGridView = true; // 是否以网格视图显示
-
+  final SettingsService _settingsService = SettingsService();
   @override
   void initState() {
     super.initState();
     _ensureAudioDirectoryExists();
+    setState(() async {
+      _isGridView = !(await _settingsService.getDefaultListmode());
+    });
     _loadItems();
   }
 
@@ -787,6 +791,56 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     }
   }
 
+  Future<void> _createNewFolder(BuildContext context) async {
+    String? folderName = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        String newFolderName = '';
+        return AlertDialog(
+          title: Text('新建文件夹'),
+          content: TextField(
+            decoration: InputDecoration(hintText: '输入文件夹名称'),
+            onChanged: (value) {
+              newFolderName = value;
+            },
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('取消',style: TextStyle(color: Colors.lightBlue)),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: Text('创建',style: TextStyle(color: Colors.lightBlue)),
+              onPressed: () {
+                Navigator.of(context).pop(newFolderName);
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (folderName != null && folderName.isNotEmpty) {
+      // 创建新文件夹
+      String newFolderPath = '$_currentPath/$folderName';
+      try {
+        await Directory(newFolderPath).create(recursive: true);
+        setState(() {
+          _loadItems(); // 刷新音频列表
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('文件夹创建成功: $newFolderPath')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('文件夹创建失败: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -826,9 +880,14 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                 icon: Icon(Icons.arrow_upward),
                 onPressed: _navigateUp,
               )),
-          IconButton(
-            icon: Icon(Icons.add),
-            onPressed: _pickAudioWithFilePicker,
+          GestureDetector(
+            onTap: () => _pickAudioWithFilePicker(),
+            onLongPress: () => _createNewFolder(context),
+            child: IconButton(
+              icon: Icon(Icons.add),
+              onPressed: () {_pickAudioWithFilePicker();},
+              // 长按弹出新建文件夹的对话框
+            ),
           ),
           IconButton(
             icon: Icon(Icons.webhook),

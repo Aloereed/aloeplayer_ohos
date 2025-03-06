@@ -47,6 +47,7 @@ class _MaterialControlsState extends State<MaterialControls>
   Timer? _bufferingDisplayTimer;
   bool _displayBufferingIndicator = false;
   bool _showSettings = false; // 控制悬浮框的显示
+  bool isBackgroundBlurred = true;
 
   final barHeight = 48.0 * 1.5;
   final marginSize = 5.0;
@@ -79,13 +80,37 @@ class _MaterialControlsState extends State<MaterialControls>
           );
     }
 
-    return MouseRegion(
-      onHover: (_) {
-        _cancelAndRestartTimer();
-      },
-      child: GestureDetector(
+    return Stack(children: [
+      Positioned.fill(
+        child: MouseRegion(
+          onHover: (_) {
+            if (_displayTapped) {
+              setState(() {
+                notifier.hideStuff = true;
+                _displayTapped = false;
+              });
+            } else {
+              _cancelAndRestartTimer();
+            }
+          },
+          child: Container(), // 空容器，确保 MouseRegion 覆盖整个区域
+        ),
+      ),
+      GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: () => _cancelAndRestartTimer(),
+        // onTap: () => _cancelAndRestartTimer(),
+        onTap: () {
+          if (chewieController.closePlaylist != null)
+            chewieController.closePlaylist!();
+          if (_displayTapped) {
+            setState(() {
+              notifier.hideStuff = true;
+              _displayTapped = false;
+            });
+          } else {
+            _cancelAndRestartTimer();
+          }
+        },
         child: AbsorbPointer(
           absorbing: notifier.hideStuff,
           child: Stack(
@@ -135,7 +160,8 @@ class _MaterialControlsState extends State<MaterialControls>
                       child: CircularProgressIndicator(),
                     )
               else
-                Visibility(visible: false, child: _buildHitArea()),
+                Visibility(
+                    visible: false, child: Container()), //_buildHitArea()),
               // 悬浮设置框
               if (_showSettings)
                 Positioned(
@@ -164,7 +190,7 @@ class _MaterialControlsState extends State<MaterialControls>
           ),
         ),
       ),
-    );
+    ]);
   }
 
   @override
@@ -577,9 +603,13 @@ class _MaterialControlsState extends State<MaterialControls>
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16.0), // 圆角效果
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), // 高斯模糊效果
+          filter: isBackgroundBlurred
+              ? ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0)
+              : ImageFilter.blur(sigmaX: 0.0, sigmaY: 0.0), // 高斯模糊效果
           child: Container(
-            color: Colors.black.withOpacity(0.3), // 背景透明效果
+            color: isBackgroundBlurred
+                ? Colors.black.withOpacity(0.3)
+                : Colors.transparent, // 背景透明效果
             height: barHeight +
                 (chewieController.isFullScreen ? 10.0 : 0) +
                 20, // 增加高度
@@ -612,6 +642,10 @@ class _MaterialControlsState extends State<MaterialControls>
                           const Expanded(child: Text('LIVE'))
                         else
                           _buildPosition(iconColor),
+                        if (chewieController.playPreviousItem != null)
+                          _buildPreviousButton(),
+                        if (chewieController.playNextItem != null)
+                          _buildNextButton(),
                         if (chewieController.allowMuting)
                           _buildMuteButton(controller),
                         if (_danmakuOn &&
@@ -619,6 +653,7 @@ class _MaterialControlsState extends State<MaterialControls>
                             chewieController.danmakuContents!.length > 0)
                           _buildDanmukuSettingsButton(context),
                         const Spacer(),
+                        _buildVisibilityButton(),
                         if (chewieController.allowFullScreen)
                           _buildExpandButton(),
                       ],
@@ -695,6 +730,66 @@ class _MaterialControlsState extends State<MaterialControls>
     );
   }
 
+  GestureDetector _buildNextButton() {
+    return GestureDetector(
+      onTap: () {
+        _cancelAndRestartTimer();
+        chewieController.playNextItem!();
+      },
+      child: AnimatedOpacity(
+        opacity: notifier.hideStuff ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 300),
+        child: ClipRect(
+          child: Container(
+              height: barHeight,
+              padding: const EdgeInsets.only(
+                left: 6.0,
+              ),
+              child: Stack(
+                children: <Widget>[
+                  // 白色图标
+                  Icon(
+                    Icons.skip_next,
+                    color: Colors.white,
+                    size: 24.0, // 比黑色图标稍微小一点，以形成描边效果
+                  ),
+                ],
+              )),
+        ),
+      ),
+    );
+  }
+
+  GestureDetector _buildPreviousButton() {
+    return GestureDetector(
+      onTap: () {
+        _cancelAndRestartTimer();
+        chewieController.playPreviousItem!();
+      },
+      child: AnimatedOpacity(
+        opacity: notifier.hideStuff ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 300),
+        child: ClipRect(
+          child: Container(
+              height: barHeight,
+              padding: const EdgeInsets.only(
+                left: 6.0,
+              ),
+              child: Stack(
+                children: <Widget>[
+                  // 白色图标
+                  Icon(
+                    Icons.skip_previous,
+                    color: Colors.white,
+                    size: 24.0, // 比黑色图标稍微小一点，以形成描边效果
+                  ),
+                ],
+              )),
+        ),
+      ),
+    );
+  }
+
   GestureDetector _buildExpandButton() {
     return GestureDetector(
       onTap: _onExpandCollapse,
@@ -724,6 +819,49 @@ class _MaterialControlsState extends State<MaterialControls>
                 chewieController.isFullScreen
                     ? Icons.fullscreen_exit
                     : Icons.fullscreen,
+                color: Colors.white,
+                size: 24.0, // 实际图标稍微小一点
+              ),
+            ],
+          )),
+        ),
+      ),
+    );
+  }
+
+  void _toggleBackground() {
+    setState(() {
+      isBackgroundBlurred = !isBackgroundBlurred;
+    });
+  }
+
+  GestureDetector _buildVisibilityButton() {
+    return GestureDetector(
+      onTap: _toggleBackground,
+      child: AnimatedOpacity(
+        opacity: notifier.hideStuff ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 300),
+        child: Container(
+          height: barHeight + (chewieController.isFullScreen ? 15.0 : 0),
+          margin: const EdgeInsets.only(right: 12.0),
+          padding: const EdgeInsets.only(
+            left: 8.0,
+            right: 8.0,
+          ),
+          child: Center(
+              child: Stack(
+            children: <Widget>[
+              // 黑色描边图标
+              // Icon(
+              //   chewieController.isFullScreen
+              //       ? Icons.fullscreen_exit
+              //       : Icons.fullscreen,
+              //   color: Colors.black,
+              //   size: 26.0, // 描边图标稍微大一点
+              // ),
+              // 白色图标
+              Icon(
+                isBackgroundBlurred ? Icons.visibility_off : Icons.visibility,
                 color: Colors.white,
                 size: 24.0, // 实际图标稍微小一点
               ),
@@ -1065,6 +1203,7 @@ class _MaterialControlsState extends State<MaterialControls>
     _hideTimer = Timer(hideControlsTimer, () {
       setState(() {
         notifier.hideStuff = true;
+        _displayTapped = false;
       });
     });
   }

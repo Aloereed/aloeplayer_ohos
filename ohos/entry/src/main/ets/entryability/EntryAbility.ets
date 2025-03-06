@@ -64,8 +64,10 @@ export default class EntryAbility extends FlutterAbility {
         if (uri == null || uri == undefined) {
             console.info("The length of str")
             return
-        } else this.myDownloadPlugin?.sendWant(uri)
-        // createFile(uri);
+        } else {
+            // createFile(uri)
+            this.myDownloadPlugin?.sendWant(uri)
+        }
     }
     async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam) {
         super.onCreate(want, launchParam)

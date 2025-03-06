@@ -40,6 +40,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   List<File> _videoFiles = [];
   String _currentPath =
       '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Videos';
+  String _thumbnailPath =
+      '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails';
   List<Directory> _directories = [];
   List<File> _filteredVideoFiles = []; // 用于存储过滤后的视频文件
   List _filteredItems = []; // 用于存储过滤后的文件和文件夹
@@ -51,6 +53,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   void initState() {
     super.initState();
     _ensureVideoDirectoryExists();
+    setState(() async {
+      _isGridView = !(await _settingsService.getDefaultListmode());
+    });
     // _loadVideoFiles();
     _loadItems();
   }
@@ -64,6 +69,10 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     final directoryOld = Directory(_videoDirPathOld);
     if (!await directoryOld.exists()) {
       await directoryOld.create(recursive: true);
+    }
+    final directoryThumbnail = Directory(_thumbnailPath);
+    if (!await directoryThumbnail.exists()) {
+      await directoryThumbnail.create(recursive: true);
     }
   }
 
@@ -396,12 +405,48 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 获取视频缩略图
   Future<Uint8List?> _getVideoThumbnail(File file) async {
+    // 从file.path提取文件名
+    String fileName = path.basename(file.path);
+    // 尝试读取/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails/$fileName.nothumbnail
+    String thumbnailPath =
+        '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails/$fileName.nothumbnail';
+    // 检查文件是否存在
+    if (await File(thumbnailPath).exists()) {
+      // 如果文件存在，则读取文件内容
+      return null;
+    }
+
+    // 尝试读取/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails/$fileName.jpg
+    thumbnailPath =
+        '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails/$fileName.jpg';
+    // 检查文件是否存在
+    if (await File(thumbnailPath).exists()) {
+      // 如果文件存在，则读取文件内容为Uint8List
+      return await File(thumbnailPath).readAsBytes();
+    }
+
     final thumbnail = await VideoThumbnailOhos.thumbnailData(
       video: file.path,
       imageFormat: ImageFormat.JPEG,
       maxWidth: 128, // 缩略图的最大宽度
       quality: 25, // 缩略图的质量 (0-100)
     );
+    
+    try {
+      // 保存缩略图到/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails/
+      String thumbnailPath =
+          '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails/$fileName.jpg';
+      // 将缩略图保存到文件
+      File thumbnailFile = File(thumbnailPath);
+      await thumbnailFile.writeAsBytes(thumbnail!);
+    } catch (e) {
+      // 写入一个空文件/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails/$fileName.nothumbnail
+      String thumbnailPath =
+          '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails/$fileName.nothumbnail';
+      // 将缩略图保存到文件
+      File thumbnailFile = File(thumbnailPath);
+      await thumbnailFile.writeAsBytes([]);
+    }
     return thumbnail;
   }
 
@@ -424,6 +469,56 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     Duration duration = Duration(milliseconds: result ?? 0);
 
     return duration;
+  }
+
+  Future<void> _createNewFolder(BuildContext context) async {
+    String? folderName = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        String newFolderName = '';
+        return AlertDialog(
+          title: Text('新建文件夹'),
+          content: TextField(
+            decoration: InputDecoration(hintText: '输入文件夹名称'),
+            onChanged: (value) {
+              newFolderName = value;
+            },
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('取消', style: TextStyle(color: Colors.lightBlue)),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: Text('创建', style: TextStyle(color: Colors.lightBlue)),
+              onPressed: () {
+                Navigator.of(context).pop(newFolderName);
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (folderName != null && folderName.isNotEmpty) {
+      // 创建新文件夹
+      String newFolderPath = '$_currentPath/$folderName';
+      try {
+        await Directory(newFolderPath).create(recursive: true);
+        setState(() {
+          _loadItems(); // 刷新音频列表
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('文件夹创建成功: $newFolderPath')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('文件夹创建失败: $e')),
+        );
+      }
+    }
   }
 
   // 获取文件大小
@@ -497,9 +592,16 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                 icon: Icon(Icons.arrow_upward),
                 onPressed: _navigateUp,
               )),
-          IconButton(
-            icon: Icon(Icons.add),
-            onPressed: _pickVideoWithFilePicker,
+          GestureDetector(
+            onTap: () => _pickVideoWithFilePicker(),
+            onLongPress: () => _createNewFolder(context),
+            child: IconButton(
+              icon: Icon(Icons.add),
+              onPressed: () {
+                _pickVideoWithFilePicker();
+              },
+              // 长按弹出新建文件夹的对话框
+            ),
           ),
           IconButton(
             icon: Icon(Icons.video_library),

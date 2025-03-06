@@ -1,8 +1,8 @@
 /*
  * @Author: 
  * @Date: 2025-02-09 17:55:36
- * @LastEditors: 
- * @LastEditTime: 2025-02-10 15:18:01
+ * @LastEditors: Please set LastEditors
+ * @LastEditTime: 2025-03-06 14:21:14
  * @Description: file content
  */
 import 'dart:ui';
@@ -34,7 +34,9 @@ class _OptionsDialogState extends State<OptionsDialog> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), // 高斯模糊效果
           child: Container(
-            color: Colors.white.withOpacity(0.5), // 背景透明效果
+            color: Theme.of(context).brightness == Brightness.light
+                ? Colors.white.withOpacity(0.5) // 亮色模式：白色半透明
+                : Colors.black.withOpacity(0.5), // 暗色模式：黑色半透明
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -37,3 +37,7 @@ export const setLyricist: (filename: string, lyricist: string) => any;
 export const setComment: (filename: string, comment: string) => any;
 export const setLyrics: (filename: string, lyrics: string) => any;
 export const setCover: (filename: string, coverBase64: string) => any;
+
+export const init_libass: (assFilename: string, width: number, height: number) => any;
+export const get_png_data_at_time: (time: number, width: number, height: number) => any;
+export const cleanup_libass: () => any;

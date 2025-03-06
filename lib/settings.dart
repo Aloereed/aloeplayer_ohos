@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-11 12:49:55
+ * @LastEditTime: 2025-03-06 15:00:31
  * @Description: file content
  */
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +21,9 @@ class SettingsService {
   static const String _extractAssSubtitleKey = 'extract_ass_subtitle';
   static const String _useFfmpegForPlayKey = 'use_ffmpeg_for_play';
   static const String _autoFfmpegAfterVpFailed = 'auto_ffmpeg_after_vp_failed';
+  static const String _autoFullscreenBeginPlay = 'auto_fullscreen_begin_play';
+  static const String _defaultListmode = 'default_listmode';
+  static const String _usePlaylist = 'use_playlist';
   Future<void> saveSubtitleFontSize(double fontSize) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_fontSizeKey, fontSize);
@@ -71,6 +74,36 @@ class SettingsService {
   Future<bool> getUseFfmpegForPlay() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_useFfmpegForPlayKey) ?? false; // 默认值为false
+  }
+
+  Future<void> saveAutoFullscreenBeginPlay (bool autoFullscreen) async{
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoFullscreenBeginPlay, autoFullscreen); 
+  }
+
+  Future<bool> getAutoFullscreenBeginPlay() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_autoFullscreenBeginPlay)?? false; // 默认值为false 
+  }
+
+  Future<void> saveDefaultListmode (bool defaultListmode) async{
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_defaultListmode, defaultListmode); 
+  }
+
+  Future<bool> getDefaultListmode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_defaultListmode)?? false; // 默认值为false 
+  }
+
+  Future<void> saveUsePlaylist (bool usePlaylist) async{
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_usePlaylist, usePlaylist); 
+  }
+
+  Future<bool> getUsePlaylist() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_usePlaylist)?? true; // 默认值为true
   }
 
 
@@ -225,7 +258,7 @@ class _SettingsTabState extends State<SettingsTab> {
           // 添加一个设置，是否使用FFmpeg作为播放内核
           ListTile(
             title: Text('使用FFmpeg软解播放（测试）'),
-            subtitle: Text('默认情况下，播放器使用系统内置的播放器播放音视频。设置后新播放有效。使用软解播放可以打开系统能力不支持的媒体文件，但可能会导致播放器卡顿和功能缺失。'),
+            subtitle: Text('默认情况下，播放器使用系统内置播放能力。设置后新播放有效。使用软解播放可以打开系统能力不支持的媒体文件，但可能会导致循环模式异常、播放器卡顿和功能缺失。'),
             trailing: FutureBuilder<bool>(
               future: _settingsService.getUseFfmpegForPlay(),
               builder: (context, snapshot) {
@@ -245,6 +278,79 @@ class _SettingsTabState extends State<SettingsTab> {
                 }
               },
             ),
+          ),
+          // 添加一个设置，是否默认为列表模式
+          ListTile(
+            title: Text('默认列表模式'),
+            subtitle: Text('开启AloePlayer时，视频库和音频库为网格模式。设置后改为列表模式，下次启动有效。'),
+            trailing: FutureBuilder<bool>(
+              future: _settingsService.getDefaultListmode(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Switch(
+                    value: snapshot.data!,
+                    onChanged: (value) {
+                      _settingsService.saveDefaultListmode(value);
+                      setState(() {});
+                    },
+                    activeColor: Colors.blue, // 设置滑块的颜色为蓝色
+                    activeTrackColor:
+                        Colors.blue.withOpacity(0.5), // 设置滑轨的颜色为半透明蓝色 
+                  ); 
+                }else{
+                  return const CircularProgressIndicator();
+                } 
+              } 
+            ) 
+          ),
+          // 添加一个设置，是否使用播放列表
+          ListTile(
+            title: Text('启用库内同级文件夹播放列表导入'),
+            subtitle: Text('打开库内文件时，将同级文件夹内文件自动导入播放列表。文件过多时可能造成卡顿，重启应用后生效。'),
+            trailing: FutureBuilder<bool>(
+              future: _settingsService.getUsePlaylist(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Switch(
+                    value: snapshot.data!,
+                    onChanged: (value) {
+                      _settingsService.saveUsePlaylist(value);
+                      setState(() {});
+                    },
+                    activeColor: Colors.blue, // 设置滑块的颜色为蓝色
+                    activeTrackColor:
+                        Colors.blue.withOpacity(0.5), // 设置滑轨的颜色为半透明蓝色 
+                  ); 
+                }else{
+                  return const CircularProgressIndicator();
+                } 
+              } 
+            ) 
+          ),
+
+          // 添加一个设置，是否在播放时自动全屏
+          ListTile(
+            title: Text('在播放时自动全屏'),
+            subtitle: Text('默认情况下，播放器在播放时不会自动全屏。设置后对系统能力新播放有效。') ,
+            trailing: FutureBuilder<bool>(
+              future: _settingsService.getAutoFullscreenBeginPlay(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Switch(
+                    value: snapshot.data!,
+                    onChanged: (value) {
+                      _settingsService.saveAutoFullscreenBeginPlay(value);
+                      setState(() {});
+                    }, 
+                    activeColor: Colors.blue, // 设置滑块的颜色为蓝色
+                    activeTrackColor:
+                        Colors.blue.withOpacity(0.5), // 设置滑轨的颜色为半透明蓝色
+                  ); 
+                } else{
+                  return const CircularProgressIndicator();
+                }
+              } 
+            ) 
           ),
             
           // 添加一个设置，是否默认后台播放(使用_settingsService)
@@ -368,7 +474,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 Text('AloePlayer'),
                 SizedBox(height: 4),
                 Text(
-                    '版本号: 1.0.5。'),
+                    '版本号: 1.1.0。'),
                 SizedBox(height: 4),
                 Text('尽享视听盛宴'),
                 SizedBox(height: 4),
@@ -381,6 +487,22 @@ class _SettingsTabState extends State<SettingsTab> {
                   },
                   child: Text(
                     '官网鸿蒙站',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+                SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () async {
+                    await launchUrl(
+                      Uri.parse('https://ohos.aloereed.com/index.php/2025/01/08/aloeplayer/'),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  },
+                  child: Text(
+                    '更新日志',
                     style: TextStyle(
                       color: Colors.blue,
                       decoration: TextDecoration.underline,
@@ -424,19 +546,21 @@ class _SettingsTabState extends State<SettingsTab> {
                 SizedBox(height: 16),
                 Text('手势说明和提示:'),
                 SizedBox(height: 8),
-                Text('1. 长按: 三倍速播放'),
+                Text('1. 长按: 三倍速播放。'),
                 SizedBox(height: 4),
-                Text('2. 双击播放界面左侧、右侧、中间: 快退、快进10秒、切换播放暂停，或者使用左右滑动来快退、快进'),
+                Text('2. 双击播放界面左侧、右侧、中间: 快退、快进10秒、切换播放暂停，或者使用左右滑动来快退、快进。'),
                 SizedBox(height: 4),
-                Text('3. 上下滑动: 靠左侧增减亮度，靠右侧增减音量，'),
+                Text('3. 上下滑动: 靠左侧增减亮度，靠右侧增减音量。'),
                 SizedBox(height: 4),
-                Text('4. 添加媒体进入音频库或视频库需要时间。较大的文件不建议加入媒体库。如果长时间没反应可以再次尝试。'),
+                Text('4. 添加媒体进入音频库或视频库需要时间。推荐直接使用系统文件管理复制导入。'),
                 SizedBox(height: 4),
                 Text('5. 点击媒体控制的音量按钮可以切换静音。'),
                 SizedBox(height: 4),
                 Text('6. 添加字幕文件后，请在右上角打开“CC”。'),
                 SizedBox(height: 4),
-                Text('7. 新版本库文件默认位于“下载”文件夹下，测试版本中的视频不会被自动复制。'),
+                Text('7. 新版本库文件默认位于“下载”文件夹下，长按添加按钮可以新建文件夹。'),
+                SizedBox(height: 4),
+                Text('8. 播放列表：播放器最右侧往左滑动唤出，播放列表从左往右滑动关闭。也可长按标题栏文件名打开或关闭。'),
               ],
             ),
           ),

@@ -217,7 +217,7 @@ class _WebDAVDialogState extends State<WebDAVDialog> {
               SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _connectToWebDAV,
-                child: Text('连接'),
+                child: Text('连接',style: TextStyle(color: Colors.lightBlue)),
               ),
             ] else ...[
               _isLoading

@@ -15,7 +15,9 @@ find_package(Aki REQUIRED)
 include_directories(${NATIVERENDER_ROOT_PATH}
                     ${NATIVERENDER_ROOT_PATH}/include
                     ${CMAKE_CURRENT_SOURCE_DIR}/FFmpeg/${OHOS_ARCH}/include
-                    ${CMAKE_CURRENT_SOURCE_DIR}/taglib/arm64-v8a/include)
+                    ${CMAKE_CURRENT_SOURCE_DIR}/taglib/arm64-v8a/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/libpng/${OHOS_ARCH}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/libass/${OHOS_ARCH}/include)
 add_library(avcodec SHARED IMPORTED)
 set_target_properties(avcodec
     PROPERTIES
@@ -51,6 +53,18 @@ set_target_properties(taglib
         IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/taglib/${OHOS_ARCH}/lib/libtag.a
         INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/taglib/arm64-v8a/include
 )
+add_library(libpng SHARED IMPORTED)
+set_target_properties(libpng
+        PROPERTIES
+        IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/libpng/${OHOS_ARCH}/lib/libpng16.so.16.39.0
+        INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/libpng/arm64-v8a/include
+)
+add_library(libass SHARED IMPORTED)
+set_target_properties(libass
+        PROPERTIES
+        IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/libass/${OHOS_ARCH}/lib/libass.so.9
+        INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/libass/arm64-v8a/include
+)
 # 创建 fftool 动态链接库
 add_library(fftool SHARED
     cmdutils.c
@@ -73,6 +87,6 @@ target_link_libraries(fftool PUBLIC avcodec avformat avutil avdevice swresample 
 # 添加 fftool 的头文件目录
 target_include_directories(fftool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_library(entry SHARED main.cpp napi_init.cpp)
-target_link_libraries(entry PUBLIC libace_napi.z.so  libhilog_ndk.z.so fftool Aki::libjsbind taglib)
+add_library(entry SHARED main.cpp napi_init.cpp asstest.c)
+target_link_libraries(entry PUBLIC libace_napi.z.so  libhilog_ndk.z.so fftool Aki::libjsbind taglib libpng libass)
 target_compile_features(entry PRIVATE cxx_std_17)

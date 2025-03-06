@@ -156,11 +156,11 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                   // 使用 fluttertoast 显示消息
                   // 背景半透明
                   Fluttertoast.showToast(
-                    msg: '长按3倍速播放',
+                    msg: '⏩长按3倍速播放',
                     toastLength: Toast.LENGTH_SHORT,
-                    gravity: ToastGravity.CENTER,
+                    gravity: ToastGravity.TOP, // 将Toast显示在顶部
                     timeInSecForIosWeb: 1,
-                    backgroundColor: Colors.grey,
+                    backgroundColor: Colors.black.withOpacity(0.7), // 半透明黑色背景
                     textColor: Colors.white,
                     fontSize: 16.0,
                   );
@@ -173,22 +173,55 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                       chewieController.previousPlaybackSpeed); // 松开恢复到长按之前的播放速率
                 },
                 onHorizontalDragUpdate: (details) {
-                  // 计算滑动的距离
-                  chewieController.swipeDistance += details.delta.dx;
+                  // 获取屏幕宽度
+                  final double screenWidth = MediaQuery.of(context).size.width;
+                  // 计算右侧 20% 区域的起始位置
+                  final double rightZoneStart = screenWidth * 0.8;
 
-                  // 根据滑动距离计算快进或快退的时间
-                  final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
-                  final Duration seekDuration = Duration(
-                      milliseconds:
-                          (chewieController.swipeDistance / sensitivity)
-                                  .round() *
-                              1000);
+                  // 检测滑动是否从右侧 20% 区域开始
+                  if (details.globalPosition.dx >= rightZoneStart) {
+                    // 检测滑动方向是否是从右往左
+                    if (details.delta.dx < 0) {
+                      // 执行打开播放列表的逻辑
+                      if (chewieController.openPlaylist != null)
+                        chewieController.openPlaylist!();
+                    } else {
+                      // 计算滑动的距离
+                      chewieController.swipeDistance += details.delta.dx;
 
-                  if (seekDuration.inMilliseconds != 0) {
-                    chewieController.seekTo(
-                        chewieController.videoPlayerController.value.position +
+                      // 根据滑动距离计算快进或快退的时间
+                      final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
+                      final Duration seekDuration = Duration(
+                          milliseconds:
+                              (chewieController.swipeDistance / sensitivity)
+                                      .round() *
+                                  1000);
+
+                      if (seekDuration.inMilliseconds != 0) {
+                        chewieController.seekTo(chewieController
+                                .videoPlayerController.value.position +
                             seekDuration);
-                    chewieController.swipeDistance = 0.0; // 重置滑动距离
+                        chewieController.swipeDistance = 0.0; // 重置滑动距离
+                      }
+                    }
+                  } else {
+                    // 计算滑动的距离
+                    chewieController.swipeDistance += details.delta.dx;
+
+                    // 根据滑动距离计算快进或快退的时间
+                    final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
+                    final Duration seekDuration = Duration(
+                        milliseconds:
+                            (chewieController.swipeDistance / sensitivity)
+                                    .round() *
+                                1000);
+
+                    if (seekDuration.inMilliseconds != 0) {
+                      chewieController.seekTo(chewieController
+                              .videoPlayerController.value.position +
+                          seekDuration);
+                      chewieController.swipeDistance = 0.0; // 重置滑动距离
+                    }
                   }
                 },
                 onHorizontalDragEnd: (details) {
