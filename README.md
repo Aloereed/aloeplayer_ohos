@@ -1,6 +1,6 @@
 # AloePlayer for HarmonyOS Next
 
-AloePlayer 是一款功能丰富的多媒体播放器，专为 HarmonyOS Next 设计。它支持视频、音频播放，拥有强大的媒体库管理功能，并提供了丰富的设置选项。无论是本地文件还是在线资源，AloePlayer 都能为您提供流畅的播放体验。
+AloePlayer 是一款功能丰富的多媒体播放器，专为 HarmonyOS Next 设计。它支持视频、音频播放，拥有强大的媒体库管理功能，并提供了丰富的设置选项。无论是本地文件还是URL，AloePlayer 都能为您提供流畅的播放体验。
 
 [AppGallery下载](https://appgallery.huawei.com/app/detail?id=com.aloereed.aloeplayer)
 
