@@ -11,6 +11,7 @@ import PathProviderPlugin from 'path_provider_ohos';
 import ScreenPlugin from 'screen';
 import SharePlusOhosPlugin from 'share_plus';
 import SharedPreferencesPlugin from 'shared_preferences_ohos';
+import SqflitePlugin from 'sqflite';
 import UrlLauncherPlugin from 'url_launcher_ohos';
 import VideoPlayerPlugin from 'video_player_ohos';
 import VideoThumbnailOhosPlugin from 'video_thumbnail_ohos';
@@ -41,6 +42,7 @@ export class GeneratedPluginRegistrant {
       flutterEngine.getPlugins()?.add(new ScreenPlugin());
       flutterEngine.getPlugins()?.add(new SharePlusOhosPlugin());
       flutterEngine.getPlugins()?.add(new SharedPreferencesPlugin());
+      flutterEngine.getPlugins()?.add(new SqflitePlugin());
       flutterEngine.getPlugins()?.add(new UrlLauncherPlugin());
       flutterEngine.getPlugins()?.add(new VideoPlayerPlugin());
       flutterEngine.getPlugins()?.add(new VideoThumbnailOhosPlugin());

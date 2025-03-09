@@ -25,7 +25,8 @@
     "screen": "file:../har/screen.har",
     "libentry.so": "file:./src/main/cpp/types/libentry",
     "@ohos/aki": "^1.2.15",
-    "@ohos/ijkplayer": "2.0.6"
+    "@ohos/ijkplayer": "2.0.6",
+    "sqflite": "file:../har/sqflite.har"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

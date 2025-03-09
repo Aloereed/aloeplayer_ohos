@@ -163,6 +163,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.0.8"
+  dart_des:
+    dependency: "direct main"
+    description:
+      name: dart_des
+      sha256: "0a66afb8883368c824497fd2a1fd67bdb1a785965a3956728382c03d40747c33"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.0.2"
   dart_libass:
     dependency: "direct overridden"
     description:
@@ -312,6 +320,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_blurhash:
+    dependency: "direct main"
+    description:
+      name: flutter_blurhash
+      sha256: "5e67678e479ac639069d7af1e133f4a4702311491188ff3e0227486430db0c06"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.8.2"
   flutter_cache_manager:
     dependency: transitive
     description:
@@ -328,6 +344,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.0.2"
+  flutter_lyric:
+    dependency: "direct main"
+    description:
+      name: flutter_lyric
+      sha256: "5d7e6c46c07b96842a05d5d8af385cb9d715feb7e0f1db1983bc128813c420d7"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "2.0.4+6"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -336,6 +360,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.0.22"
+  flutter_speed_dial:
+    dependency: "direct main"
+    description:
+      name: flutter_speed_dial
+      sha256: "698a037274a66dbae8697c265440e6acb6ab6cae9ac5f95c749e7944d8f28d41"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "7.0.0"
   flutter_subtitle:
     dependency: "direct main"
     description:
@@ -486,6 +518,15 @@ packages:
       url: "https://gitee.com/openharmony-sig/fluttertpc_just_audio.git"
     source: git
     version: "0.9.37"
+  just_audio_background:
+    dependency: "direct overridden"
+    description:
+      path: just_audio_background
+      ref: HEAD
+      resolved-ref: "61efe47a8450a0e674d3f6fa53bf898d435ed73d"
+      url: "https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git"
+    source: git
+    version: "0.0.1-beta.11"
   just_audio_ohos:
     dependency: "direct overridden"
     description:
@@ -550,6 +591,22 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.0.0"
+  lpinyin:
+    dependency: "direct main"
+    description:
+      name: lpinyin
+      sha256: "0bb843363f1f65170efd09fbdfc760c7ec34fc6354f9fcb2f89e74866a0d814a"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "2.0.3"
+  lrc:
+    dependency: "direct main"
+    description:
+      name: lrc
+      sha256: "5100362b5c8e97f4d3f03ff87efeb40e73a6dd780eca2cbde9312e0d44b8e5ba"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.0.2"
   marquee:
     dependency: "direct main"
     description:
@@ -731,7 +788,7 @@ packages:
     source: hosted
     version: "6.1.2"
   rxdart:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: rxdart
       sha256: "0c7c0cedd93788d996e33041ffecda924cc54389199cde4e6a34b440f50044cb"
@@ -851,21 +908,23 @@ packages:
     source: hosted
     version: "1.10.0"
   sqflite:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: sqflite
-      sha256: a43e5a27235518c03ca238e7b4732cf35eabe863a369ceba6cbefa537a66f16d
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.3.3+1"
+      path: sqflite
+      ref: HEAD
+      resolved-ref: "64d1855cc1f8b4b362e08004b5faab1b9bfa88e0"
+      url: "https://gitee.com/openharmony-sig/flutter_sqflite.git"
+    source: git
+    version: "2.2.8+3"
   sqflite_common:
     dependency: transitive
     description:
-      name: sqflite_common
-      sha256: "3da423ce7baf868be70e2c0976c28a1bb2f73644268b7ffa7d2e08eab71f16a4"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.5.4"
+      path: sqflite_common
+      ref: HEAD
+      resolved-ref: "64d1855cc1f8b4b362e08004b5faab1b9bfa88e0"
+      url: "https://gitee.com/openharmony-sig/flutter_sqflite.git"
+    source: git
+    version: "2.4.5+1"
   stack_trace:
     dependency: transitive
     description:

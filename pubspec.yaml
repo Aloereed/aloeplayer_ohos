@@ -4,24 +4,29 @@ dependencies:
   chewie:
     path: ./chewie-1.8.5
   cupertino_icons: ^1.0.6
+  dart_des: ^1.0.2
   flutter:
     sdk: flutter
+  flutter_blurhash: ^0.8.2
+  flutter_lyric: ^2.0.4+6
+  flutter_speed_dial: any
   flutter_subtitle: ^0.0.5
   http: null
+  lpinyin: any
+  lrc: any
+  marquee: any
+  ns_danmaku:
+    git:
+      ref: master
+      url: https://github.com/xiaoyaocz/flutter_ns_danmaku.git
   path: null
-  provider: 6.1.2
+  provider: ^6.0.5
+  rxdart: ^0.27.7
   simple_gesture_detector: ^0.2.1
   vivysub_utils: ^0.2.0
   webdav_client: null
   xml: null
-  marquee: any
-  ns_danmaku: 
-    git: 
-        url: https://github.com/xiaoyaocz/flutter_ns_danmaku.git
-        ref: master
 dependency_overrides:
-  dart_libass:
-    path: ./dart_libass-main
   audio_service:
     git:
       path: audio_service
@@ -29,6 +34,8 @@ dependency_overrides:
   audio_session:
     git:
       url: https://gitee.com/openharmony-sig/flutter_audio_session.git
+  dart_libass:
+    path: ./dart_libass-main
   file_picker_ohos:
     path: ./fluttertpc_file_picker/ohos
   file_selector:
@@ -45,6 +52,10 @@ dependency_overrides:
     git:
       path: just_audio
       url: https://gitee.com/openharmony-sig/fluttertpc_just_audio.git
+  just_audio_background:
+    git:
+      path: just_audio_background
+      url: https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git
   just_audio_ohos:
     git:
       path: just_audio/ohos
@@ -67,6 +78,10 @@ dependency_overrides:
     git:
       path: packages/shared_preferences/shared_preferences
       url: https://gitee.com/openharmony-sig/flutter_packages.git
+  sqflite:
+    git:
+      path: sqflite
+      url: https://gitee.com/openharmony-sig/flutter_sqflite.git
   url_launcher:
     git:
       path: packages/url_launcher/url_launcher
@@ -110,4 +125,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 1.1.0+19
+version: 2.0.0+20
