@@ -2,9 +2,12 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-09 19:43:43
+ * @LastEditTime: 2025-03-10 21:22:02
  * @Description: file content
  */
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +29,63 @@ class SettingsService {
   static const String _usePlaylist = 'use_playlist';
   static const String _useSeekToLatest = 'use_seek_to_latest';
   static const String _useInnerThumbnail = 'use_inner_thumbnail';
+
+  Future<bool> activatePersistPermission(String uri) async {
+    final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
+// 调用方法 getBatteryLevel
+    String result = await _platform
+            .invokeMethod<String>('activatePermission', {"uri": uri}) ??
+        '';
+    if (result != "") {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  Future<String> getPersistPermission(String exts) async {
+    final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
+// 调用方法 getBatteryLevel
+    String uri = await _platform
+            .invokeMethod<String>('persistPermission', {"exts": exts}) ??
+        '';
+    return uri;
+  }
+
+  // 假设 fetchCover 是通过 platform channel 调用的函数
+  Future<String> fetchCover(String uri) async {
+    // 这里调用 platform channel 的 fetchCover 函数
+    // 假设返回的是一个 Base64 字符串
+    const platform = MethodChannel('samples.flutter.dev/ffmpegplugin');
+    final String base64String =
+        await platform.invokeMethod<String>('fetchCover', {'uri': uri})??"";
+    return base64String;
+  }
+
+// 将 Base64 字符串转换为 Uint8List
+  Uint8List base64ToUint8List(String base64String) {
+    return base64Decode(base64String);
+  }
+
+// 使用示例
+  Future<Uint8List?> fetchCoverNative(String uri) async {
+    try {
+      // 调用 fetchCover 获取 Base64 字符串
+      final String base64String = await fetchCover(uri);
+      if(base64String == ""){
+        return null;
+      }
+      // 将 Base64 字符串转换为 Uint8List
+      final Uint8List uint8List = base64ToUint8List(base64String);
+
+      return uint8List;
+
+    } catch (e) {
+      print('Error: $e');
+      return null;
+    }
+  }
+
   Future<void> saveSubtitleFontSize(double fontSize) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_fontSizeKey, fontSize);
@@ -166,11 +226,11 @@ class SettingsService {
 
 // 调用方法
   Future<void> clearCache() async {
-    // const cachePath = '/data/storage/el2/base/haps/entry/cache/';
-    // await deleteCacheDirectory(cachePath);
     final cacheDir = await getTemporaryDirectory();
     final directoryPath = cacheDir.path; // 缓存目录路径
     await deleteCacheDirectory(directoryPath);
+    const cachePath = '/data/storage/el2/base/haps/entry/cache/';
+    await deleteCacheDirectory(cachePath);
   }
 }
 
@@ -285,10 +345,10 @@ class _SettingsTabState extends State<SettingsTab> {
                   ListTile(
                     leading: Icon(Icons.text_fields, color: Colors.lightBlue),
                     title: Text('字幕字体大小'),
-                    subtitle: Text('18以上的选择会导致字幕闪烁'),
+                    subtitle: Text('ASS字幕为比例调整'),
                     trailing: DropdownButton<int>(
                       value: _subtitleFontSize.toInt(),
-                      items: List.generate(10, (index) {
+                      items: List.generate(20, (index) {
                         return DropdownMenuItem<int>(
                           value: 18 + 3 * index,
                           child: Text('${18 + 3 * index}'),
@@ -307,7 +367,8 @@ class _SettingsTabState extends State<SettingsTab> {
                   ),
                   ListTile(
                     leading: Icon(Icons.subtitles, color: Colors.lightBlue),
-                    title: Text('自动尝试加载内挂字幕'),
+                    title: Text('自动尝试加载内挂和同级外挂字幕'),
+                    subtitle: Text('优先加载外挂ASS字幕'),
                     trailing: FutureBuilder<bool>(
                       future: _settingsService.getAutoLoadSubtitle(),
                       builder: (context, snapshot) {

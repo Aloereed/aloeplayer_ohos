@@ -37,6 +37,7 @@ import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:dart_libass/dart_libass.dart';
 import 'history_service.dart';
+import 'package:aloeplayer/ass.dart';
 
 // class MyAudioHandler extends BaseAudioHandler {
 //   final _player = AudioPlayer();
@@ -600,6 +601,7 @@ class _PlayerTabState extends State<PlayerTab>
       showControls: _showControls,
       allowFullScreen: true,
       zoomAndPan: true,
+      subtitleFontsize: await _settingsService.getSubtitleFontSize(),
       customToggleFullScreen: toggleFullScreen,
       playNextItem: _usePlaylist ? _playNextItem : null,
       playPreviousItem: _usePlaylist ? _playPreviousItem : null,
@@ -842,6 +844,9 @@ class _PlayerTabState extends State<PlayerTab>
             // 解析字幕内容
             if (subtitleData.extension == 'ass') {
               subtitleData.subtitles = await ass2srt(content);
+              final result = AssParserPlus.parseAssContent(content);
+              subtitleData.styles = result.$1;
+              subtitleData.assSubtitles = result.$2;
             } else if (subtitleData.extension == 'srt') {
               SubtitleController controller = SubtitleController.string(
                 content,
@@ -864,16 +869,16 @@ class _PlayerTabState extends State<PlayerTab>
           }
 
           // 如果当前没有启用的字幕，则默认启用第一个匹配的字幕
-          if (_currentSubtitleIndex == -1 && _subtitles.isNotEmpty) {
-            _currentSubtitleIndex = 0;
-            _chewieController!.setSubtitle(_subtitles[0].subtitles!);
-          }
+          // if (_currentSubtitleIndex == -1 && _subtitles.isNotEmpty) {
+          //   _currentSubtitleIndex = 0;
+          //   _chewieController!.setSubtitle(_subtitles[0].subtitles!);
+          // }
 
-          // 更新 UI
-          setState(() {});
+          // // 更新 UI
+          // setState(() {});
 
           // 文件加载成功，退出循环
-          return;
+          break;
         } else {
           // 如果没有找到文件，抛出异常
           throw FileSystemException('文件不存在', directoryPath);
@@ -887,6 +892,91 @@ class _PlayerTabState extends State<PlayerTab>
           // 其他异常，直接抛出
           rethrow;
         }
+      }
+    }
+
+    // 然后尝试在path的同级文件夹里面找
+    try {
+      directoryPath = path.substring(0, path.lastIndexOf('/'));
+      Directory directory = Directory(directoryPath);
+      List<FileSystemEntity> files = await directory.list().toList();
+      // 过滤出符合条件的文件
+      List<File> matchingFiles = files.whereType<File>().where((file) {
+        String name = file.path.split('/').last;
+        return (name
+                .startsWith(fileName.substring(0, fileName.lastIndexOf('.'))) &&
+            (name.endsWith('.ass') || name.endsWith('.srt')));
+      }).toList();
+
+      // 遍历并打印匹配文件
+      if (matchingFiles.isNotEmpty) {
+        print('找到 ${matchingFiles.length} 个匹配的文件：');
+        for (var file in matchingFiles) {
+          print(file.path);
+        }
+      }
+
+      // 如果找到符合条件的文件，加载所有匹配的字幕
+      if (matchingFiles.isNotEmpty) {
+        for (var file in matchingFiles) {
+          String content = await file.readAsString();
+
+          // 创建字幕数据对象
+          SubtitleData subtitleData = SubtitleData(
+            name: file.path.split('/').last,
+            content: content,
+            extension: file.path.split('.').last,
+          );
+          // 解析字幕内容
+          if (subtitleData.extension == 'ass') {
+            subtitleData.subtitles = await ass2srt(content);
+            final result = AssParserPlus.parseAssContent(content);
+            subtitleData.styles = result.$1;
+            subtitleData.assSubtitles = result.$2;
+          } else if (subtitleData.extension == 'srt') {
+            SubtitleController controller = SubtitleController.string(
+              content,
+              format: SubtitleFormat.srt,
+            );
+            subtitleData.subtitles = controller.subtitles
+                .map(
+                  (e) => Subtitle(
+                    index: e.number,
+                    start: Duration(milliseconds: e.start),
+                    end: Duration(milliseconds: e.end),
+                    text: e.text.replaceAll('\\N', '\n'),
+                  ),
+                )
+                .toList();
+          }
+          // 将字幕添加到列表中
+          _subtitles.add(subtitleData);
+        }
+      }
+    } catch (e) {
+      print(e);
+    }
+
+    // 如果当前没有启用的字幕，则优先启用第一个ASS字幕，若没有则启用第一个普通字幕
+    if (_currentSubtitleIndex == -1 && _subtitles.isNotEmpty) {
+      // 尝试查找第一个ASS字幕
+      int assSubtitleIndex =
+          _subtitles.indexWhere((subtitle) => subtitle.assSubtitles != null);
+
+      if (assSubtitleIndex != -1) {
+        // 找到了ASS字幕
+        _currentSubtitleIndex = assSubtitleIndex;
+        final subtitleData = _subtitles[assSubtitleIndex];
+        _chewieController!.setSubtitle(subtitleData.subtitles!);
+        _chewieController!.assStyles = subtitleData.styles;
+        _chewieController!.assSubtitles = subtitleData.assSubtitles;
+      } else {
+        // 没有找到ASS字幕，使用第一个普通字幕
+        _currentSubtitleIndex = 0;
+        final subtitleData = _subtitles[0];
+        _chewieController!.setSubtitle(subtitleData.subtitles!);
+        _chewieController!.assStyles = subtitleData.styles;
+        _chewieController!.assSubtitles = subtitleData.assSubtitles;
       }
     }
 
@@ -1072,6 +1162,20 @@ class _PlayerTabState extends State<PlayerTab>
         Wakelock.enable();
         return;
       }
+      String originalUri = uri;
+      // 检查file是否是".lnk"文件
+      if (uri.endsWith('.lnk')) {
+        // 读取文件内容
+        File lnkFile = File(uri);
+        uri = await lnkFile.readAsString();
+        // widget.openfile = uri;
+        String uri2 = uri;
+        if (!uri.contains(':')) {
+          uri2 = "file://docs" + uri;
+          uri2 = Uri.parse(uri2).toString();
+        }
+        await _settingsService.activatePersistPermission(uri2);
+      }
       _videoController = VideoPlayerController.file(File(uri),
           videoPlayerOptions:
               VideoPlayerOptions(allowBackgroundPlayback: isBgPlay))
@@ -1098,7 +1202,8 @@ class _PlayerTabState extends State<PlayerTab>
             if (_videoController != null &&
                 latestDuration.inMilliseconds /
                         _videoController!.value.duration.inMilliseconds <
-                    0.99&&latestDuration.inMilliseconds!=0) {
+                    0.99 &&
+                latestDuration.inMilliseconds != 0) {
               _videoController?.seekTo(latestDuration);
               Fluttertoast.showToast(
                 msg: "已跳转到上次播放位置：${latestDuration.toString()}",
@@ -1119,10 +1224,10 @@ class _PlayerTabState extends State<PlayerTab>
         _ffmpegExample?.controller?.sendMessageToOhosView(
             "newPlay", convertUriToPath(widget.openfile));
       }
-      _getPlaylist(uri);
-      _recordPlayStart(uri, uri);
+      _getPlaylist(originalUri);
+      _recordPlayStart(originalUri, originalUri);
       _setupPositionUpdateTimer();
-      String fileName = uri.split('/').last;
+      String fileName = originalUri.split('/').last;
       final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
       final cacheDir = await getTemporaryDirectory();
       final directoryPath = cacheDir.path; // 缓存目录路径
@@ -1531,6 +1636,9 @@ class _PlayerTabState extends State<PlayerTab>
         // _initAssRenderer();
         // 仍然保留转换逻辑用于普通显示
         subtitleData.subtitles = await ass2srt(fileContent);
+        final result = AssParserPlus.parseAssContent(fileContent);
+        subtitleData.styles = result.$1;
+        subtitleData.assSubtitles = result.$2;
       } else if (subtitleData.extension == 'lrc') {
         subtitleData.subtitles = parseLrcToSubtitles(fileContent);
       } else {
@@ -1557,10 +1665,13 @@ class _PlayerTabState extends State<PlayerTab>
       _subtitles.add(subtitleData);
 
       // 如果当前没有启用的字幕，则默认启用新添加的字幕
-      if (_currentSubtitleIndex == -1) {
-        _currentSubtitleIndex = _subtitles.length - 1;
-        _chewieController!.setSubtitle(subtitleData.subtitles!);
-      }
+      // if (_currentSubtitleIndex == -1) {
+      _currentSubtitleIndex = _subtitles.length - 1;
+      _chewieController!.setSubtitle(subtitleData.subtitles!);
+      _chewieController!.assStyles = subtitleData.styles;
+      _chewieController!.assSubtitles = subtitleData.assSubtitles;
+
+      // }
 
       // 更新 UI
       setState(() {});
@@ -1632,6 +1743,8 @@ class _PlayerTabState extends State<PlayerTab>
     if (selectedIndex != null) {
       _currentSubtitleIndex = selectedIndex;
       _chewieController!.setSubtitle(_subtitles[selectedIndex].subtitles!);
+      _chewieController!.assStyles = _subtitles[selectedIndex].styles;
+      _chewieController!.assSubtitles = _subtitles[selectedIndex].assSubtitles;
       setState(() {});
     }
   }
@@ -1743,6 +1856,11 @@ class _PlayerTabState extends State<PlayerTab>
         }
       } else if (await File(widget.openfile).exists()) {
         // 如果是文件路径且文件存在，分享文件
+        if (widget.openfile.endsWith('.lnk')) {
+          String uri = File(widget.openfile).readAsStringSync();
+          await Share.shareXFiles([XFile(uri)]);
+          return;
+        }
         await Share.shareXFiles([XFile(widget.openfile)]);
       } else {
         // 否则作为文本分享
@@ -1960,6 +2078,7 @@ class _PlayerTabState extends State<PlayerTab>
                       Expanded(
                         child: Stack(
                           children: [
+                            // FFMPEG 播放器
                             if (_useFfmpegForPlay && (_ffmpegExample != null))
                               Transform(
                                 alignment: Alignment.center,
@@ -1968,6 +2087,8 @@ class _PlayerTabState extends State<PlayerTab>
                                       _isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
                                 child: this._ffmpegExample!,
                               ),
+
+                            // Chewie 播放器
                             if (_chewieController != null &&
                                 _videoController != null &&
                                 _videoController!.value.isInitialized)
@@ -1978,85 +2099,222 @@ class _PlayerTabState extends State<PlayerTab>
                                       _isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
                                 child: Chewie(controller: _chewieController!),
                               ),
+
+                            // 播放列表部分 - 覆盖在播放器右侧
+                            if (_showPlaylist)
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: AnimatedContainer(
+                                  duration: Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                  width: 280,
+                                  child: GestureDetector(
+                                    onTap: () {}, // 防止点击穿透
+                                    onHorizontalDragEnd: (details) {
+                                      if (details.primaryVelocity! > 0) {
+                                        // 只有向右滑动才关闭
+                                        setState(() {
+                                          _showPlaylist = false;
+                                        });
+                                      }
+                                    },
+                                    child: Stack(
+                                      children: [
+                                        // 背景模糊效果
+                                        Positioned.fill(
+                                          child: BackdropFilter(
+                                            filter: ImageFilter.blur(
+                                                sigmaX: 10, sigmaY: 10),
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: Colors.black
+                                                    .withOpacity(0.5),
+                                                border: Border(
+                                                  left: BorderSide(
+                                                    color: Colors.white
+                                                        .withOpacity(0.2),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+
+                                        // 播放列表内容
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            // 播放列表标题栏
+                                            Container(
+                                              padding: EdgeInsets.symmetric(
+                                                  horizontal: 16, vertical: 12),
+                                              decoration: BoxDecoration(
+                                                border: Border(
+                                                  bottom: BorderSide(
+                                                    color: Colors.white
+                                                        .withOpacity(0.1),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    '播放列表',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 18,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: Icon(Icons.close,
+                                                        color: Colors.white70),
+                                                    onPressed: () =>
+                                                        setState(() {
+                                                      _showPlaylist = false;
+                                                    }),
+                                                    iconSize: 20,
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        BoxConstraints(),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+
+                                            // 播放列表内容
+                                            if (_playlist.isEmpty ||
+                                                _playlist.length == 1)
+                                              Expanded(
+                                                child: Center(
+                                                  child: Column(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.playlist_play,
+                                                        color: Colors.white54,
+                                                        size: 48,
+                                                      ),
+                                                      SizedBox(height: 8),
+                                                      Text(
+                                                        '播放列表为空或只有一个文件',
+                                                        style: TextStyle(
+                                                          color: Colors.white70,
+                                                          fontSize: 14,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              )
+                                            else
+                                              Expanded(
+                                                child: ListView.builder(
+                                                  padding: EdgeInsets.symmetric(
+                                                      vertical: 8),
+                                                  itemCount: _playlist.length,
+                                                  itemBuilder:
+                                                      (context, index) {
+                                                    final item =
+                                                        _playlist[index];
+                                                    final isCurrentFile =
+                                                        item['path'] ==
+                                                            widget.openfile;
+
+                                                    return Container(
+                                                      margin:
+                                                          EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: isCurrentFile
+                                                            ? Colors.blue
+                                                                .withOpacity(
+                                                                    0.2)
+                                                            : Colors
+                                                                .transparent,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8),
+                                                      ),
+                                                      child: ListTile(
+                                                        contentPadding:
+                                                            EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 4,
+                                                        ),
+                                                        leading: isCurrentFile
+                                                            ? Icon(
+                                                                Icons
+                                                                    .play_circle_filled,
+                                                                color:
+                                                                    Colors.blue,
+                                                                size: 24,
+                                                              )
+                                                            : Icon(
+                                                                Icons
+                                                                    .movie_outlined,
+                                                                color: Colors
+                                                                    .white60,
+                                                                size: 24,
+                                                              ),
+                                                        title: Text(
+                                                          item['name']!,
+                                                          style: TextStyle(
+                                                            color: isCurrentFile
+                                                                ? Colors.blue
+                                                                : Colors.white,
+                                                            fontWeight:
+                                                                isCurrentFile
+                                                                    ? FontWeight
+                                                                        .bold
+                                                                    : FontWeight
+                                                                        .normal,
+                                                            fontSize: 14,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                        onTap: () {
+                                                          if (item['path'] !=
+                                                              widget.openfile) {
+                                                            setState(() {
+                                                              getopenfile(item[
+                                                                  'path']!);
+                                                              _showPlaylist =
+                                                                  false;
+                                                            });
+                                                          }
+                                                        },
+                                                        hoverColor: Colors.white
+                                                            .withOpacity(0.1),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
-                      // 播放列表部分
-                      if (_showPlaylist)
-                        GestureDetector(
-                          onTap: () {
-                            // 点击任意地方关闭播放列表
-                            setState(() {
-                              _showPlaylist = false;
-                            });
-                          },
-                          onHorizontalDragEnd: (details) => setState(() {
-                            _showPlaylist = false;
-                          }),
-                          child: Container(
-                            width: 200, // 播放列表宽度
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.7), // 半透明背景
-                              borderRadius: BorderRadius.circular(8), // 圆角
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // 播放列表内容
-                                if (_playlist.isEmpty || _playlist.length == 1)
-                                  Center(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16.0),
-                                      child: Text(
-                                        '播放列表为空或只有一个文件',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Expanded(
-                                    child: ListView.builder(
-                                      shrinkWrap: true,
-                                      itemCount: _playlist.length,
-                                      itemBuilder: (context, index) {
-                                        final item = _playlist[index];
-                                        final isCurrentFile =
-                                            item['path'] == widget.openfile;
-                                        return ListTile(
-                                          title: Text(
-                                            item['name']!,
-                                            style: TextStyle(
-                                              color: isCurrentFile
-                                                  ? Colors.blue
-                                                  : Colors.white,
-                                              fontWeight: isCurrentFile
-                                                  ? FontWeight.bold
-                                                  : FontWeight.normal,
-                                            ),
-                                          ),
-                                          onTap: () {
-                                            // 点击播放列表项的逻辑
-                                            // 例如：_playFile(item['path']);
-                                            if (item['path'] !=
-                                                widget.openfile) {
-                                              setState(() {
-                                                getopenfile(item['path']!);
-                                                // _openUri(item['path']!);
-                                                _showPlaylist = false;
-                                              });
-                                            }
-                                          },
-                                        );
-                                      },
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                   if (_showVolumeSlider)
@@ -2191,11 +2449,15 @@ class SubtitleData {
   final String content; // 字幕内容
   final String extension; // 文件扩展名
   List<Subtitle>? subtitles; // 解析后的字幕列表
+  List<AssStyle>? styles;
+  List<AssSubtitle>? assSubtitles;
 
   SubtitleData({
     required this.name,
     required this.content,
     required this.extension,
     this.subtitles,
+    this.styles,
+    this.assSubtitles,
   });
 }

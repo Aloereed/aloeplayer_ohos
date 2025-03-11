@@ -66,6 +66,7 @@
     ],
     requestPermissions: [
       { name: "ohos.permission.INTERNET" },
+      { name: "ohos.permission.FILE_ACCESS_PERSIST" },
       { name: "ohos.permission.GET_WIFI_INFO" },
       { name: "ohos.permission.GET_NETWORK_INFO" },
       {

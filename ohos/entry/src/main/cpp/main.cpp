@@ -2,7 +2,7 @@
  * @Author:
  * @Date: 2025-01-21 20:39:36
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-19 15:25:01
+ * @LastEditTime: 2025-03-10 21:14:37
  * @Description: file content
  */
 #include "utils.hpp"
@@ -18,6 +18,7 @@ extern "C" {
 #include <cstring> // for strdup
 #include "hilog/log.h"
 #include "napi_init.h"
+// #include "napi_new.h"
 #include <taglib/tag.h>
 #include <taglib/fileref.h>
 #include <taglib/id3v2tag.h>
@@ -29,6 +30,8 @@ extern "C" {
 #include <taglib/attachedpictureframe.h>
 #include <taglib/unsynchronizedlyricsframe.h>
 #include <taglib/textidentificationframe.h>
+#include <csignal>
+#include <csetjmp>
 #include <locale>
 #include <codecvt>
 
@@ -38,6 +41,15 @@ extern "C" {
 #include <cstdarg>
 
 #include <png.h>
+// 用于保存程序状态的跳转点
+sigjmp_buf jumpBuffer;
+
+// 信号处理函数
+void handleSegmentationFault(int signal) {
+    std::cerr << "Segmentation fault caught! Recovering..." << std::endl;
+    // 跳转到保存的程序状态
+    siglongjmp(jumpBuffer, 1);
+}
 
 std::string type_audio = "normal";
 std::string toUTF8(const std::wstring &wstr) {
@@ -157,6 +169,7 @@ int executeFFmpegCommandAPP2(std::string uuid, int cmdLen, std::vector<std::stri
     onActionListener.onFFmpegFail = aki::JSBind::GetJSFunction(uuid + "_onFFmpegFail");
     onActionListener.onFFmpegSuccess = aki::JSBind::GetJSFunction(uuid + "_onFFmpegSuccess");
     int ret = extract_subtitle(cmdLen, argv1);
+    // int ret = extractAss(cmdLen, argv1);
     if (ret != 0) {
         char err[1024] = {0};
         onActionListener.onFFmpegFail->Invoke<void>(ret, err);
@@ -683,42 +696,53 @@ void setAlbumArtist(const std::string &filename, const std::string &albumArtist)
 
 // 读取歌词
 std::string getLyrics(const std::string &filename) {
-    TagLib::FileRef fileRef(filename.c_str());
+    // 设置 SIGSEGV 信号处理函数
+    struct sigaction sa;
+    sa.sa_handler = handleSegmentationFault;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGSEGV, &sa, nullptr);
+    if (sigsetjmp(jumpBuffer, 1) == 0) {
+        TagLib::FileRef fileRef(filename.c_str());
 
-    if (!fileRef.isNull() && fileRef.file()) {
-        if (type_audio == "mp3") {
-            TagLib::MPEG::File *file = (TagLib::MPEG::File *)openFile(filename);
-            if (!file)
-                return "";
-            auto tag = file->ID3v2Tag(true);
-            if (!tag)
-                return "";
-            auto frameList = tag->frameList("USLT");
-            if (frameList.isEmpty())
-                return "";
-            auto frame = dynamic_cast<TagLib::ID3v2::UnsynchronizedLyricsFrame *>(frameList.front());
-            if (!frame)
-                return "";
-            std::string lyrics = frame->text().to8Bit(true);
-            delete file;
-            return lyrics;
-        } else if (type_audio == "flac") {
-            TagLib::FLAC::File *file = (TagLib::FLAC::File *)openFile(filename);
-            if (!file)
-                return "";
-            auto tag = file->ID3v2Tag(true);
-            if (!tag)
-                return "";
-            auto frameList = tag->frameList("USLT");
-            if (frameList.isEmpty())
-                return "";
-            auto frame = dynamic_cast<TagLib::ID3v2::UnsynchronizedLyricsFrame *>(frameList.front());
-            if (!frame)
-                return "";
-            std::string lyrics = frame->text().to8Bit(true);
-            delete file;
-            return lyrics;
+        if (!fileRef.isNull() && fileRef.file()) {
+            if (type_audio == "mp3") {
+                TagLib::MPEG::File *file = (TagLib::MPEG::File *)openFile(filename);
+                if (!file)
+                    return "";
+                auto tag = file->ID3v2Tag(true);
+                if (!tag)
+                    return "";
+                auto frameList = tag->frameList("USLT");
+                if (frameList.isEmpty())
+                    return "";
+                auto frame = dynamic_cast<TagLib::ID3v2::UnsynchronizedLyricsFrame *>(frameList.front());
+                if (!frame)
+                    return "";
+                std::string lyrics = frame->text().to8Bit(true);
+                delete file;
+                return lyrics;
+            } else if (type_audio == "flac") {
+                TagLib::FLAC::File *file = (TagLib::FLAC::File *)openFile(filename);
+                if (!file)
+                    return "";
+                auto tag = file->ID3v2Tag(true);
+                if (!tag)
+                    return "";
+                auto frameList = tag->frameList("USLT");
+                if (frameList.isEmpty())
+                    return "";
+                auto frame = dynamic_cast<TagLib::ID3v2::UnsynchronizedLyricsFrame *>(frameList.front());
+                if (!frame)
+                    return "";
+                std::string lyrics = frame->text().to8Bit(true);
+                delete file;
+                return lyrics;
+            }
         }
+    } else {
+        // 从 SIGSEGV 恢复后的逻辑
+        std::cout << "Recovered from segmentation fault!" << std::endl;
     }
     return "";
 }

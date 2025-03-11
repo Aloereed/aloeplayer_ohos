@@ -15,7 +15,8 @@ import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
-
+import 'package:aloeplayer/ass.dart';
+import 'package:aloeplayer/settings.dart';
 typedef ChewieRoutePageBuilder = Widget Function(
   BuildContext context,
   Animation<double> animation,
@@ -321,6 +322,9 @@ class ChewieController extends ChangeNotifier {
     this.playPreviousItem,
     this.closePlaylist,
     this.openPlaylist,
+    this.assStyles,
+    this.assSubtitles,
+    this.subtitleFontsize = 18,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
           'The playbackSpeeds values must all be greater than 0',
@@ -386,6 +390,9 @@ class ChewieController extends ChangeNotifier {
     Function? playPreviousItem,
     Function? closePlaylist,
     Function? openPlaylist,
+    List<AssStyle>? assStyles,
+    List<AssSubtitle>? assSubtitles,
+    double? subtitleFontsize,
   }) {
     return ChewieController(
       draggableProgressBar: draggableProgressBar ?? this.draggableProgressBar,
@@ -450,6 +457,9 @@ class ChewieController extends ChangeNotifier {
       playPreviousItem: playPreviousItem?? this.playPreviousItem,
       closePlaylist: closePlaylist?? this.closePlaylist,
       openPlaylist: openPlaylist?? this.openPlaylist,
+      assStyles: assStyles?? this.assStyles,
+      assSubtitles: assSubtitles?? this.assSubtitles,
+      subtitleFontsize: subtitleFontsize?? this.subtitleFontsize,
     );
   }
 
@@ -466,6 +476,11 @@ class ChewieController extends ChangeNotifier {
   Function? playPreviousItem;
   Function? closePlaylist;
   Function? openPlaylist;
+
+  List<AssStyle>? assStyles;
+  List<AssSubtitle>? assSubtitles;
+
+  double subtitleFontsize = 18.0;
 
   /// Pass your translations for the options like:
   /// - PlaybackSpeed

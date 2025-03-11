@@ -15,7 +15,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:media_info/media_info.dart';
 import 'package:video_player/video_player.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+import 'package:audio_metadata_reader/audio_metadata_reader.dart'
+    hide AudioMetadata;
 import 'dart:typed_data';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:flutter/services.dart';
@@ -24,299 +25,6 @@ import 'package:lpinyin/lpinyin.dart'; // Add this package for Chinese pinyin co
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'mini_player.dart';
 import 'audio_player_service.dart';
-
-class AudioMetadata {
-  static const MethodChannel _channel =
-      MethodChannel('samples.flutter.dev/ffmpegplugin');
-
-  // 读取标题
-  static Future<String> getTitle(String filename) async {
-    try {
-      final String title =
-          await _channel.invokeMethod('getTitle', {'filename': filename});
-      return title;
-    } on PlatformException catch (e) {
-      print("Failed to get title: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置标题
-  static Future<void> setTitle(String filename, String title) async {
-    try {
-      await _channel
-          .invokeMethod('setTitle', {'filename': filename, 'value': title});
-    } on PlatformException catch (e) {
-      print("Failed to set title: ${e.message}");
-    }
-  }
-
-  // 读取艺术家
-  static Future<String> getArtist(String filename) async {
-    try {
-      final String artist =
-          await _channel.invokeMethod('getArtist', {'filename': filename});
-      return artist;
-    } on PlatformException catch (e) {
-      print("Failed to get artist: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置艺术家
-  static Future<void> setArtist(String filename, String artist) async {
-    try {
-      await _channel
-          .invokeMethod('setArtist', {'filename': filename, 'value': artist});
-    } on PlatformException catch (e) {
-      print("Failed to set artist: ${e.message}");
-    }
-  }
-
-  // 读取专辑
-  static Future<String> getAlbum(String filename) async {
-    try {
-      final String album =
-          await _channel.invokeMethod('getAlbum', {'filename': filename});
-      return album;
-    } on PlatformException catch (e) {
-      print("Failed to get album: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置专辑
-  static Future<void> setAlbum(String filename, String album) async {
-    try {
-      await _channel
-          .invokeMethod('setAlbum', {'filename': filename, 'value': album});
-    } on PlatformException catch (e) {
-      print("Failed to set album: ${e.message}");
-    }
-  }
-
-  // 读取年份
-  static Future<int> getYear(String filename) async {
-    try {
-      final int year =
-          await _channel.invokeMethod('getYear', {'filename': filename});
-      return year;
-    } on PlatformException catch (e) {
-      print("Failed to get year: ${e.message}");
-      return 0;
-    }
-  }
-
-  // 设置年份
-  static Future<void> setYear(String filename, int year) async {
-    try {
-      await _channel
-          .invokeMethod('setYear', {'filename': filename, 'value': year});
-    } on PlatformException catch (e) {
-      print("Failed to set year: ${e.message}");
-    }
-  }
-
-  // 读取音轨号
-  static Future<int> getTrack(String filename) async {
-    try {
-      final int track =
-          await _channel.invokeMethod('getTrack', {'filename': filename});
-      return track;
-    } on PlatformException catch (e) {
-      print("Failed to get track: ${e.message}");
-      return 0;
-    }
-  }
-
-  // 设置音轨号
-  static Future<void> setTrack(String filename, int track) async {
-    try {
-      await _channel
-          .invokeMethod('setTrack', {'filename': filename, 'value': track});
-    } on PlatformException catch (e) {
-      print("Failed to set track: ${e.message}");
-    }
-  }
-
-  // 读取碟号
-  static Future<int> getDisc(String filename) async {
-    try {
-      final int disc =
-          await _channel.invokeMethod('getDisc', {'filename': filename});
-      return disc;
-    } on PlatformException catch (e) {
-      print("Failed to get disc: ${e.message}");
-      return 0;
-    }
-  }
-
-  // 设置碟号
-  static Future<void> setDisc(String filename, int disc) async {
-    try {
-      await _channel
-          .invokeMethod('setDisc', {'filename': filename, 'value': disc});
-    } on PlatformException catch (e) {
-      print("Failed to set disc: ${e.message}");
-    }
-  }
-
-  // 读取风格
-  static Future<String> getGenre(String filename) async {
-    try {
-      final String genre =
-          await _channel.invokeMethod('getGenre', {'filename': filename});
-      return genre;
-    } on PlatformException catch (e) {
-      print("Failed to get genre: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置风格
-  static Future<void> setGenre(String filename, String genre) async {
-    try {
-      await _channel
-          .invokeMethod('setGenre', {'filename': filename, 'value': genre});
-    } on PlatformException catch (e) {
-      print("Failed to set genre: ${e.message}");
-    }
-  }
-
-  // 读取专辑艺术家
-  static Future<String> getAlbumArtist(String filename) async {
-    try {
-      final String albumArtist =
-          await _channel.invokeMethod('getAlbumArtist', {'filename': filename});
-      return albumArtist;
-    } on PlatformException catch (e) {
-      print("Failed to get album artist: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置专辑艺术家
-  static Future<void> setAlbumArtist(
-      String filename, String albumArtist) async {
-    try {
-      await _channel.invokeMethod(
-          'setAlbumArtist', {'filename': filename, 'value': albumArtist});
-    } on PlatformException catch (e) {
-      print("Failed to set album artist: ${e.message}");
-    }
-  }
-
-  // 读取作曲
-  static Future<String> getComposer(String filename) async {
-    try {
-      final String composer =
-          await _channel.invokeMethod('getComposer', {'filename': filename});
-      return composer;
-    } on PlatformException catch (e) {
-      print("Failed to get composer: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置作曲
-  static Future<void> setComposer(String filename, String composer) async {
-    try {
-      await _channel.invokeMethod(
-          'setComposer', {'filename': filename, 'value': composer});
-    } on PlatformException catch (e) {
-      print("Failed to set composer: ${e.message}");
-    }
-  }
-
-  // 读取作词
-  static Future<String> getLyricist(String filename) async {
-    try {
-      final String lyricist =
-          await _channel.invokeMethod('getLyricist', {'filename': filename});
-      return lyricist;
-    } on PlatformException catch (e) {
-      print("Failed to get lyricist: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置作词
-  static Future<void> setLyricist(String filename, String lyricist) async {
-    try {
-      await _channel.invokeMethod(
-          'setLyricist', {'filename': filename, 'value': lyricist});
-    } on PlatformException catch (e) {
-      print("Failed to set lyricist: ${e.message}");
-    }
-  }
-
-  // 读取注释
-  static Future<String> getComment(String filename) async {
-    try {
-      final String comment =
-          await _channel.invokeMethod('getComment', {'filename': filename});
-      return comment;
-    } on PlatformException catch (e) {
-      print("Failed to get comment: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置注释
-  static Future<void> setComment(String filename, String comment) async {
-    try {
-      await _channel
-          .invokeMethod('setComment', {'filename': filename, 'value': comment});
-    } on PlatformException catch (e) {
-      print("Failed to set comment: ${e.message}");
-    }
-  }
-
-  // 读取歌词
-// 读取歌词
-  static Future<String> getLyrics(String filename) async {
-    try {
-      final String lyrics =
-          await _channel.invokeMethod('getLyrics', {'filename': filename});
-      return lyrics;
-    } on PlatformException catch (e) {
-      print("Failed to get lyrics: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置歌词
-  static Future<void> setLyrics(String filename, String lyrics) async {
-    try {
-      await _channel
-          .invokeMethod('setLyrics', {'filename': filename, 'value': lyrics});
-    } on PlatformException catch (e) {
-      print("Failed to set lyrics: ${e.message}");
-    }
-  }
-
-  // 读取封面（返回 base64 编码的图片数据）
-  static Future<String> getCover(String filename) async {
-    try {
-      final String cover =
-          await _channel.invokeMethod('getCover', {'filename': filename});
-      return cover;
-    } on PlatformException catch (e) {
-      print("Failed to get cover: ${e.message}");
-      return "";
-    }
-  }
-
-  // 设置封面（接受 base64 编码的图片数据）
-  static Future<void> setCover(String filename, String coverBase64) async {
-    try {
-      await _channel.invokeMethod(
-          'setCover', {'filename': filename, 'value': coverBase64});
-    } on PlatformException catch (e) {
-      print("Failed to set cover: ${e.message}");
-    }
-  }
-}
 
 class AudioInfoEditor extends StatefulWidget {
   final String filePath;
@@ -588,7 +296,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   // Load items and process metadata
   Future<void> _loadItems() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = false;
     });
 
     // Load directories and files
@@ -750,17 +458,32 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     return '#';
   }
 
+  String pathToUri(String path) {
+    if (path.contains(':')) {
+      return Uri.parse(path).toString();
+    } else if (path.startsWith('/Photos')) {
+      return Uri.parse("file://media" + path).toString();
+    } else {
+      return Uri.parse("file://docs" + path).toString();
+    }
+    return path;
+  }
+
   // Extract metadata from audio file
   Future<AudioMetadataLite> _extractAudioMetadataLite(File file) async {
     try {
       final metadata = readMetadata(file, getImage: true);
-
-      String title = metadata.title ?? path.basenameWithoutExtension(file.path);
-      String artist = metadata.artist ?? 'Unknown Artist';
-      String album = metadata.album ?? 'Unknown Album';
+      String title = await AudioMetadata.getTitle(file.path);
+      String artist = await AudioMetadata.getArtist(file.path);
+      String album = await AudioMetadata.getAlbum(file.path);
+      title =
+          title.isNotEmpty ? title : path.basenameWithoutExtension(file.path);
+      artist = artist.isNotEmpty ? artist : 'Unknown Artist';
+      album = album.isNotEmpty ? album : 'Unknown Album';
       int trackNumber = metadata.trackNumber ?? 0;
-      Uint8List? albumArt =
-          metadata.pictures.isNotEmpty ? metadata.pictures[0].bytes : null;
+      Uint8List? albumArt = metadata.pictures.isEmpty
+          ? await _settingsService.fetchCoverNative(pathToUri(file.path))
+          : metadata.pictures[0].bytes;
 
       return AudioMetadataLite(
         title: title,
@@ -1000,7 +723,10 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   // 获取音频缩略图
   Future<Uint8List?> _getAudioThumbnail(File file) async {
     final metadata = readMetadata(file, getImage: true);
-    return metadata.pictures[0].bytes;
+    if (metadata.pictures.isNotEmpty) {
+      return metadata.pictures[0].bytes;
+    }
+    return await _settingsService.fetchCoverNative(pathToUri(file.path));
   }
 
   // 获取音频时长
@@ -1213,10 +939,11 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           ),
           actions: [
             IconButton(
-              icon: Icon(Icons.folder_open,color: Theme.of(context).brightness == Brightness.dark
+              icon: Icon(Icons.folder_open,
+                  color: Theme.of(context).brightness == Brightness.dark
                       ? Colors.white
                       : Colors.black),
-              onPressed: () => _openFile(), 
+              onPressed: () => _openFile(),
             ),
             AnimatedSwitcher(
               duration: Duration(milliseconds: 300),
@@ -1240,9 +967,10 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
               visible:
                   _currentPath != _audioDirPath && _tabController.index == 0,
               child: IconButton(
-                icon: Icon(Icons.arrow_upward,color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black),
+                icon: Icon(Icons.arrow_upward,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black),
                 onPressed: _navigateUp,
               ),
             ),
@@ -1250,7 +978,10 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
               visible: (_selectedArtist != null || _selectedAlbum != null) &&
                   (_tabController.index == 1 || _tabController.index == 2),
               child: IconButton(
-                icon: Icon(Icons.arrow_back),
+                icon: Icon(Icons.arrow_back,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black),
                 onPressed: _resetCategoryView,
               ),
             ),
@@ -1307,7 +1038,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
             //   onPressed: () => _openWebDavFileManager(context),
             // ),
             IconButton(
-              icon: Icon(Icons.refresh,color: Theme.of(context).brightness == Brightness.dark
+              icon: Icon(Icons.refresh,
+                  color: Theme.of(context).brightness == Brightness.dark
                       ? Colors.white
                       : Colors.black),
               onPressed: _loadItems,
@@ -1318,22 +1050,26 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
             ? Center(child: CircularProgressIndicator())
             : Column(children: [
                 Expanded(
-                    child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    // Tab 1: Files view (existing functionality)
-                    _buildFilesView(),
+                    child: Container(
+                        decoration: BoxDecoration(
+                          border: null, // 移除 TabBar 和 TabBarView 之间的分割线
+                        ),
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            // Tab 1: Files view (existing functionality)
+                            _buildFilesView(),
 
-                    // Tab 2: Artists view
-                    _buildArtistsView(),
+                            // Tab 2: Artists view
+                            _buildArtistsView(),
 
-                    // Tab 3: Albums view
-                    _buildAlbumsView(),
+                            // Tab 3: Albums view
+                            _buildAlbumsView(),
 
-                    // Tab 4: Songs view
-                    _buildSongsView(),
-                  ],
-                )),
+                            // Tab 4: Songs view
+                            _buildSongsView(),
+                          ],
+                        ))),
                 MiniPlayer(
                   onTap: () {
                     final audioService = AudioPlayerService();

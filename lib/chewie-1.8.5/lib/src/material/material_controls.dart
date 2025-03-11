@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
+import 'package:aloeplayer/ass.dart';
 
 class MaterialControls extends StatefulWidget {
   const MaterialControls({
@@ -31,6 +32,20 @@ class MaterialControls extends StatefulWidget {
   }
 }
 
+// 在你的文件中添加这个数据类
+class VideoSizeData {
+  final double width;
+  final double height;
+  final double offsetX;
+  final double offsetY;
+
+  const VideoSizeData(
+      {required this.width,
+      required this.height,
+      required this.offsetX,
+      required this.offsetY});
+}
+
 class _MaterialControlsState extends State<MaterialControls>
     with SingleTickerProviderStateMixin {
   late PlayerNotifier notifier;
@@ -41,6 +56,7 @@ class _MaterialControlsState extends State<MaterialControls>
   late var _subtitlesPosition = Duration.zero;
   bool _subtitleOn = true;
   bool _danmakuOn = true;
+  bool _assOn = true;
   Timer? _showAfterExpandCollapseTimer;
   bool _dragging = false;
   bool _displayTapped = false;
@@ -48,6 +64,9 @@ class _MaterialControlsState extends State<MaterialControls>
   bool _displayBufferingIndicator = false;
   bool _showSettings = false; // 控制悬浮框的显示
   bool isBackgroundBlurred = true;
+  // 在你的State类中添加这些字段
+  Timer? _subtitleUpdateThrottler;
+  VideoPlayerValue? _lastProcessedValue;
 
   final barHeight = 48.0 * 1.5;
   final marginSize = 5.0;
@@ -62,6 +81,31 @@ class _MaterialControlsState extends State<MaterialControls>
   void initState() {
     super.initState();
     notifier = Provider.of<PlayerNotifier>(context, listen: false);
+  }
+
+  // 在你的State类中添加这个计算方法
+  VideoSizeData _calculateVideoDisplaySize(double videoWidth,
+      double videoHeight, double containerWidth, double containerHeight) {
+    double videoDisplayWidth, videoDisplayHeight;
+    double offsetX = 0, offsetY = 0;
+
+    if (videoWidth / videoHeight > containerWidth / containerHeight) {
+      // 视频比例比容器宽，视频将填满宽度，高度居中
+      videoDisplayWidth = containerWidth;
+      videoDisplayHeight = containerWidth * videoHeight / videoWidth;
+      offsetY = (containerHeight - videoDisplayHeight) / 2;
+    } else {
+      // 视频比例比容器高，视频将填满高度，宽度居中
+      videoDisplayHeight = containerHeight;
+      videoDisplayWidth = containerHeight * videoWidth / videoHeight;
+      offsetX = (containerWidth - videoDisplayWidth) / 2;
+    }
+
+    return VideoSizeData(
+        width: videoDisplayWidth,
+        height: videoDisplayHeight,
+        offsetX: offsetX,
+        offsetY: offsetY);
   }
 
   @override
@@ -153,6 +197,62 @@ class _MaterialControlsState extends State<MaterialControls>
                   ),
                 ),
               ),
+              if (_subtitleOn &&
+                  (chewieController.assSubtitles?.isNotEmpty ?? false))
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return ValueListenableBuilder<VideoPlayerValue>(
+                      valueListenable: chewieController.videoPlayerController,
+                      builder: (context, videoValue, child) {
+                        // 仅当位置发生较大变化时更新字幕
+                        final positionChanged =
+                            _lastProcessedValue?.position.inMilliseconds !=
+                                videoValue.position.inMilliseconds;
+
+                        if (positionChanged) {
+                          _subtitleUpdateThrottler?.cancel();
+                          _subtitleUpdateThrottler =
+                              Timer(const Duration(milliseconds: 100), () {
+                            if (mounted) {
+                              setState(() {
+                                _lastProcessedValue = videoValue;
+                              });
+                            }
+                          });
+                        }
+
+                        // 计算视频显示尺寸
+                        final videoSizeData = _calculateVideoDisplaySize(
+                            videoValue.size.width,
+                            videoValue.size.height,
+                            constraints.maxWidth,
+                            constraints.maxHeight);
+
+                        return Stack(
+                          children: [
+                            Positioned(
+                              left: videoSizeData.offsetX,
+                              top: videoSizeData.offsetY,
+                              width: videoSizeData.width,
+                              height: videoSizeData.height,
+                              child: RepaintBoundary(
+                                child: AssSubtitleRenderer(
+                                  subtitles: chewieController.assSubtitles!,
+                                  currentPosition: videoValue.position,
+                                  videoSize: Size(videoSizeData.width,
+                                      videoSizeData.height),
+                                  subtitleScale: 0.225 *
+                                      chewieController.subtitleFontsize /
+                                      18.0,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
 
               if (_displayBufferingIndicator)
                 _chewieController?.bufferingBuilder?.call(context) ??
@@ -174,7 +274,8 @@ class _MaterialControlsState extends State<MaterialControls>
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
                   if (_subtitleOn &&
-                      (chewieController.subtitle?.isNotEmpty ?? false))
+                      (chewieController.subtitle?.isNotEmpty ?? false) &&
+                      !(chewieController.assSubtitles?.isNotEmpty ?? false))
                     Transform.translate(
                       offset: Offset(
                         0.0,
@@ -195,6 +296,7 @@ class _MaterialControlsState extends State<MaterialControls>
 
   @override
   void dispose() {
+    _subtitleUpdateThrottler?.cancel();
     _dispose();
     super.dispose();
   }

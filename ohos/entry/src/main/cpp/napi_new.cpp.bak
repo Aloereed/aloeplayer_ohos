@@ -1,0 +1,284 @@
+/*
+ * @Author: 
+ * @Date: 2025-03-10 21:02:42
+ * @LastEditors: 
+ * @LastEditTime: 2025-03-10 21:04:25
+ * @Description: file content
+ */
+#include <iostream>
+#include <string>
+#include <vector>
+#include <fstream>
+#include <memory>
+#include <filesystem>
+
+extern "C" {
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/avutil.h>
+#include <libavutil/timestamp.h>
+#include <libavutil/opt.h>
+}
+
+// 字幕信息结构
+struct SubtitleInfo {
+    int index;
+    std::string language;
+    std::string codec;
+    bool isAss;
+};
+
+// 辅助函数：写入ASS/SSA头部
+void writeAssHeader(std::ofstream& outFile, const AVCodecParameters* codecpar) {
+    // 如果头部数据可用，直接写入
+    if (codecpar->extradata && codecpar->extradata_size > 0) {
+        outFile.write(reinterpret_cast<const char*>(codecpar->extradata), codecpar->extradata_size);
+    } else {
+        // 写入一个基本的ASS头部
+        outFile << "[Script Info]\n";
+        outFile << "Title: Extracted subtitle\n";
+        outFile << "ScriptType: v4.00+\n";
+        outFile << "PlayResX: 384\n";
+        outFile << "PlayResY: 288\n";
+        outFile << "Timer: 100.0000\n\n";
+        
+        outFile << "[V4+ Styles]\n";
+        outFile << "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n";
+        outFile << "Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n";
+        
+        outFile << "[Events]\n";
+        outFile << "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
+    }
+}
+
+// SRT时间格式转换
+std::string formatSrtTime(int64_t timeStamp, AVRational time_base) {
+    int64_t milliseconds = av_rescale_q(timeStamp, time_base, AVRational{1, 1000});
+    int hours = milliseconds / 3600000;
+    milliseconds %= 3600000;
+    int minutes = milliseconds / 60000;
+    milliseconds %= 60000;
+    int seconds = milliseconds / 1000;
+    milliseconds %= 1000;
+    
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d,%03d", hours, minutes, seconds, (int)milliseconds);
+    return buf;
+}
+
+// 提取所有字幕流
+bool extractSubtitles(const std::string& inputFile, const std::string& output_prefix) {
+    AVFormatContext* format_ctx = nullptr;
+    
+    // 打开输入文件
+    if (avformat_open_input(&format_ctx, inputFile.c_str(), nullptr, nullptr) != 0) {
+        std::cerr << "Could not open input file: " << inputFile << std::endl;
+        return false;
+    }
+    
+    // 获取流信息
+    if (avformat_find_stream_info(format_ctx, nullptr) < 0) {
+        std::cerr << "Could not find stream information" << std::endl;
+        avformat_close_input(&format_ctx);
+        return false;
+    }
+    
+    // 查找所有字幕流
+    std::vector<SubtitleInfo> subtitles;
+    for (unsigned int i = 0; i < format_ctx->nb_streams; i++) {
+        if (format_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+            SubtitleInfo info;
+            info.index = i;
+            
+            // 获取字幕编解码器信息
+            AVCodecParameters* codec_params = format_ctx->streams[i]->codecpar;
+            const AVCodec* codec = avcodec_find_decoder(codec_params->codec_id);
+            info.codec = codec ? codec->name : "unknown";
+            
+            // 检查是否为ASS/SSA格式
+            info.isAss = (codec_params->codec_id == AV_CODEC_ID_ASS || 
+                         codec_params->codec_id == AV_CODEC_ID_SSA);
+            
+            // 获取语言信息
+            AVDictionaryEntry* lang = av_dict_get(format_ctx->streams[i]->metadata, "language", nullptr, 0);
+            info.language = lang ? lang->value : "und";
+            
+            subtitles.push_back(info);
+        }
+    }
+    
+    if (subtitles.empty()) {
+        std::cout << "No subtitle streams found in file" << std::endl;
+        avformat_close_input(&format_ctx);
+        return false;
+    }
+    
+    std::cout << "Found " << subtitles.size() << " subtitle streams" << std::endl;
+    
+    // 为每个字幕流创建解码器上下文
+    std::vector<AVCodecContext*> codec_contexts(format_ctx->nb_streams, nullptr);
+    
+    // 处理每个字幕流
+    for (const auto& subtitle : subtitles) {
+        int stream_idx = subtitle.index;
+        AVStream* stream = format_ctx->streams[stream_idx];
+        
+        // 获取解码器
+        const AVCodec* decoder = avcodec_find_decoder(stream->codecpar->codec_id);
+        if (!decoder) {
+            std::cerr << "Unsupported subtitle codec for stream " << stream_idx << std::endl;
+            continue;
+        }
+        
+        // 创建解码器上下文
+        AVCodecContext* codec_ctx = avcodec_alloc_context3(decoder);
+        if (!codec_ctx) {
+            std::cerr << "Failed to allocate codec context for stream " << stream_idx << std::endl;
+            continue;
+        }
+        
+        // 复制编解码器参数到上下文
+        if (avcodec_parameters_to_context(codec_ctx, stream->codecpar) < 0) {
+            std::cerr << "Failed to copy codec parameters for stream " << stream_idx << std::endl;
+            avcodec_free_context(&codec_ctx);
+            continue;
+        }
+        
+        // 打开解码器
+        if (avcodec_open2(codec_ctx, decoder, nullptr) < 0) {
+            std::cerr << "Failed to open codec for stream " << stream_idx << std::endl;
+            avcodec_free_context(&codec_ctx);
+            continue;
+        }
+        
+        codec_contexts[stream_idx] = codec_ctx;
+        
+        // 确定输出文件名
+        std::string extension = subtitle.isAss ? ".ass" : ".srt";
+        std::string outFilename = output_prefix + "_" + subtitle.language + "_" + std::to_string(subtitle.index) + extension;
+        
+        std::cout << "Extracting subtitle #" << subtitle.index 
+                  << " (language: " << subtitle.language 
+                  << ", codec: " << subtitle.codec << ") to " << outFilename << std::endl;
+        
+        // 创建输出文件
+        std::ofstream outFile(outFilename, std::ios::out | std::ios::binary);
+        if (!outFile.is_open()) {
+            std::cerr << "Could not open output file: " << outFilename << std::endl;
+            continue;
+        }
+        
+        // 如果是ASS/SSA字幕，写入头部信息
+        if (subtitle.isAss) {
+            writeAssHeader(outFile, stream->codecpar);
+        }
+        
+        // 创建包和帧对象
+        AVPacket* pkt = av_packet_alloc();
+        AVSubtitle sub;
+        int subtitle_count = 0;
+        
+        // 重新定位到文件开始
+        av_seek_frame(format_ctx, -1, 0, AVSEEK_FLAG_BACKWARD);
+        
+        // 读取所有包并解码字幕
+        while (av_read_frame(format_ctx, pkt) >= 0) {
+            if (pkt->stream_index == stream_idx) {
+                int ret = avcodec_decode_subtitle2(codec_ctx, &sub, &ret, pkt);
+                
+                if (ret > 0 && sub.num_rects > 0) {
+                    // 处理字幕数据
+                    if (subtitle.isAss) {
+                        // 写入ASS格式的字幕
+                        for (unsigned i = 0; i < sub.num_rects; i++) {
+                            if (sub.rects[i]->type == SUBTITLE_ASS && sub.rects[i]->ass) {
+                                outFile << "Dialogue: " << sub.rects[i]->ass << std::endl;
+                            }
+                        }
+                    } else {
+                        // 写入SRT格式的字幕
+                        subtitle_count++;
+                        outFile << subtitle_count << std::endl;
+                        
+                        // 时间格式化
+                        std::string start_time = formatSrtTime(pkt->pts, stream->time_base);
+                        std::string end_time = formatSrtTime(pkt->pts + pkt->duration, stream->time_base);
+                        
+                        outFile << start_time << " --> " << end_time << std::endl;
+                        
+                        // 提取并写入文本
+                        for (unsigned i = 0; i < sub.num_rects; i++) {
+                            if (sub.rects[i]->type == SUBTITLE_TEXT && sub.rects[i]->text) {
+                                outFile << sub.rects[i]->text << std::endl;
+                            } else if (sub.rects[i]->type == SUBTITLE_ASS && sub.rects[i]->ass) {
+                                // 从ASS格式中提取纯文本
+                                const char* ass_line = sub.rects[i]->ass;
+                                const char* text_start = strstr(ass_line, ",");
+                                if (text_start) {
+                                    // 跳过8个逗号来获取文本部分 (ASS Dialogue格式)
+                                    int commas = 0;
+                                    while (text_start && commas < 8) {
+                                        text_start = strchr(text_start + 1, ',');
+                                        commas++;
+                                    }
+                                    if (text_start) {
+                                        outFile << text_start + 1 << std::endl;
+                                    }
+                                }
+                            }
+                        }
+                        outFile << std::endl;
+                    }
+                    
+                    // 释放字幕
+                    avsubtitle_free(&sub);
+                }
+            }
+            av_packet_unref(pkt);
+        }
+        
+        av_packet_free(&pkt);
+        outFile.close();
+    }
+    
+    // 清理资源
+    for (auto& ctx : codec_contexts) {
+        if (ctx) {
+            avcodec_free_context(&ctx);
+        }
+    }
+    
+    avformat_close_input(&format_ctx);
+    return true;
+}
+
+// 检查指定文件是否存在
+bool fileExists(const std::string& filename) {
+    return std::filesystem::exists(filename);
+}
+
+int extractAss(int argc, char* argv[]) {
+    // 可能需要注册所有编解码器（旧版FFmpeg需要，6.0版本可能已不需要）
+    // av_register_all(); // FFmpeg 4.0及以上版本不再需要
+
+    if (argc < 3) {
+        std::cout << "Usage: " << argv[0] << " <input_file> <output_prefix>" << std::endl;
+        return 1;
+    }
+    
+    std::string inputFile = argv[1];
+    std::string output_prefix = argv[2];
+    
+    if (!fileExists(inputFile)) {
+        std::cerr << "Input file does not exist: " << inputFile << std::endl;
+        return 1;
+    }
+    
+    if (!extractSubtitles(inputFile, output_prefix)) {
+        std::cerr << "Failed to extract subtitles" << std::endl;
+        return 1;
+    }
+    
+    std::cout << "Subtitle extraction completed successfully" << std::endl;
+    return 0;
+}

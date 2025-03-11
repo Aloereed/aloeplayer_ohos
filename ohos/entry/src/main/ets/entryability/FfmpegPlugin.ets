@@ -34,6 +34,10 @@ import { taskpool } from '@kit.ArkTS';
 import { common , Want } from '@kit.AbilityKit';
 import { FfmpegFactory } from './FfmpegFactory';
 import { audio } from '@kit.AudioKit';
+import { image } from '@kit.ImageKit';
+import { buffer } from '@kit.ArkTS';
+import media from "@ohos.multimedia.media"
+import fs from "@ohos.file.fs"
 import libAddon from 'libentry.so'
 // import testNapi from 'libentry.so';
 import { FFMpegUtils, FFmpegCommandOptions } from './FFmpegUtils';
@@ -169,6 +173,9 @@ export default class FfmpegPlugin implements FlutterPlugin {
             break;
           case "cleanupLibass":
             that.api.cleanupLibass(result);
+            break;
+          case "fetchCover":
+            that.api.fetchCover(call.argument("uri") as string, result);
             break;
           case "callEvent":
             that.eventSink?.success("Success at " + new Date());
@@ -801,7 +808,7 @@ class FfmpegApi {
     }
 
     getLyrics(filename: string, result: MethodResult) {
-        console.log("getLyrics start");
+        console.log("getLyrics start: " + filename);
         libAddon.getLyrics(filename).then((lyrics: string) => {
           console.log("getLyrics end: " + lyrics);
           result.success(lyrics);
@@ -862,6 +869,114 @@ class FfmpegApi {
     cleanupLibass(result: MethodResult) {
       libAddon.cleanup_libass();
       result.success(null);
+    }
+
+    async fetchCover(filename: string,result: MethodResult) {
+        if (canIUse("SystemCapability.Multimedia.Media.AVMetadataExtractor")) {
+            // 创建AVMetadataExtractor对象
+            let avMetadataExtractor: media.AVMetadataExtractor =
+                await media.createAVMetadataExtractor()
+            // 设置fdSrc
+            if (filename != null && filename.startsWith("file")) {
+                console.log(`trying to get metadata from file: ${filename}`)
+                let file = fs.openSync(filename, fs.OpenMode.READ_ONLY)
+                let state = fs.statSync(file.fd)
+                let avFileDescriptor: media.AVFileDescriptor = {
+                    fd: file.fd,
+                    offset: 0,
+                    length: state.size,
+                }
+                avMetadataExtractor.fdSrc = avFileDescriptor
+            }  else {
+                avMetadataExtractor.release()
+                result.success("")
+                return
+            }
+
+            // avMetadataExtractor.fdSrc = await getContext(this).resourceManager.getRawFd(filename);
+
+            // 获取元数据（promise模式）
+            let metadata = await avMetadataExtractor.fetchMetadata()
+            console.info(TAG, `get meta data, hasAudio: ${metadata.hasAudio}`)
+
+            // 获取专辑封面（promise模式）
+            try {
+                if (metadata.hasVideo == "yes") {
+                    let avImageGenerator: media.AVImageGenerator =
+                        await media.createAVImageGenerator()
+                    if (filename != null && filename.startsWith("file")) {
+                        console.log(
+                            `trying to get video cover from file: ${filename}`
+                        )
+                        let file = fs.openSync(filename, fs.OpenMode.READ_ONLY)
+                        let state = fs.statSync(file.fd)
+                        let avFileDescriptor: media.AVFileDescriptor = {
+                            fd: file.fd,
+                            offset: 0,
+                            length: state.size,
+                        }
+                        avImageGenerator.fdSrc = avFileDescriptor
+                    } 
+                    // 初始化入参
+                    let timeUs = 0
+                    let queryOption =
+                        media.AVImageQueryOptions.AV_IMAGE_QUERY_NEXT_SYNC
+                    let param: media.PixelMapParams = {
+                        width: 300,
+                        height: 300,
+                    }
+
+                    // 获取缩略图（promise模式）
+                    let pixelMap = await avImageGenerator.fetchFrameByTime(
+                        timeUs,
+                        queryOption,
+                        param
+                    )
+
+                    // 创建 ImagePacker 实例
+                    const imagePacker = image.createImagePacker();
+
+                    // 将 PixelMap 编码为图像数据
+                    const packedData = await imagePacker.packing(pixelMap, {
+                      format: "image/jpeg", // 你可以根据需要选择其他格式，如 "image/png"
+                      quality: 100 // 图像质量，范围是 1 到 100
+                    });
+
+                    // 将 Uint8Array 转换为 Base64 字符串
+                    const base64String = buffer.from(packedData).toString('base64');
+                    result.success(base64String);
+                    // 释放资源（promise模式）
+                    avImageGenerator.release()
+                    
+                    console.info(TAG, `release success.`)
+                    return;
+                } else {
+                    let pixelMap = await avMetadataExtractor.fetchAlbumCover()
+                     // 创建 ImagePacker 实例
+                    const imagePacker = image.createImagePacker();
+
+                    // 将 PixelMap 编码为图像数据
+                    const packedData = await imagePacker.packing(pixelMap, {
+                      format: "image/jpeg", // 你可以根据需要选择其他格式，如 "image/png"
+                      quality: 100 // 图像质量，范围是 1 到 100
+                    });
+
+                    // 将 Uint8Array 转换为 Base64 字符串
+                    const base64String = buffer.from(packedData).toString('base64');
+                    result.success(base64String);
+                    return;
+                }
+            } catch (e) {
+                result.success("");
+                
+                console.error(TAG, `fetchAlbumCover failed: ${e}`)
+                return;
+            }
+            result.success("");
+            // 释放资源（promise模式）
+            avMetadataExtractor.release()
+            console.info(TAG, `release success.`)
+        }
     }
 
 }

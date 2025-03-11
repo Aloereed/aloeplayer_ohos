@@ -20,6 +20,7 @@ import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'favorite.dart';
 import 'package:path_provider/path_provider.dart';
+import 'history_page.dart';
 
 // import 'package:path/path.dart';
 class VideoLibraryTab extends StatefulWidget {
@@ -66,9 +67,10 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   void initState() async {
     super.initState();
     bool useinnerthumb = await _settingsService.getUseInnerThumbnail();
-    if(useinnerthumb){
+    if (useinnerthumb) {
       // path join
-      _thumbnailPath = path.join((await getTemporaryDirectory()).path, 'Thumbnails');
+      _thumbnailPath =
+          path.join((await getTemporaryDirectory()).path, 'Thumbnails');
     }
     _ensureVideoDirectoryExists();
     setState(() async {
@@ -223,6 +225,16 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 //       }
 //     });
 //   }
+  String pathToUri(String path) {
+    if (path.contains(':')) {
+      return Uri.parse(path).toString();
+    } else if (path.startsWith('/Photos')) {
+      return Uri.parse("file://media" + path).toString();
+    } else {
+      return Uri.parse("file://docs" + path).toString();
+    }
+    return path;
+  }
 
   Future<void> _loadItems() async {
     final directory = Directory(_currentPath);
@@ -237,7 +249,21 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
           // 排除 .srt 和 .ass 文件
           if (extension != '.srt' &&
               extension != '.ass' &&
+              extension != '.jpg' &&
+              extension!= '.png' &&
+              extension!= '.jpeg' &&
+              extension!= '.gif' &&
+              extension!= '.bmp' &&
               !item.path.contains('.ux_store')) {
+            if (extension == '.lnk') {
+              // 作为string读取lnk文件为uri
+              String uri = await item.readAsString();
+              if (!uri.contains(':')) {
+                uri = "file://docs" + uri;
+                uri = Uri.parse(uri).toString();
+              }
+              _settingsService.activatePersistPermission(uri);
+            }
             files.add(item);
           }
         } else if (item is Directory) {
@@ -356,11 +382,78 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     }
   }
 
+  Future<void> _pickVideoWithPersist() async {
+    await _ensureVideoDirectoryExists();
+    // 创建实例
+    final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
+// 调用方法 getBatteryLevel
+    String uri = await _platform.invokeMethod<String>('persistPermission', {
+          "exts": '视频文件|.mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,.rmvb,.wmv,.ts'
+        }) ??
+        '';
+    if (uri.startsWith('file://docs')) {
+      // 删除file://docs并解析unicode码
+      uri = Uri.decodeFull(uri.substring(11));
+    }
+
+    // 检查是否选择了文件
+    if (uri != '') {
+      await _createLinkFile(uri);
+    } else {
+      // 用户取消了选择
+      print('用户取消了文件选择');
+    }
+  }
+
+  Future<void> _createLinkFile(String uri) async {
+    final fileName = path.basename(uri + ".lnk");
+    final destinationPath = path.join(_currentPath, fileName);
+    final destinationFile = File(destinationPath);
+    bool deleteIfError = true;
+
+    try {
+      // 检查destinationPath是否已存在
+      if (await destinationFile.exists()) {
+        deleteIfError = false;
+        throw FileSystemException(
+          "文件已存在",
+          destinationPath,
+        );
+      }
+      // 向destinationFile写入uri
+      await destinationFile.writeAsString(uri);
+      print("文件创建完成: $destinationPath");
+    } catch (e) {
+      print("链接文件文件创建失败: $e");
+      // 关闭对话框
+      Navigator.of(context).pop();
+
+      // 显示复制失败的Toast
+      Fluttertoast.showToast(
+        msg: "链接文件文件创建失败: $e",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+        timeInSecForIosWeb: 1,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+        fontSize: 16.0,
+      );
+
+      // 如果复制失败，删除可能已创建的目标文件
+      if (deleteIfError && await destinationFile.exists()) {
+        await destinationFile.delete();
+      }
+      rethrow;
+    } finally {
+      _loadItems();
+    }
+  }
+
   // 使用image_picker选择视频文件
   Future<void> _pickVideoWithImagePicker() async {
     await _ensureVideoDirectoryExists();
     final picker = ImagePicker();
-    final List<XFile> files = await picker.pickMultipleMedia();
+    final List<XFile> files = await picker.pickMultipleVideo(source: ImageSource.gallery);
     for (XFile? file in files) {
       if (file != null) {
         await _copyVideoFile(file);
@@ -565,9 +658,15 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   Future<Uint8List?> _getVideoThumbnail(File file) async {
     // 从file.path提取文件名
     String fileName = path.basename(file.path);
+    String filePath = file.path;
+    // 检查file是否是".lnk"文件
+    if (file.path.endsWith('.lnk')) {
+      // 读取文件内容
+      filePath = await file.readAsString();
+      fileName = path.basename(filePath);
+    }
     // 尝试读取$_thumbnailPath/$fileName.nothumbnail
-    String thumbnailPath =
-        '$_thumbnailPath/$fileName.nothumbnail';
+    String thumbnailPath = '$_thumbnailPath/$fileName.nothumbnail';
     // 检查文件是否存在
     if (await File(thumbnailPath).exists()) {
       // 如果文件存在，则读取文件内容
@@ -575,8 +674,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     }
 
     // 尝试读取$_thumbnailPath/$fileName.jpg
-    thumbnailPath =
-        '$_thumbnailPath/$fileName.jpg';
+    thumbnailPath = '$_thumbnailPath/$fileName.jpg';
     // 检查文件是否存在
     if (await File(thumbnailPath).exists()) {
       // 如果文件存在，则读取文件内容为Uint8List
@@ -584,7 +682,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     }
 
     final thumbnail = await VideoThumbnailOhos.thumbnailData(
-      video: file.path,
+      video: filePath,
       imageFormat: ImageFormat.JPEG,
       maxWidth: 128, // 缩略图的最大宽度
       quality: 25, // 缩略图的质量 (0-100)
@@ -592,15 +690,13 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
     try {
       // 保存缩略图到$_thumbnailPath/
-      String thumbnailPath =
-          '$_thumbnailPath/$fileName.jpg';
+      String thumbnailPath = '$_thumbnailPath/$fileName.jpg';
       // 将缩略图保存到文件
       File thumbnailFile = File(thumbnailPath);
       await thumbnailFile.writeAsBytes(thumbnail!);
     } catch (e) {
       // 写入一个空文件$_thumbnailPath/$fileName.nothumbnail
-      String thumbnailPath =
-          '$_thumbnailPath/$fileName.nothumbnail';
+      String thumbnailPath = '$_thumbnailPath/$fileName.nothumbnail';
       // 将缩略图保存到文件
       File thumbnailFile = File(thumbnailPath);
       await thumbnailFile.writeAsBytes([]);
@@ -618,10 +714,17 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
     // // 从元数据中提取视频时长
     // int durationInMilliseconds = metadata['durationMs'];
+    String filePath = file.path;
+    // 检查file是否是".lnk"文件
+    if (file.path.endsWith('.lnk')) {
+      // 读取文件内容
+      filePath = await file.readAsString();
+      _settingsService.activatePersistPermission(pathToUri(filePath));
+    }
     final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
     // 调用方法 getBatteryLevel
     final result = await _platform
-        .invokeMethod<int>('getVideoDurationMs', {"path": file.path});
+        .invokeMethod<int>('getVideoDurationMs', {"path": filePath});
 
     // 将毫秒转换为 Duration 对象
     Duration duration = Duration(milliseconds: result ?? 0);
@@ -681,7 +784,14 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 获取文件大小
   String _getFileSize(File file) {
-    final sizeInBytes = file.lengthSync();
+    String filePath = file.path;
+    // 检查file是否是".lnk"文件
+    if (file.path.endsWith('.lnk')) {
+      // 读取文件内容
+      filePath = file.readAsStringSync();
+      _settingsService.activatePersistPermission(pathToUri(filePath));
+    }
+    final sizeInBytes = File(filePath).lengthSync();
     if (sizeInBytes < 1024) {
       return '$sizeInBytes B';
     } else if (sizeInBytes < 1024 * 1024) {
@@ -694,12 +804,15 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   String _getFileDate(File file) {
     final fileDate = file.lastModifiedSync();
     final now = DateTime.now();
-    final difference = now.difference(fileDate); 
+    final difference = now.difference(fileDate);
+    if (difference.inDays > 30) {
+      return '${fileDate.year}/${fileDate.month}/${fileDate.day}';
+    }
     if (difference.inDays > 0) {
-      return '${difference.inDays}天前'; 
+      return '${difference.inDays}天前';
     }
     if (difference.inHours > 0) {
-      return '${difference.inHours}小时前'; 
+      return '${difference.inHours}小时前';
     }
     if (difference.inMinutes > 0) {
       return '${difference.inMinutes}分钟前';
@@ -863,7 +976,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               } else if (value == 'gallery') {
                 _pickVideoWithImagePicker();
               } else if (value == 'webdav') {
-                _openWebDavFileManager(context); 
+                _openWebDavFileManager(context);
+              } else if (value == 'softlink') {
+                _pickVideoWithPersist();
               }
             },
             itemBuilder: (context) => [
@@ -873,7 +988,17 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                   children: [
                     Icon(Icons.file_upload, color: Colors.lightBlue),
                     SizedBox(width: 10),
-                    Text('选择视频文件'),
+                    Text('添加本地视频文件'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'softlink',
+                child: Row(
+                  children: [
+                    Icon(Icons.dataset_linked_rounded, color: Colors.lightBlue),
+                    SizedBox(width: 10),
+                    Text('添加本地视频文件链接'),
                   ],
                 ),
               ),
@@ -898,14 +1023,14 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                 ),
               ),
               PopupMenuItem(
-               value: 'webdav',
+                value: 'webdav',
                 child: Row(
                   children: [
                     Icon(Icons.cloud_upload_rounded, color: Colors.lightBlue),
                     SizedBox(width: 10),
                     Text('从WebDAV下载'),
                   ],
-                ), 
+                ),
               )
             ],
           ),
@@ -1606,7 +1731,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                         ),
                         Spacer(),
                         Text(
-                          _getFileSize(file)+ " "+_getFileDate(file),
+                          _getFileSize(file) + " " + _getFileDate(file),
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.grey[600],
@@ -1637,7 +1762,12 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         _showExtractSubtitleDialog(file);
         break;
       case 'share':
-        Share.shareXFiles([XFile(file.path)]);
+        String filePath = file.path;
+        if (file.path.endsWith('.lnk')) {
+          filePath = file.readAsStringSync();
+          _settingsService.activatePersistPermission(pathToUri(filePath));
+        }
+        Share.shareXFiles([XFile(filePath)]);
         break;
       case 'favorite':
         _toggleFavorite(file);
@@ -1740,7 +1870,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                                           future: _getVideoDuration(file),
                                           builder: (context, snapshot) {
                                             final fileSize = _getFileSize(file);
-                                            final fileDateString = _getFileDate(file);
+                                            final fileDateString =
+                                                _getFileDate(file);
 
                                             if (snapshot.connectionState ==
                                                     ConnectionState.waiting ||
@@ -1994,7 +2125,13 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                             title: '分享视频',
                             onTap: () {
                               Navigator.pop(context);
-                              Share.shareXFiles([XFile(file.path)]);
+                              String filePath = file.path;
+                              if (file.path.endsWith('.lnk')) {
+                                filePath = file.readAsStringSync();
+                                _settingsService.activatePersistPermission(
+                                    pathToUri(filePath));
+                              }
+                              Share.shareXFiles([XFile(filePath)]);
                             },
                           ),
                           _buildOptionTile(
@@ -2122,6 +2259,47 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                 try {
                   final _platform =
                       const MethodChannel('samples.flutter.dev/ffmpegplugin');
+                  if (file.path.endsWith('.lnk')) {
+                    Navigator.pop(context);
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16.0),
+                          ),
+                          title: const Text(
+                            '暂不支持链接文件',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          content: const Text(
+                            '当前暂不支持处理链接文件 (.lnk)，请选择其他文件。',
+                            style: TextStyle(
+                              fontSize: 16,
+                            ),
+                          ),
+                          actions: <Widget>[
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                              child: const Text(
+                                '确定',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                    return;
+                  }
                   final result = await _platform
                       .invokeMethod<String>('tomp4', {"path": file.path});
 
@@ -2205,7 +2383,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               ),
               child: Text(
                 '开始转换',
-                style: TextStyle(color: Colors.lightBlue),
+                style: TextStyle(color: Colors.white),
               ),
             ),
           ],
@@ -2302,16 +2480,101 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
                     final _platform =
                         const MethodChannel('samples.flutter.dev/ffmpegplugin');
+                    String filePath = file.path;
+                    if (file.path.endsWith('.lnk')) {
+                      Navigator.pop(context);
+                      // 提示暂不支持链接文件
+                      showDialog(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16.0),
+                            ),
+                            title: const Text(
+                              '暂不支持链接文件',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            content: const Text(
+                              '当前暂不支持处理链接文件 (.lnk)，请选择其他文件。',
+                              style: TextStyle(
+                                fontSize: 16,
+                              ),
+                            ),
+                            actions: <Widget>[
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                },
+                                child: const Text(
+                                  '确定',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    }
                     await _platform.invokeMethod<String>(
-                        'getsrt', {"path": file.path, "type": "ass"});
+                        'getsrt', {"path": filePath, "type": "ass"});
                     setState(() {
                       isFFmpeged = true;
                     });
                   } else {
                     final _platform =
                         const MethodChannel('samples.flutter.dev/ffmpegplugin');
+                    String filePath = file.path;
+                    if (file.path.endsWith('.lnk')) {
+                      Navigator.pop(context);
+                      // 作为String读取file
+                      showDialog(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16.0),
+                            ),
+                            title: const Text(
+                              '暂不支持链接文件',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            content: const Text(
+                              '当前暂不支持处理链接文件 (.lnk)，请选择其他文件。',
+                              style: TextStyle(
+                                fontSize: 16,
+                              ),
+                            ),
+                            actions: <Widget>[
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                },
+                                child: const Text(
+                                  '确定',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                      return;
+                    }
                     await _platform.invokeMethod<String>(
-                        'getsrtold', {"path": file.path, "type": "ass"});
+                        'getsrtold', {"path": filePath, "type": "ass"});
                   }
 
                   // Close progress dialog
@@ -2390,7 +2653,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               ),
               child: Text(
                 '开始抽取',
-                style: TextStyle(color: Colors.lightBlue),
+                style: TextStyle(color: Colors.white),
               ),
             ),
           ],
@@ -2563,6 +2826,24 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               ? Colors.grey[800]
               : Colors.white,
           onTap: () => _showUrlDialog(context),
+        ),
+        SpeedDialChild(
+          child: Icon(Icons.history, color: Colors.white),
+          backgroundColor: Colors.orange[600],
+          foregroundColor: Colors.white,
+          label: '打开历史记录',
+          labelStyle: TextStyle(fontSize: 14),
+          labelBackgroundColor: Theme.of(context).brightness == Brightness.dark
+              ? Colors.grey[800]
+              : Colors.white,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => HistoryPage(getOpenFile: widget.getopenfile,startPlayerPage: widget.startPlayerPage,),
+              ),
+            );
+          },
         ),
         // SpeedDialChild(
         //   child: Icon(Icons.webhook, color: Colors.white),

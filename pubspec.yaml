@@ -26,6 +26,7 @@ dependencies:
   vivysub_utils: ^0.2.0
   webdav_client: null
   xml: null
+  intl: any
 dependency_overrides:
   audio_service:
     git:
@@ -45,9 +46,15 @@ dependency_overrides:
   fluttertoast:
     git: https://gitee.com/openharmony-sig/flutter_fluttertoast.git
   image_picker:
-    git:
-      path: packages/image_picker/image_picker
-      url: https://gitee.com/openharmony-sig/flutter_packages.git
+    path: ./image_picker/image_picker
+  image_picker_platform_interface:
+    path: ./image_picker/image_picker_platform_interface
+  image_picker_ohos:
+    path: ./image_picker/image_picker_ohos
+  image_picker_android:
+    path: ./image_picker/image_picker_android
+  image_picker_ios:
+    path: ./image_picker/image_picker_ios
   just_audio:
     git:
       path: just_audio
@@ -92,6 +99,8 @@ dependency_overrides:
     path: ./video_player/video_player_ohos
   video_player_platform_interface:
     path: ./video_player/video_player_platform_interface
+  video_player_avfoundation:
+    path: ./video_player/video_player_avfoundation
   video_thumbnail_ohos:
     git:
       path: ohos
@@ -125,4 +134,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 2.0.0+20
+version: 2.0.0+22

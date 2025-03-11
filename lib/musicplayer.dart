@@ -5,7 +5,8 @@ import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+import 'package:audio_metadata_reader/audio_metadata_reader.dart'
+    hide AudioMetadata;
 import 'package:rxdart/rxdart.dart';
 import 'settings.dart';
 import 'audio_player_service.dart';
@@ -79,7 +80,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
   late String _title = '';
   late String _artist = '';
   late String _album = '';
-  late Uint8List? _coverBytes;
+  Uint8List? _coverBytes = null;
   final SettingsService _settingsService = SettingsService();
   bool isBgPlay = true;
   bool _usePlaylist = true;
@@ -124,6 +125,17 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     });
   }
 
+  String pathToUri(String path) {
+    if (path.contains(':')) {
+      return Uri.parse(path).toString();
+    } else if (path.startsWith('/Photos')) {
+      return Uri.parse("file://media" + path).toString();
+    } else {
+      return Uri.parse("file://docs" + path).toString();
+    }
+    return path;
+  }
+
   void _getPlaylist(String path) async {
     //提取文件夹路径
     _playlist.clear();
@@ -163,15 +175,20 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
             //   _coverBytes =
             //       metadata.pictures.isNotEmpty ? metadata.pictures[0].bytes : null;
             // });
+            String title = await AudioMetadata.getTitle(file.path);
+            String artist = await AudioMetadata.getArtist(file.path);
+            String album = await AudioMetadata.getAlbum(file.path);
             _playlist.add({
               'name': file.path.split('/').last,
               'path': file.path,
-              'title': metadata.title ?? file.path.split('/').last,
-              'artist': metadata.artist ?? 'Unknown Artist',
-              'album': metadata.album ?? 'Unknown Album',
+              'title': title == "" ? "Unknown Title" : title,
+              'artist': artist == "" ? 'Unknown Artist' : artist,
+              'album': album == "" ? 'Unknown Album' : album,
               'coverBytes': metadata.pictures.isNotEmpty
                   ? String.fromCharCodes(metadata.pictures[0].bytes)
-                  : '',
+                  : (String.fromCharCodes(await _settingsService
+                          .fetchCoverNative(pathToUri(file.path)) ??
+                      Uint8List.fromList([]))),
             });
           } else {
             _playlist.add({
@@ -264,12 +281,18 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
       if (includeExts.contains(widget.filePath.split('.').last)) {
         final metadata =
             await readMetadata(File(widget.filePath), getImage: true);
+        _artist = await AudioMetadata.getArtist(widget.filePath);
+        _title = await AudioMetadata.getTitle(widget.filePath);
+        _album = await AudioMetadata.getAlbum(widget.filePath);
+        _coverBytes = metadata.pictures.isEmpty
+            ? await _settingsService
+                .fetchCoverNative(pathToUri(widget.filePath))
+            : metadata.pictures[0].bytes;
         setState(() {
-          _title = metadata.title ?? widget.filePath.split('/').last;
-          _artist = metadata.artist ?? 'Unknown Artist';
-          _album = metadata.album ?? 'Unknown Album';
-          _coverBytes =
-              metadata.pictures.isNotEmpty ? metadata.pictures[0].bytes : null;
+          _title = _title == "" ? widget.filePath.split('/').last : _title;
+          _artist = _artist == "" ? 'Unknown Artist' : _artist;
+          _album = _album == "" ? 'Unknown Album' : _album;
+          _coverBytes = _coverBytes;
         });
         _audioService.album = _album;
         _audioService.artist = _artist;
@@ -298,30 +321,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
             _duration = _controller.value.duration;
           });
           _audioService.updatePlayerState();
-
-          // 检查是否到达结尾
-          // if (_controller.value.position >= _controller.value.duration ||
-          //     (_controller.value.position == Duration.zero &&
-          //         !_controller.value.isPlaying)) {
-          //   switch (_loopMode) {
-          //     case LoopMode.off:
-          //       // 不循环，停止播放
-          //       break;
-          //     case LoopMode.all:
-          //       // 循环整个列表（在此示例中只有一首歌）
-          //       // _controller.seekTo(Duration.zero);
-          //       // _controller.play();
-          //       _playNextItem();
-          //       _controller.play();
-          //       break;
-          //     case LoopMode.one:
-          //       // 单曲循环
-          //       _controller.seekTo(Duration.zero);
-          //       _controller.play();
-          //       break;
-          //   }
-          // }
-
           // 更新歌词位置
           _updateLyricPosition(_controller.value.position);
         }
@@ -335,6 +334,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
       _audioService.firstPlay = false;
       _audioService.updatePlayerState();
     } catch (e) {
+      print('Error initializing player: $e');
       _playNextItem();
     }
   }
@@ -351,10 +351,38 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
           _parseLyrics(content);
         });
       } else {
-        setState(() {
-          _lrcContent = '暂无歌词';
-          _lyrics = [LyricsLine(timeMs: 0, text: '暂无歌词')];
-        });
+        try {
+          final filename = widget.filePath;
+          await AudioMetadata.getTitle(filename);
+          // await AudioMetadata.getArtist(filename);
+          // await AudioMetadata.getAlbum(filename);
+          // await AudioMetadata.getYear(filename);
+          // await AudioMetadata.getTrack(filename);
+          // await AudioMetadata.getDisc(filename);
+          // await AudioMetadata.getGenre(filename);
+          // await AudioMetadata.getAlbumArtist(filename);
+          // await AudioMetadata.getComposer(filename);
+          // await AudioMetadata.getLyricist(filename);
+          // await AudioMetadata.getComment(filename);
+          final lyrics = await AudioMetadata.getLyrics(widget.filePath);
+          print("lyrics: $lyrics");
+          if (lyrics == '') {
+            setState(() {
+              _lrcContent = '暂无歌词';
+              _lyrics = [LyricsLine(timeMs: 0, text: '暂无歌词')];
+            });
+          } else {
+            setState(() {
+              _lrcContent = lyrics;
+              _parseLyrics(lyrics);
+            });
+          }
+        } catch (e) {
+          setState(() {
+            _lrcContent = '暂无歌词';
+            _lyrics = [LyricsLine(timeMs: 0, text: '暂无歌词')];
+          });
+        }
       }
     } catch (e) {
       print('加载歌词失败: $e');
@@ -369,111 +397,252 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      isScrollControlled: true, // 允许更大的高度
+      isScrollControlled: true,
       builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.7, // 占屏幕高度的70%
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade900,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 25.0, sigmaY: 25.0),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.75,
+            padding: const EdgeInsets.only(top: 20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.8),
+                  Colors.black.withOpacity(0.9),
+                ],
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(30),
+                topRight: Radius.circular(30),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  spreadRadius: 1,
+                  blurRadius: 10,
+                  offset: const Offset(0, -3),
+                ),
+              ],
             ),
-          ),
-          child: Column(
-            children: [
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '播放列表',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      '${_playlist.length} 首歌曲',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+            child: Column(
+              children: [
+                // 顶部把手
+                Container(
+                  width: 40,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-              ),
-              Divider(color: Colors.white.withOpacity(0.1)),
-              Expanded(
-                child: ListView.builder(
-                  physics: BouncingScrollPhysics(),
-                  itemCount: _playlist.length,
-                  itemBuilder: (context, index) {
-                    final song = _playlist[index];
-                    // 检查是否是当前播放的歌曲
-                    bool isCurrentSong = widget.filePath == song['path'];
+                // 标题区域
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.queue_music_rounded,
+                            color: Colors.white.withOpacity(0.9),
+                            size: 28,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            '播放列表',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${_playlist.length} 首歌曲',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // 分割线
+                Container(
+                  height: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        Colors.white.withOpacity(0.15),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // 歌曲列表
+                Expanded(
+                  child: ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: _playlist.length,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    itemBuilder: (context, index) {
+                      final song = _playlist[index];
+                      bool isCurrentSong = widget.filePath == song['path'];
 
-                    return ListTile(
-                      title: Text(
-                        song['title'] ?? 'Unknown Title',
-                        style: TextStyle(
-                          color: isCurrentSong ? Colors.blue : Colors.white,
-                          fontWeight: isCurrentSong
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        song['artist'] ?? 'Unknown Artist',
-                        style: TextStyle(
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
                           color: isCurrentSong
-                              ? Colors.blue.withOpacity(0.7)
-                              : Colors.white.withOpacity(0.7),
+                              ? Colors.blue.withOpacity(0.15)
+                              : Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(5),
-                        child: song['coverBytes'] != null
-                            ? Image.memory(
-                                Uint8List.fromList(
-                                    song['coverBytes']!.codeUnits),
-                                width: 50,
-                                height: 50,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                width: 50,
-                                height: 50,
-                                color: Colors.grey.shade800,
-                                child: Icon(
-                                  Icons.music_note,
-                                  color: Colors.white.withOpacity(0.7),
-                                ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () {
+                              if (!isCurrentSong) {
+                                _playSongFromList(song);
+                              }
+                              Navigator.pop(context);
+                            },
+                            splashColor: Colors.white.withOpacity(0.1),
+                            highlightColor: Colors.white.withOpacity(0.05),
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Row(
+                                children: [
+                                  // 封面图
+                                  Hero(
+                                    tag: 'song_cover_${song['path']}',
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Container(
+                                        width: 60,
+                                        height: 60,
+                                        decoration: BoxDecoration(
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color:
+                                                  Colors.black.withOpacity(0.2),
+                                              blurRadius: 10,
+                                              spreadRadius: 1,
+                                            )
+                                          ],
+                                        ),
+                                        child: song['coverBytes'] != null
+                                            ? Image.memory(
+                                                Uint8List.fromList(
+                                                    song['coverBytes']!
+                                                        .codeUnits),
+                                                width: 60,
+                                                height: 60,
+                                                fit: BoxFit.cover,
+                                              )
+                                            : Container(
+                                                color: Colors.grey.shade800,
+                                                child: Icon(
+                                                  Icons.music_note,
+                                                  color: Colors.white
+                                                      .withOpacity(0.7),
+                                                  size: 30,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  // 歌曲信息
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          song['title'] ?? 'Unknown Title',
+                                          style: TextStyle(
+                                            color: isCurrentSong
+                                                ? Colors.blue.shade300
+                                                : Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: isCurrentSong
+                                                ? FontWeight.w700
+                                                : FontWeight.w600,
+                                            letterSpacing: 0.3,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          song['artist'] ?? 'Unknown Artist',
+                                          style: TextStyle(
+                                            color: isCurrentSong
+                                                ? Colors.blue.shade100
+                                                    .withOpacity(0.8)
+                                                : Colors.white.withOpacity(0.6),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // 当前播放指示
+                                  if (isCurrentSong)
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.withOpacity(0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.volume_up_rounded,
+                                          color: Colors.blue,
+                                          size: 22,
+                                        ),
+                                      ),
+                                    )
+                                ],
                               ),
-                      ),
-                      trailing: isCurrentSong
-                          ? Icon(Icons.volume_up, color: Colors.blue, size: 20)
-                          : null,
-                      onTap: () {
-                        // 如果点击的不是当前播放的歌曲，切换到该歌曲
-                        if (!isCurrentSong) {
-                          _playSongFromList(song);
-                        }
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+                // 底部空间
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         );
       },
