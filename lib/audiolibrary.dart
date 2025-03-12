@@ -1,8 +1,10 @@
 import 'dart:collection';
+import 'dart:ui';
 
 import 'package:aloeplayer/settings.dart';
 import 'package:aloeplayer/webdav.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter/services.dart';
@@ -26,6 +28,17 @@ import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'mini_player.dart';
 import 'audio_player_service.dart';
 
+String pathToUri(String path) {
+  if (path.contains(':')) {
+    return Uri.parse(path).toString();
+  } else if (path.startsWith('/Photos')) {
+    return Uri.parse("file://media" + path).toString();
+  } else {
+    return Uri.parse("file://docs" + path).toString();
+  }
+  return path;
+}
+
 class AudioInfoEditor extends StatefulWidget {
   final String filePath;
 
@@ -48,6 +61,7 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
   late TextEditingController _lyricistController;
   late TextEditingController _commentController;
   late TextEditingController _lyricsController;
+  final SettingsService _settingsService = SettingsService();
 
   @override
   void initState() {
@@ -110,79 +124,318 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
     );
   }
 
+// 获取音频缩略图
+  Future<Uint8List?> _getAudioThumbnail(File file) async {
+    final filePath = file.path;
+    final metadata = readMetadata(file, getImage: true);
+    if (metadata.pictures.isNotEmpty) {
+      return metadata.pictures[0].bytes;
+    }
+    final coverNative =
+        await _settingsService.fetchCoverNative(pathToUri(file.path));
+    return coverNative;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('修改元信息'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.save),
-            onPressed: _saveMetadata,
+    File file = File(widget.filePath);
+    return FutureBuilder<Uint8List?>(
+      future: _getAudioThumbnail(file),
+      builder: (context, snapshot) {
+        final coverArt = snapshot.data;
+
+        return Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: AppBar(
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            title: Text('编辑元信息',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.white)),
+            actions: [
+              TextButton.icon(
+                icon: Icon(Icons.save_rounded, color: Colors.white),
+                label: Text('保存', style: TextStyle(color: Colors.white)),
+                onPressed: _saveMetadata,
+              ),
+            ],
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(labelText: '标题'),
-            ),
-            TextField(
-              controller: _artistController,
-              decoration: InputDecoration(labelText: '艺术家'),
-            ),
-            TextField(
-              controller: _albumController,
-              decoration: InputDecoration(labelText: '专辑'),
-            ),
-            TextField(
-              controller: _yearController,
-              decoration: InputDecoration(labelText: '年份'),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(
-              controller: _trackController,
-              decoration: InputDecoration(labelText: '音轨号'),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(
-              controller: _discController,
-              decoration: InputDecoration(labelText: '碟号'),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(
-              controller: _genreController,
-              decoration: InputDecoration(labelText: '风格'),
-            ),
-            TextField(
-              controller: _albumArtistController,
-              decoration: InputDecoration(labelText: '专辑艺术家'),
-            ),
-            TextField(
-              controller: _composerController,
-              decoration: InputDecoration(labelText: '作曲'),
-            ),
-            TextField(
-              controller: _lyricistController,
-              decoration: InputDecoration(labelText: '作词'),
-            ),
-            TextField(
-              controller: _commentController,
-              decoration: InputDecoration(labelText: '注释'),
-            ),
-            TextField(
-              controller: _lyricsController,
-              decoration: InputDecoration(labelText: '歌词'),
-              maxLines: 5,
-            ),
-            Text('注意：支持UTF-8的常见和ID3v2 tag。修改元信息可能会导致文件损坏，请谨慎操作。'),
-          ],
-        ),
-      ),
+          body: Stack(
+            children: [
+              // 背景层 - 专辑封面和模糊效果
+              if (coverArt != null)
+                Container(
+                  decoration: BoxDecoration(
+                    image: DecorationImage(
+                      image: MemoryImage(coverArt),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.3),
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.indigo.shade800,
+                        Colors.purple.shade900,
+                      ],
+                    ),
+                  ),
+                ),
+
+              // 内容层
+              SafeArea(
+                child: SingleChildScrollView(
+                  physics: BouncingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 封面显示区域
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Container(
+                            width: 200,
+                            height: 200,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 15,
+                                  offset: Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: coverArt != null
+                                  ? Image.memory(
+                                      coverArt,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Container(
+                                      color: Colors.grey.shade800,
+                                      child: Icon(
+                                        Icons.music_note,
+                                        size: 80,
+                                        color: Colors.white54,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // 表单区域
+                      Container(
+                        margin: EdgeInsets.symmetric(horizontal: 16),
+                        padding: EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.2),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '基本信息',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            SizedBox(height: 16),
+                            _buildTextField(
+                                _titleController, '标题', Icons.title),
+                            _buildTextField(
+                                _artistController, '艺术家', Icons.person),
+                            _buildTextField(
+                                _albumController, '专辑', Icons.album),
+                            _buildTextField(
+                                _yearController, '年份', Icons.calendar_today,
+                                keyboardType: TextInputType.number),
+                            SizedBox(height: 24),
+                            Text(
+                              '详细信息',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    _trackController,
+                                    '音轨号',
+                                    Icons.format_list_numbered,
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildTextField(
+                                    _discController,
+                                    '碟号',
+                                    Icons.album,
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            _buildTextField(
+                                _genreController, '风格', Icons.category),
+                            _buildTextField(
+                                _albumArtistController, '专辑艺术家', Icons.group),
+                            _buildTextField(
+                                _composerController, '作曲', Icons.music_note),
+                            _buildTextField(
+                                _lyricistController, '作词', Icons.edit),
+                            _buildTextField(
+                                _commentController, '注释', Icons.comment),
+                            SizedBox(height: 16),
+                            Text(
+                              '歌词',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white30,
+                                ),
+                              ),
+                              child: TextField(
+                                controller: _lyricsController,
+                                maxLines: 8,
+                                style: TextStyle(
+                                    color: Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.white
+                                        : Colors.black),
+                                decoration: InputDecoration(
+                                  contentPadding: EdgeInsets.all(16),
+                                  border: InputBorder.none,
+                                  hintText: '输入歌词...',
+                                  hintStyle: TextStyle(color: Colors.white54),
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 24),
+                            Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.orange.withOpacity(0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.warning_amber_rounded,
+                                      color: Colors.orange.shade300, size: 24),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      '修改元信息可能会导致文件损坏，请谨慎操作。支持UTF-8和ID3v2标签。',
+                                      style: TextStyle(
+                                        color: Colors.orange.shade100,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
+  }
+
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return Builder(builder: (context) {
+      final ThemeData theme = Theme.of(context);
+      final bool isDarkMode = theme.brightness == Brightness.dark;
+
+      // 根据主题亮暗模式选择颜色
+      final Color containerColor = isDarkMode
+          ? Colors.white.withOpacity(0.1)
+          : Colors.black.withOpacity(0.05);
+      final Color borderColor = isDarkMode ? Colors.white30 : Colors.black12;
+      final Color textColor = isDarkMode ? Colors.white : Colors.black;
+      final Color iconColor = isDarkMode ? Colors.white70 : Colors.black54;
+      final Color hintColor = isDarkMode ? Colors.white54 : Colors.black38;
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: containerColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: borderColor,
+            ),
+          ),
+          child: TextField(
+            controller: controller,
+            keyboardType: keyboardType,
+            style: TextStyle(color: textColor),
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.symmetric(vertical: 16),
+              border: InputBorder.none,
+              prefixIcon: Icon(icon, color: iconColor),
+              hintText: label,
+              hintStyle: TextStyle(color: hintColor),
+            ),
+          ),
+        ),
+      );
+    });
   }
 }
 
@@ -244,7 +497,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   String _searchQuery = '';
   bool _isGridView = true;
   final SettingsService _settingsService = SettingsService();
-
+  // 添加缓存
+  Map<String, Uint8List?> _thumbnailCache = {};
+  Map<String, Duration?> _durationCache = {};
   // For metadata sorted view
   late TabController _tabController;
   final List<String> _tabTitles = ["文件", "艺术家", "专辑", "歌曲"];
@@ -456,17 +711,6 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
       return firstChar;
     }
     return '#';
-  }
-
-  String pathToUri(String path) {
-    if (path.contains(':')) {
-      return Uri.parse(path).toString();
-    } else if (path.startsWith('/Photos')) {
-      return Uri.parse("file://media" + path).toString();
-    } else {
-      return Uri.parse("file://docs" + path).toString();
-    }
-    return path;
   }
 
   // Extract metadata from audio file
@@ -722,17 +966,29 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
 
   // 获取音频缩略图
   Future<Uint8List?> _getAudioThumbnail(File file) async {
+    final filePath = file.path;
+    if (_thumbnailCache.containsKey(filePath)) {
+      return _thumbnailCache[filePath];
+    }
     final metadata = readMetadata(file, getImage: true);
     if (metadata.pictures.isNotEmpty) {
+      _thumbnailCache[filePath] = metadata.pictures[0].bytes;
       return metadata.pictures[0].bytes;
     }
-    return await _settingsService.fetchCoverNative(pathToUri(file.path));
+    final coverNative =
+        await _settingsService.fetchCoverNative(pathToUri(file.path));
+    _thumbnailCache[filePath] = coverNative;
+    return coverNative;
   }
 
   // 获取音频时长
   Future<Duration> _getAudioDuration(File file) async {
     // final metadata = readMetadata(file, getImage: false);
     // return metadata.duration ?? Duration.zero;
+    final filePath = file.path;
+    if (_durationCache.containsKey(filePath)) {
+      return _durationCache[filePath] ?? Duration.zero;
+    }
     final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
     // 调用方法 getBatteryLevel
     final result = await _platform
@@ -740,6 +996,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
 
     // 将毫秒转换为 Duration 对象
     Duration duration = Duration(milliseconds: result ?? 0);
+    // 缓存结果
+    _durationCache[filePath] = duration;
     return duration;
   }
 
@@ -881,18 +1139,64 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     }
   }
 
+  Widget _buildActionMenuItem({
+    required BuildContext context,
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        child: Row(
+          children: [
+            Container(
+              height: 36,
+              width: 36,
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 15,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
     return Scaffold(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? Color(0xFF121212)
+            : Color(0xFFF5F5F5),
         // floatingActionButton: _buildSpeedDial(),
         appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Theme.of(context).brightness == Brightness.dark
+              ? Color(0xFF121212)
+              : Color(0xFFF5F5F5),
+          titleSpacing: 0,
           title: AnimatedContainer(
             duration: Duration(milliseconds: 300),
             width: double.infinity,
             height: 40,
-            margin: EdgeInsets.symmetric(horizontal: 8),
+            margin: EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               color: Theme.of(context).brightness == Brightness.dark
                   ? Colors.grey[800]
@@ -986,11 +1290,19 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
               ),
             ),
             PopupMenuButton<String>(
-              icon: Icon(Icons.add_rounded,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black),
-              tooltip: "添加视频",
+              icon: Icon(
+                Icons.add_rounded,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.black,
+              ),
+              tooltip: "添加音频",
+              elevation: 0,
+              offset: const Offset(0, 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              color: Colors.transparent,
               onSelected: (value) {
                 if (value == 'pick') {
                   _pickAudioWithFilePicker();
@@ -1002,48 +1314,108 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
               },
               itemBuilder: (context) => [
                 PopupMenuItem(
-                  value: 'pick',
-                  child: Row(
-                    children: [
-                      Icon(Icons.file_upload, color: Colors.lightBlue),
-                      SizedBox(width: 10),
-                      Text('选择音频文件'),
-                    ],
+                  padding: EdgeInsets.zero,
+                  value: null,
+                  enabled: false,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.black.withOpacity(0.6)
+                              : Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white.withOpacity(0.2)
+                                    : Colors.white.withOpacity(0.5),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Title
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                  vertical: 8.0,
+                                ),
+                                child: Text(
+                                  '添加音频',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.white
+                                        : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                              const Divider(height: 1, thickness: 1),
+
+                              // Add local video
+                              _buildActionMenuItem(
+                                context: context,
+                                title: '添加本地音频文件',
+                                icon: Icons.file_upload,
+                                iconColor: Colors.lightBlue,
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _pickAudioWithFilePicker();
+                                },
+                              ),
+
+                              // Create new folder
+                              _buildActionMenuItem(
+                                context: context,
+                                title: '新建文件夹',
+                                icon: Icons.create_new_folder,
+                                iconColor: Colors.lightBlue,
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _createNewFolder(context);
+                                },
+                              ),
+
+                              // WebDAV download
+                              _buildActionMenuItem(
+                                context: context,
+                                title: '从WebDAV下载',
+                                icon: Icons.cloud_upload_rounded,
+                                iconColor: Colors.lightBlue,
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _openWebDavFileManager(context);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'folder',
-                  child: Row(
-                    children: [
-                      Icon(Icons.create_new_folder, color: Colors.lightBlue),
-                      SizedBox(width: 10),
-                      Text('新建文件夹'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'webdav',
-                  child: Row(
-                    children: [
-                      Icon(Icons.cloud_upload_rounded, color: Colors.lightBlue),
-                      SizedBox(width: 10),
-                      Text('从WebDAV下载'),
-                    ],
-                  ),
-                )
               ],
             ),
             // IconButton(
             //   icon: Icon(Icons.webhook),
             //   onPressed: () => _openWebDavFileManager(context),
             // ),
-            IconButton(
-              icon: Icon(Icons.refresh,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black),
-              onPressed: _loadItems,
-            ),
+            // IconButton(
+            //   icon: Icon(Icons.refresh,
+            //       color: Theme.of(context).brightness == Brightness.dark
+            //           ? Colors.white
+            //           : Colors.black),
+            //   onPressed: _loadItems,
+            // ),
           ],
         ),
         body: _isLoading
@@ -1094,35 +1466,39 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
       return Center(child: Text('暂无音频'));
     }
 
-    return _isGridView
-        ? GridView.builder(
-            padding: EdgeInsets.all(8),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 0.8,
-            ),
-            itemCount: _filteredItems.length,
-            itemBuilder: (context, index) {
-              final file = _filteredItems[index];
-              if (file is Directory) {
-                return _buildFolderCard(file);
-              }
-              return _buildAudioCard(file);
-            },
-          )
-        : ListView.builder(
-            padding: EdgeInsets.all(8),
-            itemCount: _filteredItems.length,
-            itemBuilder: (context, index) {
-              final file = _filteredItems[index];
-              if (file is Directory) {
-                return _buildFolderListItem(file);
-              }
-              return _buildAudioCard(file, isListView: true);
-            },
-          );
+    return RefreshIndicator(
+        onRefresh: () async {
+          await _loadItems();
+        },
+        child: _isGridView
+            ? GridView.builder(
+                padding: EdgeInsets.all(8),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.8,
+                ),
+                itemCount: _filteredItems.length,
+                itemBuilder: (context, index) {
+                  final file = _filteredItems[index];
+                  if (file is Directory) {
+                    return _buildFolderCard(file);
+                  }
+                  return _buildAudioCard(file);
+                },
+              )
+            : ListView.builder(
+                padding: EdgeInsets.all(8),
+                itemCount: _filteredItems.length,
+                itemBuilder: (context, index) {
+                  final file = _filteredItems[index];
+                  if (file is Directory) {
+                    return _buildFolderListItem(file);
+                  }
+                  return _buildAudioCard(file, isListView: true);
+                },
+              ));
   }
 
   Widget _buildArtistsView() {
@@ -1134,11 +1510,35 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
       return Column(
         children: [
           Container(
+            margin: EdgeInsets.symmetric(vertical: 8),
             padding: EdgeInsets.all(16),
-            color: Colors.grey[200],
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.light
+                  ? Colors.grey[200]
+                  : Colors.grey[800],
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).shadowColor.withOpacity(0.12),
+                  blurRadius: 6,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
             child: Row(
               children: [
-                Icon(Icons.person, size: 40),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.person,
+                    size: 40,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ),
                 SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -1147,79 +1547,128 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                       Text(
                         _selectedArtist!,
                         style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold),
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).textTheme.titleLarge?.color,
+                        ),
                       ),
-                      Text('${songs.length} 首歌曲'),
+                      SizedBox(height: 4),
+                      Text(
+                        '${songs.length} 首歌曲',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.color
+                              ?.withOpacity(0.7),
+                        ),
+                      ),
                     ],
                   ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.play_circle_filled,
+                    color: Theme.of(context).primaryColor,
+                    size: 36,
+                  ),
+                  onPressed: () {
+                    // 播放该艺术家所有歌曲
+                  },
+                  tooltip: '播放全部',
                 ),
               ],
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: songs.length,
-              itemBuilder: (context, index) {
-                final song = songs[index];
-                return ListTile(
-                  leading: song.albumArt != null
-                      ? Image.memory(song.albumArt!, width: 50, height: 50)
-                      : Icon(Icons.music_note, size: 40),
-                  title: Text(song.title),
-                  subtitle: Text(song.album),
-                  onTap: () {
-                    // widget.getopenfile(song.filePath);
-                    // widget.changeTab(0);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            MusicPlayerPage(filePath: song.filePath),
-                      ),
+            child: RefreshIndicator(
+                onRefresh: () async {
+                  await _loadItems();
+                },
+                child: ListView.builder(
+                  itemCount: songs.length,
+                  itemBuilder: (context, index) {
+                    final song = songs[index];
+                    return ListTile(
+                      leading: song.albumArt != null
+                          ? Image.memory(song.albumArt!, width: 50, height: 50)
+                          : Icon(Icons.music_note, size: 40),
+                      title: Text(song.title),
+                      subtitle: Text(song.album),
+                      onTap: () {
+                        // widget.getopenfile(song.filePath);
+                        // widget.changeTab(0);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                MusicPlayerPage(filePath: song.filePath),
+                          ),
+                        );
+                      },
+                      trailing: _buildSongPopupMenu(song),
                     );
                   },
-                  trailing: _buildSongPopupMenu(song),
-                );
-              },
-            ),
+                )),
           ),
         ],
       );
     }
 
     // Show all artists
-    return ListView.builder(
-      itemCount: _artistCategories.length,
-      itemBuilder: (context, categoryIndex) {
-        final category = _artistCategories[categoryIndex];
+    return RefreshIndicator(
+        onRefresh: () async {
+          await _loadItems();
+        },
+        child: ListView.builder(
+          itemCount: _artistCategories.length,
+          itemBuilder: (context, categoryIndex) {
+            final category = _artistCategories[categoryIndex];
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              color: Colors.grey[200],
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              width: double.infinity,
-              child: Text(
-                category.name,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            ),
-            ...category.items.map((item) {
-              final artistName = item['name'];
-              final artistSongs = item['items'];
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.light
+                        ? Colors.grey[200]
+                        : Colors.grey[800],
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context).shadowColor.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  width: double.infinity,
+                  child: Text(
+                    category.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Theme.of(context).textTheme.titleLarge?.color,
+                    ),
+                  ),
+                ),
+                ...category.items.map((item) {
+                  final artistName = item['name'];
+                  final artistSongs = item['items'];
 
-              return ListTile(
-                leading: Icon(Icons.person),
-                title: Text(artistName),
-                subtitle: Text('${artistSongs.length} 首歌曲'),
-                onTap: () => _viewArtistSongs(artistName),
-              );
-            }).toList(),
-          ],
-        );
-      },
-    );
+                  return ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text(artistName),
+                    subtitle: Text('${artistSongs.length} 首歌曲'),
+                    onTap: () => _viewArtistSongs(artistName),
+                  );
+                }).toList(),
+              ],
+            );
+          },
+        ));
   }
 
   Widget _buildAlbumsView() {
@@ -1236,102 +1685,324 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
       return Column(
         children: [
           Container(
-            padding: EdgeInsets.all(16),
-            color: Colors.grey[200],
-            child: Row(
-              children: [
-                albumArt != null
-                    ? Image.memory(albumArt, width: 80, height: 80)
-                    : Icon(Icons.album, size: 80),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _selectedAlbum!,
-                        style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      Text('${songs.length} 首歌曲'),
-                      if (songs.isNotEmpty) Text(songs[0].artist),
-                    ],
-                  ),
+            margin: EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.light
+                  ? Colors.grey[200]
+                  : Colors.grey[800],
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).shadowColor.withOpacity(0.12),
+                  blurRadius: 6,
+                  offset: Offset(0, 3),
                 ),
               ],
             ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Row(
+                children: [
+                  // 专辑封面区域
+                  Container(
+                    width: 100,
+                    height: 100,
+                    child: albumArt != null
+                        ? Image.memory(
+                            albumArt,
+                            fit: BoxFit.cover,
+                            width: 100,
+                            height: 100,
+                          )
+                        : Container(
+                            color:
+                                Theme.of(context).primaryColor.withOpacity(0.2),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.album,
+                              size: 60,
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
+                  ),
+                  // 专辑信息区域
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _selectedAlbum!,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color:
+                                  Theme.of(context).textTheme.titleLarge?.color,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            '${songs.length} 首歌曲',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.color
+                                  ?.withOpacity(0.7),
+                            ),
+                          ),
+                          if (songs.isNotEmpty)
+                            Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Text(
+                                songs[0].artist,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.color,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // 播放按钮
+                  Padding(
+                    padding: EdgeInsets.only(right: 12),
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.play_circle_filled,
+                        color: Theme.of(context).primaryColor,
+                        size: 36,
+                      ),
+                      onPressed: () {
+                        // 播放该专辑所有歌曲
+                      },
+                      tooltip: '播放全部',
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: songs.length,
-              itemBuilder: (context, index) {
-                final song = songs[index];
-                return ListTile(
-                  leading: Text(
-                    song.trackNumber > 0 ? song.trackNumber.toString() : '-',
-                    style: TextStyle(fontSize: 18),
-                  ),
-                  title: Text(song.title),
-                  subtitle: Text(song.artist),
-                  onTap: () {
-                    // widget.getopenfile(song.filePath);
-                    // widget.changeTab(0);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            MusicPlayerPage(filePath: song.filePath),
+            child: RefreshIndicator(
+                onRefresh: () async {
+                  await _loadItems();
+                },
+                child: ListView.builder(
+                  itemCount: songs.length,
+                  itemBuilder: (context, index) {
+                    final song = songs[index];
+                    return ListTile(
+                      leading: Text(
+                        song.trackNumber > 0
+                            ? song.trackNumber.toString()
+                            : '-',
+                        style: TextStyle(fontSize: 18),
                       ),
+                      title: Text(song.title),
+                      subtitle: Text(song.artist),
+                      onTap: () {
+                        // widget.getopenfile(song.filePath);
+                        // widget.changeTab(0);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                MusicPlayerPage(filePath: song.filePath),
+                          ),
+                        );
+                      },
+                      trailing: _buildSongPopupMenu(song),
                     );
                   },
-                  trailing: _buildSongPopupMenu(song),
-                );
-              },
-            ),
+                )),
           ),
         ],
       );
     }
 
     // Show all albums
-    return _isGridView
-        ? GridView.builder(
-            padding: EdgeInsets.all(8),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.8,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-            ),
-            itemCount: _albumCategories.length,
-            itemBuilder: (context, categoryIndex) {
-              final category = _albumCategories[categoryIndex];
+    return RefreshIndicator(
+        onRefresh: () async {
+          await _loadItems();
+        },
+        child: _isGridView
+            ? GridView.builder(
+                padding: EdgeInsets.all(8),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.8,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                ),
+                itemCount: _albumCategories.length,
+                itemBuilder: (context, categoryIndex) {
+                  final category = _albumCategories[categoryIndex];
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    color: Colors.grey[200],
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    width: double.infinity,
-                    child: Text(
-                      category.name,
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                  ),
-                  Expanded(
-                    child: GridView.builder(
-                      physics: NeverScrollableScrollPhysics(),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 0.8,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color:
+                              Theme.of(context).brightness == Brightness.light
+                                  ? Colors.grey[200]
+                                  : Colors.grey[800],
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Theme.of(context)
+                                  .shadowColor
+                                  .withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        width: double.infinity,
+                        child: Text(
+                          category.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color:
+                                Theme.of(context).textTheme.titleLarge?.color,
+                          ),
+                        ),
                       ),
-                      itemCount: category.items.length,
-                      itemBuilder: (context, index) {
-                        final album = category.items[index];
-                        final albumName = album['name'];
-                        final albumSongs = album['items'];
+                      Expanded(
+                        child: GridView.builder(
+                          physics: NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.8,
+                          ),
+                          itemCount: category.items.length,
+                          itemBuilder: (context, index) {
+                            final album = category.items[index];
+                            final albumName = album['name'];
+                            final albumSongs = album['items'];
+
+                            Uint8List? albumArt;
+                            if (albumSongs.isNotEmpty &&
+                                albumSongs[0].albumArt != null) {
+                              albumArt = albumSongs[0].albumArt;
+                            }
+
+                            return GestureDetector(
+                              onTap: () => _viewAlbumSongs(albumName),
+                              child: Card(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: albumArt != null
+                                          ? Image.memory(albumArt,
+                                              fit: BoxFit.cover,
+                                              width: double.infinity)
+                                          : Container(
+                                              color: Colors.grey[300],
+                                              child: Center(
+                                                  child: Icon(Icons.album,
+                                                      size: 50)),
+                                            ),
+                                    ),
+                                    Padding(
+                                      padding: EdgeInsets.all(8),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            albumName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                          if (albumSongs.isNotEmpty)
+                                            Text(
+                                              albumSongs[0].artist,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(fontSize: 12),
+                                            ),
+                                          Text(
+                                            '${albumSongs.length} 首歌曲',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              )
+            : ListView.builder(
+                itemCount: _albumCategories.length,
+                itemBuilder: (context, categoryIndex) {
+                  final category = _albumCategories[categoryIndex];
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color:
+                              Theme.of(context).brightness == Brightness.light
+                                  ? Colors.grey[200]
+                                  : Colors.grey[800],
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Theme.of(context)
+                                  .shadowColor
+                                  .withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        width: double.infinity,
+                        child: Text(
+                          category.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color:
+                                Theme.of(context).textTheme.titleLarge?.color,
+                          ),
+                        ),
+                      ),
+                      ...category.items.map((item) {
+                        final albumName = item['name'];
+                        final albumSongs = item['items'];
 
                         Uint8List? albumArt;
                         if (albumSongs.isNotEmpty &&
@@ -1339,155 +2010,532 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                           albumArt = albumSongs[0].albumArt;
                         }
 
-                        return GestureDetector(
+                        return ListTile(
+                          leading: albumArt != null
+                              ? Image.memory(albumArt,
+                                  width: 50, height: 50, fit: BoxFit.cover)
+                              : Icon(Icons.album, size: 40),
+                          title: Text(albumName),
+                          subtitle: Text('${albumSongs.length} 首歌曲'),
                           onTap: () => _viewAlbumSongs(albumName),
-                          child: Card(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: albumArt != null
-                                      ? Image.memory(albumArt,
-                                          fit: BoxFit.cover,
-                                          width: double.infinity)
-                                      : Container(
-                                          color: Colors.grey[300],
-                                          child: Center(
-                                              child:
-                                                  Icon(Icons.album, size: 50)),
-                                        ),
-                                ),
-                                Padding(
-                                  padding: EdgeInsets.all(8),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        albumName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold),
-                                      ),
-                                      if (albumSongs.isNotEmpty)
-                                        Text(
-                                          albumSongs[0].artist,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                      Text(
-                                        '${albumSongs.length} 首歌曲',
-                                        style: TextStyle(
-                                            fontSize: 12, color: Colors.grey),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         );
-                      },
-                    ),
-                  ),
-                ],
-              );
-            },
-          )
-        : ListView.builder(
-            itemCount: _albumCategories.length,
-            itemBuilder: (context, categoryIndex) {
-              final category = _albumCategories[categoryIndex];
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    color: Colors.grey[200],
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    width: double.infinity,
-                    child: Text(
-                      category.name,
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                  ),
-                  ...category.items.map((item) {
-                    final albumName = item['name'];
-                    final albumSongs = item['items'];
-
-                    Uint8List? albumArt;
-                    if (albumSongs.isNotEmpty &&
-                        albumSongs[0].albumArt != null) {
-                      albumArt = albumSongs[0].albumArt;
-                    }
-
-                    return ListTile(
-                      leading: albumArt != null
-                          ? Image.memory(albumArt,
-                              width: 50, height: 50, fit: BoxFit.cover)
-                          : Icon(Icons.album, size: 40),
-                      title: Text(albumName),
-                      subtitle: Text('${albumSongs.length} 首歌曲'),
-                      onTap: () => _viewAlbumSongs(albumName),
-                    );
-                  }).toList(),
-                ],
-              );
-            },
-          );
+                      }).toList(),
+                    ],
+                  );
+                },
+              ));
   }
 
   Widget _buildSongsView() {
-    return ListView.builder(
-      itemCount: _songCategories.length,
-      itemBuilder: (context, categoryIndex) {
-        final category = _songCategories[categoryIndex];
+    return RefreshIndicator(
+        onRefresh: () async {
+          await _loadItems();
+        },
+        child: ListView.builder(
+          itemCount: _songCategories.length,
+          itemBuilder: (context, categoryIndex) {
+            final category = _songCategories[categoryIndex];
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              color: Colors.grey[200],
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              width: double.infinity,
-              child: Text(
-                category.name,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            ),
-            ...category.items.map((item) {
-              final songs = item['items'];
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.light
+                        ? Colors.grey[200]
+                        : Colors.grey[800],
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context).shadowColor.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  width: double.infinity,
+                  child: Text(
+                    category.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Theme.of(context).textTheme.titleLarge?.color,
+                    ),
+                  ),
+                ),
+                ...category.items.map((item) {
+                  final songs = item['items'];
 
-              return Column(
-                children: songs.map<Widget>((song) {
-                  return ListTile(
-                    leading: song.albumArt != null
-                        ? Image.memory(song.albumArt!, width: 50, height: 50)
-                        : Icon(Icons.music_note, size: 40),
-                    title: Text(song.title),
-                    subtitle: Text('${song.artist} • ${song.album}'),
-                    onTap: () {
-                      // widget.getopenfile(song.filePath);
-                      // widget.changeTab(0);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              MusicPlayerPage(filePath: song.filePath),
-                        ),
+                  return Column(
+                    children: songs.map<Widget>((song) {
+                      return ListTile(
+                        leading: song.albumArt != null
+                            ? Image.memory(song.albumArt!,
+                                width: 50, height: 50)
+                            : Icon(Icons.music_note, size: 40),
+                        title: Text(song.title),
+                        subtitle: Text('${song.artist} • ${song.album}'),
+                        onTap: () {
+                          // widget.getopenfile(song.filePath);
+                          // widget.changeTab(0);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  MusicPlayerPage(filePath: song.filePath),
+                            ),
+                          );
+                        },
+                        trailing: _buildSongPopupMenu(song),
                       );
-                    },
-                    trailing: _buildSongPopupMenu(song),
+                    }).toList(),
                   );
                 }).toList(),
-              );
-            }).toList(),
+              ],
+            );
+          },
+        ));
+  }
+
+  // 添加弹出菜单的方法
+  void _showFolderOptions(Directory directory) {
+    final folderName = path.basename(directory.path);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 20),
+          margin: EdgeInsets.fromLTRB(10, 0, 10, 10),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? Colors.grey[900]!.withOpacity(0.8)
+                : Colors.white.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.1),
+              width: 0.5,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFFFCA28).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.folder_rounded,
+                        size: 36,
+                        color: Color(0xFFFFCA28),
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        folderName,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isDarkMode ? Colors.white : Colors.black87,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(
+                height: 30,
+                color: isDarkMode
+                    ? Colors.white.withOpacity(0.2)
+                    : Colors.black.withOpacity(0.1),
+              ),
+              _buildFolderOptionTile(
+                icon: Icons.drive_file_rename_outline,
+                title: "重命名",
+                color: Colors.blue,
+                onTap: () {
+                  Navigator.pop(context);
+                  _renameFolder(directory);
+                },
+                isDarkMode: isDarkMode,
+              ),
+              _buildFolderOptionTile(
+                icon: Icons.delete_outline,
+                title: "删除",
+                color: Colors.red,
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteFolder(directory);
+                },
+                isDarkMode: isDarkMode,
+              ),
+              _buildFolderOptionTile(
+                icon: Icons.info_outline,
+                title: "详细信息",
+                color: Colors.green,
+                onTap: () {
+                  Navigator.pop(context);
+                  _showFolderDetails(directory);
+                },
+                isDarkMode: isDarkMode,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFolderOptionTile({
+    required IconData icon,
+    required String title,
+    required Color color,
+    required VoidCallback onTap,
+    required bool isDarkMode,
+  }) {
+    return ListTile(
+      leading: Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(isDarkMode ? 0.2 : 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: color),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: isDarkMode ? Colors.white : Colors.black87,
+        ),
+      ),
+      onTap: onTap,
+      contentPadding: EdgeInsets.symmetric(horizontal: 20),
+    );
+  }
+
+// 重命名文件夹
+  void _renameFolder(Directory directory) {
+    final TextEditingController controller = TextEditingController();
+    controller.text = path.basename(directory.path);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        backgroundColor: isDarkMode ? Colors.grey[850] : Colors.white,
+        title: Text(
+          "重命名文件夹",
+          style: TextStyle(
+            color: isDarkMode ? Colors.white : Colors.black87,
+          ),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: TextStyle(
+            color: isDarkMode ? Colors.white : Colors.black87,
+          ),
+          decoration: InputDecoration(
+            hintText: "输入新的文件夹名称",
+            hintStyle: TextStyle(
+              color: isDarkMode ? Colors.white70 : Colors.black45,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: isDarkMode ? Colors.white30 : Colors.black26,
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: isDarkMode ? Colors.white30 : Colors.black26,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: Color(0xFFFFCA28),
+              ),
+            ),
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: isDarkMode ? Colors.grey[800] : Colors.grey[50],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "取消",
+              style: TextStyle(
+                color: isDarkMode ? Colors.white70 : Colors.grey[700],
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty &&
+                  controller.text != path.basename(directory.path)) {
+                final newPath =
+                    path.join(path.dirname(directory.path), controller.text);
+                try {
+                  directory.renameSync(newPath);
+                  // 更新UI状态
+                  _loadItems();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('重命名成功'),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('重命名失败: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+              Navigator.pop(context);
+            },
+            child: Text("确认"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFFFFCA28),
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: isDarkMode ? 0 : 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+// 确认删除文件夹
+  void _confirmDeleteFolder(Directory directory) {
+    final folderName = path.basename(directory.path);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        backgroundColor: isDarkMode ? Colors.grey[850] : Colors.white,
+        title: Text(
+          "删除文件夹",
+          style: TextStyle(
+            color: isDarkMode ? Colors.white : Colors.black87,
+          ),
+        ),
+        content: Text(
+          "确定要删除文件夹 \"$folderName\" 及其所有内容吗？此操作不可撤销。",
+          style: TextStyle(
+            color: isDarkMode ? Colors.white70 : Colors.black87,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "取消",
+              style: TextStyle(
+                color: isDarkMode ? Colors.white70 : Colors.grey[700],
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              try {
+                directory.deleteSync(recursive: true);
+                // 更新UI状态
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('文件夹已删除'),
+                    backgroundColor: Colors.green,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('删除失败: ${e.toString()}'),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+              Navigator.pop(context);
+            },
+            child: Text("删除"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: isDarkMode ? 0 : 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+// 显示文件夹详情
+  void _showFolderDetails(Directory directory) async {
+    final folderName = path.basename(directory.path);
+    final stats = await directory.stat();
+    final modified = DateFormat('yyyy-MM-dd HH:mm:ss').format(stats.modified);
+    final accessed = DateFormat('yyyy-MM-dd HH:mm:ss').format(stats.accessed);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    // 计算文件夹大小和内容数量
+    int totalSize = 0;
+    int fileCount = 0;
+    int folderCount = 0;
+
+    try {
+      await for (final entity in directory.list(recursive: true)) {
+        if (entity is File) {
+          fileCount++;
+          totalSize += await entity.length();
+        } else if (entity is Directory) {
+          folderCount++;
+        }
+      }
+    } catch (e) {
+      print('Error calculating folder size: $e');
+    }
+
+    String formattedSize = '';
+    if (totalSize < 1024) {
+      formattedSize = '$totalSize B';
+    } else if (totalSize < 1024 * 1024) {
+      formattedSize = '${(totalSize / 1024).toStringAsFixed(2)} KB';
+    } else if (totalSize < 1024 * 1024 * 1024) {
+      formattedSize = '${(totalSize / (1024 * 1024)).toStringAsFixed(2)} MB';
+    } else {
+      formattedSize =
+          '${(totalSize / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        backgroundColor: isDarkMode ? Colors.grey[850] : Colors.white,
+        title: Row(
+          children: [
+            Icon(Icons.folder_rounded, color: Color(0xFFFFCA28)),
+            SizedBox(width: 8),
+            Text(
+              "文件夹详情",
+              style: TextStyle(
+                color: isDarkMode ? Colors.white : Colors.black87,
+              ),
+            ),
           ],
-        );
-      },
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetailItem("名称", folderName, isDarkMode),
+              _buildDetailItem("路径", directory.path, isDarkMode),
+              _buildDetailItem("大小", formattedSize, isDarkMode),
+              _buildDetailItem("文件数量", "$fileCount 个文件", isDarkMode),
+              _buildDetailItem("文件夹数量", "$folderCount 个文件夹", isDarkMode),
+              _buildDetailItem("修改时间", modified, isDarkMode),
+              _buildDetailItem("访问时间", accessed, isDarkMode),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("确定"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFFFFCA28),
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: isDarkMode ? 0 : 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailItem(String label, String value, bool isDarkMode) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w400,
+              color: isDarkMode ? Colors.white : Colors.black87,
+            ),
+          ),
+          SizedBox(height: 4),
+          Divider(
+            height: 1,
+            color: isDarkMode
+                ? Colors.white.withOpacity(0.1)
+                : Colors.black.withOpacity(0.1),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1502,6 +2550,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           onTap: () {
             _navigateToDirectory(directory);
           },
+          onLongPress: () => _showFolderOptions(directory),
           borderRadius: BorderRadius.circular(12),
           child: Card(
             elevation: 2,
@@ -1585,6 +2634,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           onTap: () {
             _navigateToDirectory(directory);
           },
+          onLongPress: () => _showFolderOptions(directory),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -1728,103 +2778,182 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   void _showAudioOptions(File file) {
     showModalBottomSheet(
       context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(15.0)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return Wrap(
-          children: [
-            ListTile(
-              leading: Icon(Icons.play_arrow, color: Colors.green),
-              title: Text('播放'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => MusicPlayerPage(filePath: file.path),
+        final theme = Theme.of(context);
+        final isDarkMode = theme.brightness == Brightness.dark;
+
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+          child: Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? theme.colorScheme.surface.withOpacity(0.9)
+                  : Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  spreadRadius: 0,
+                )
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 顶部指示器
+                Container(
+                  margin: EdgeInsets.only(top: 12, bottom: 8),
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurface.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                );
-              },
-            ),
-            ListTile(
-                leading: Icon(Icons.play_circle_fill_sharp, color: Colors.blue),
-                title: Text('使用视频播放器播放'),
-                onTap: () {
-                  widget.getopenfile(file.path!); // 更新_openfile状态
-                  widget.startPlayerPage(context);
-                }),
-            ListTile(
-              leading: Icon(Icons.edit, color: Colors.blue),
-              title: Text('元信息修改'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AudioInfoEditor(filePath: file.path),
+                ),
+                // 标题
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 16.0),
+                  child: Text(
+                    '音频选项',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
-                ).then((_) => _loadItems());
-              },
+                ),
+                // 选项列表
+                _buildOptionTile(
+                  icon: Icons.play_arrow,
+                  iconColor: Colors.green,
+                  title: '播放',
+                  theme: theme,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            MusicPlayerPage(filePath: file.path),
+                      ),
+                    );
+                  },
+                ),
+                _buildDivider(theme),
+                _buildOptionTile(
+                  icon: Icons.play_circle_fill_sharp,
+                  iconColor: Colors.blue,
+                  title: '使用视频播放器播放',
+                  theme: theme,
+                  onTap: () {
+                    widget.getopenfile(file.path); // 更新_openfile状态
+                    widget.startPlayerPage(context);
+                  },
+                ),
+                _buildDivider(theme),
+                _buildOptionTile(
+                  icon: Icons.edit,
+                  iconColor: Colors.blue,
+                  title: '元信息修改',
+                  theme: theme,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            AudioInfoEditor(filePath: file.path),
+                      ),
+                    ).then((_) => _loadItems());
+                  },
+                ),
+                _buildDivider(theme),
+                _buildOptionTile(
+                  icon: Icons.share,
+                  iconColor: Colors.purple,
+                  title: '分享',
+                  theme: theme,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Share.shareXFiles([XFile(file.path)]);
+                  },
+                ),
+                _buildDivider(theme),
+                _buildOptionTile(
+                  icon: Icons.delete,
+                  iconColor: Colors.red,
+                  title: '删除',
+                  theme: theme,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _confirmDeleteDialog(file);
+                  },
+                ),
+                SizedBox(height: 16),
+              ],
             ),
-            ListTile(
-              leading: Icon(Icons.share, color: Colors.purple),
-              title: Text('分享'),
-              onTap: () {
-                Navigator.pop(context);
-                Share.shareXFiles([XFile(file.path)]);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.delete, color: Colors.red),
-              title: Text('删除'),
-              onTap: () {
-                Navigator.pop(context);
-                _confirmDeleteDialog(file);
-              },
-            ),
-          ],
+          ),
         );
       },
     );
   }
 
+  Widget _buildOptionTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required VoidCallback onTap,
+    required ThemeData theme,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: iconColor, size: 24),
+            ),
+            SizedBox(width: 16),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider(ThemeData theme) {
+    return Divider(
+      height: 1,
+      thickness: 0.5,
+      indent: 64,
+      endIndent: 16,
+      color: theme.colorScheme.onSurface.withOpacity(0.3),
+    );
+  }
+
   Widget _buildSongPopupMenu(AudioMetadataLite song) {
-    return PopupMenuButton(
+    return IconButton(
       icon: Icon(Icons.more_vert),
-      onSelected: (value) {
-        if (value == 'play') {
-          // widget.getopenfile(song.filePath);
-          // widget.changeTab(0);
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => MusicPlayerPage(filePath: song.filePath),
-            ),
-          );
-        } else if (value == 'edit') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => AudioInfoEditor(filePath: song.filePath),
-            ),
-          ).then((_) => _loadItems());
-        } else if (value == 'share') {
-          Share.shareXFiles([XFile(song.filePath)]);
-        } else if (value == 'delete') {
-          _confirmDeleteDialog(File(song.filePath));
-        } else if (value == 'playwithvideo') {
-          widget.getopenfile(song.filePath);
-          widget.startPlayerPage(context);
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(value: 'play', child: Text('播放')),
-        PopupMenuItem(value: 'playwithvideo', child: Text('使用视频播放器播放')),
-        PopupMenuItem(value: 'edit', child: Text('编辑元数据')),
-        PopupMenuItem(value: 'share', child: Text('分享')),
-        PopupMenuItem(value: 'delete', child: Text('删除')),
-      ],
+      onPressed: () => _showAudioOptions(File(song.filePath)),
     );
   }
 

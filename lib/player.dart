@@ -409,27 +409,117 @@ class _PlayerTabState extends State<PlayerTab>
 
     String? selectedTrack = await showDialog<String>(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('选择音轨'),
-          content: SingleChildScrollView(
-            child: Column(
-              children: [
-                const Text(
-                  '选择非音频轨道可能会导致错误。0一般为视频轨。然后是音频轨。其他轨道可能是字幕轨道。',
-                  style: TextStyle(color: Colors.red),
-                ),
-                ListBody(
-                  children: audioTracks.map((track) {
-                    return ListTile(
-                      title: Text(track),
-                      onTap: () {
-                        Navigator.of(context).pop(track); // 返回选中的音轨
-                      },
-                    );
-                  }).toList(),
-                ),
-              ],
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Dialog(
+            backgroundColor: Colors.white.withOpacity(0.85),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20.0),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '选择音轨',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.withOpacity(0.3)),
+                    ),
+                    child: const Text(
+                      '选择非音频轨道可能会导致错误。0一般为视频轨。然后是音频轨。其他轨道可能是字幕轨道。',
+                      style: TextStyle(color: Colors.red, fontSize: 14),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.4,
+                    ),
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        children: audioTracks.map((track) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.blue.withOpacity(0.2),
+                              ),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 4),
+                              leading: const Icon(Icons.audio_file,
+                                  color: Colors.blue),
+                              title: Text(
+                                track,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              trailing: const Icon(Icons.chevron_right,
+                                  color: Colors.blue),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              onTap: () {
+                                Navigator.of(context).pop(track);
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.blue.withOpacity(0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 12, horizontal: 24),
+                    ),
+                    child: const Text(
+                      '取消',
+                      style: TextStyle(
+                        color: Colors.blue,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -1719,21 +1809,140 @@ class _PlayerTabState extends State<PlayerTab>
     // 显示字幕选择对话框
     int? selectedIndex = await showDialog<int>(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
       builder: (context) {
-        return AlertDialog(
-          title: Text('选择字幕轨道'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: _subtitles
-                .asMap()
-                .entries
-                .map(
-                  (entry) => ListTile(
-                    title: Text(entry.value.name),
-                    onTap: () => Navigator.pop(context, entry.key),
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Dialog(
+            backgroundColor: Colors.white.withOpacity(0.85),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20.0),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
                   ),
-                )
-                .toList(),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Center(
+                    child: Text(
+                      '选择字幕轨道',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.4,
+                    ),
+                    child: _subtitles.isEmpty
+                        ? Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: Colors.amber.withOpacity(0.3)),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                '没有可用的字幕轨道',
+                                style: TextStyle(
+                                    color: Colors.amber, fontSize: 16),
+                              ),
+                            ),
+                          )
+                        : SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              children: _subtitles
+                                  .asMap()
+                                  .entries
+                                  .map(
+                                    (entry) => Container(
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.purple.withOpacity(0.05),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: Colors.purple.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      child: ListTile(
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 4,
+                                        ),
+                                        leading: const Icon(
+                                          Icons.subtitles,
+                                          color: Colors.purple,
+                                        ),
+                                        title: Text(
+                                          entry.value.name,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        trailing: const Icon(
+                                          Icons.chevron_right,
+                                          color: Colors.purple,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        onTap: () =>
+                                            Navigator.pop(context, entry.key),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 15),
+                  Center(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.purple.withOpacity(0.1),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 24,
+                        ),
+                      ),
+                      child: const Text(
+                        '取消',
+                        style: TextStyle(
+                          color: Colors.purple,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -1905,6 +2114,50 @@ class _PlayerTabState extends State<PlayerTab>
     );
   }
 
+  // 辅助方法，创建菜单项
+  Widget _buildThemeMenuItem(
+      BuildContext context, ThemeMode mode, Icon icon, String text) {
+    // 获取当前主题模式
+    ThemeMode currentMode = Provider.of<ThemeProvider>(context).themeMode;
+    bool isSelected = currentMode == mode;
+
+    return InkWell(
+      onTap: () {
+        Provider.of<ThemeProvider>(context, listen: false).setThemeMode(mode);
+        Navigator.of(context).pop(); // 关闭菜单
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: isSelected
+              ? Theme.of(context).primaryColor.withOpacity(0.2)
+              : Colors.transparent,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            icon,
+            SizedBox(width: 12),
+            Text(
+              text,
+              style: TextStyle(
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+            Spacer(),
+            if (isSelected)
+              Icon(
+                Icons.check_circle_outline,
+                color: Theme.of(context).primaryColor,
+                size: 18,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // super.build(context);
@@ -1939,50 +2192,95 @@ class _PlayerTabState extends State<PlayerTab>
                           icon: Icon(Icons.share)),
                       // 主题切换按钮
                       PopupMenuButton<ThemeMode>(
-                        icon: Icon(Icons.brightness_medium), // 主题切换图标
+                        icon: Icon(Icons.brightness_medium),
+                        offset: Offset(0, 10), // 菜单偏移量，让菜单不会太贴近图标
+                        elevation: 0, // 移除默认阴影
+                        color: Colors.transparent, // 透明背景色
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16), // 圆角边框
+                        ),
                         onSelected: (ThemeMode mode) {
-                          // 切换主题
                           Provider.of<ThemeProvider>(context, listen: false)
                               .setThemeMode(mode);
                         },
-                        itemBuilder: (BuildContext context) =>
-                            <PopupMenuEntry<ThemeMode>>[
-                          // 亮色主题
-                          PopupMenuItem<ThemeMode>(
-                            value: ThemeMode.light,
-                            child: Row(
-                              children: [
-                                Icon(Icons.brightness_high,
-                                    color: Colors.orange),
-                                SizedBox(width: 8),
-                                Text('亮色主题'),
-                              ],
+                        itemBuilder: (BuildContext context) {
+                          // 获取当前亮暗主题
+                          bool isDarkMode =
+                              Theme.of(context).brightness == Brightness.dark;
+
+                          // 返回包含BackdropFilter的项目列表
+                          return [
+                            // 使用一个自定义PopupMenuItem包装真正的选项
+                            PopupMenuItem<ThemeMode>(
+                              enabled: false, // 禁用此项，因为它只是容器
+                              height: 0, // 设为0使其不占用额外空间
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(
+                                      sigmaX: 10, sigmaY: 10), // 高斯模糊效果
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: isDarkMode
+                                          ? Colors.grey[900]!.withOpacity(0.7)
+                                          : Colors.white.withOpacity(0.7),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: isDarkMode
+                                            ? Colors.white.withOpacity(0.1)
+                                            : Colors.black.withOpacity(0.1),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // 亮色主题选项
+                                        _buildThemeMenuItem(
+                                            context,
+                                            ThemeMode.light,
+                                            Icon(Icons.brightness_high,
+                                                color: Colors.orange),
+                                            '亮色主题'),
+
+                                        Divider(
+                                            height: 1,
+                                            color:
+                                                Colors.grey.withOpacity(0.3)),
+
+                                        // 暗色主题选项
+                                        _buildThemeMenuItem(
+                                            context,
+                                            ThemeMode.dark,
+                                            Icon(Icons.brightness_2,
+                                                color: Colors.blue),
+                                            '暗色主题'),
+
+                                        Divider(
+                                            height: 1,
+                                            color:
+                                                Colors.grey.withOpacity(0.3)),
+
+                                        // 跟随系统选项
+                                        _buildThemeMenuItem(
+                                            context,
+                                            ThemeMode.system,
+                                            Icon(Icons.settings_suggest,
+                                                color: Colors.grey),
+                                            '跟随系统'),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                          // 暗色主题
-                          PopupMenuItem<ThemeMode>(
-                            value: ThemeMode.dark,
-                            child: Row(
-                              children: [
-                                Icon(Icons.brightness_2, color: Colors.blue),
-                                SizedBox(width: 8),
-                                Text('暗色主题'),
-                              ],
-                            ),
-                          ),
-                          // 跟随系统
-                          PopupMenuItem<ThemeMode>(
-                            value: ThemeMode.system,
-                            child: Row(
-                              children: [
-                                Icon(Icons.settings, color: Colors.grey),
-                                SizedBox(width: 8),
-                                Text('跟随系统'),
-                              ],
-                            ),
-                          ),
-                        ],
+                          ];
+                        },
                       ),
+
+// 不要忘记导入
+// import 'dart:ui'; // 为 ImageFilter.blur 导入
                     ],
                   ),
             body: GestureDetector(

@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.aloereed.aloeplayer",
     "vendor": "example",
-    "versionCode": 22,
-    "versionName": "2.0.0",
+    "versionCode": 23,
+    "versionName": "2.0.1",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }

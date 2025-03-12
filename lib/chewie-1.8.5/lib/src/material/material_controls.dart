@@ -728,6 +728,17 @@ class _MaterialControlsState extends State<MaterialControls>
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  if (!chewieController.isLive)
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.only(right: 20),
+                        child: Row(
+                          children: [
+                            _buildProgressBar(),
+                          ],
+                        ),
+                      ),
+                    ),
                   Flexible(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -764,17 +775,6 @@ class _MaterialControlsState extends State<MaterialControls>
                   SizedBox(
                     height: chewieController.isFullScreen ? 15.0 : 0,
                   ),
-                  if (!chewieController.isLive)
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.only(right: 20),
-                        child: Row(
-                          children: [
-                            _buildProgressBar(),
-                          ],
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -801,32 +801,26 @@ class _MaterialControlsState extends State<MaterialControls>
       child: AnimatedOpacity(
         opacity: notifier.hideStuff ? 0.0 : 1.0,
         duration: const Duration(milliseconds: 300),
-        child: ClipRect(
-          child: Container(
-              height: barHeight,
-              padding: const EdgeInsets.only(
-                left: 6.0,
-              ),
+        child: Container(
+          height: barHeight + (chewieController.isFullScreen ? 15.0 : 0),
+          margin: const EdgeInsets.only(right: 6.0),
+          padding: const EdgeInsets.only(
+            left: 4.0,
+            right: 4.0,
+          ),
+          child: Center(
               child: Stack(
-                children: <Widget>[
-                  // 黑色描边图标
-                  // Icon(
-                  //   _latestValue.volume > 0
-                  //       ? Icons.volume_up
-                  //       : Icons.volume_off,
-                  //   color: Colors.black,
-                  //   size: 26.0, // 可以根据需要调整大小
-                  // ),
-                  // 白色图标
-                  Icon(
+            children: <Widget>[
+              // 白色图标
+              Icon(
                     _latestValue.volume > 0
                         ? Icons.volume_up
                         : Icons.volume_off,
                     color: Colors.white,
                     size: 24.0, // 比黑色图标稍微小一点，以形成描边效果
                   ),
-                ],
-              )),
+            ],
+          )),
         ),
       ),
     );
@@ -841,22 +835,24 @@ class _MaterialControlsState extends State<MaterialControls>
       child: AnimatedOpacity(
         opacity: notifier.hideStuff ? 0.0 : 1.0,
         duration: const Duration(milliseconds: 300),
-        child: ClipRect(
-          child: Container(
-              height: barHeight,
-              padding: const EdgeInsets.only(
-                left: 6.0,
-              ),
+        child: Container(
+          height: barHeight + (chewieController.isFullScreen ? 15.0 : 0),
+          margin: const EdgeInsets.only(right: 6.0),
+          padding: const EdgeInsets.only(
+            left: 4.0,
+            right: 4.0,
+          ),
+          child: Center(
               child: Stack(
-                children: <Widget>[
-                  // 白色图标
-                  Icon(
+            children: <Widget>[
+              // 白色图标
+              Icon(
                     Icons.skip_next,
                     color: Colors.white,
                     size: 24.0, // 比黑色图标稍微小一点，以形成描边效果
                   ),
-                ],
-              )),
+            ],
+          )),
         ),
       ),
     );
@@ -871,25 +867,28 @@ class _MaterialControlsState extends State<MaterialControls>
       child: AnimatedOpacity(
         opacity: notifier.hideStuff ? 0.0 : 1.0,
         duration: const Duration(milliseconds: 300),
-        child: ClipRect(
-          child: Container(
-              height: barHeight,
-              padding: const EdgeInsets.only(
-                left: 6.0,
-              ),
+        child: Container(
+          height: barHeight + (chewieController.isFullScreen ? 15.0 : 0),
+          margin: const EdgeInsets.only(right: 6.0),
+          padding: const EdgeInsets.only(
+            left: 4.0,
+            right: 4.0,
+          ),
+          child: Center(
               child: Stack(
-                children: <Widget>[
-                  // 白色图标
-                  Icon(
+            children: <Widget>[
+              // 白色图标
+              Icon(
                     Icons.skip_previous,
                     color: Colors.white,
                     size: 24.0, // 比黑色图标稍微小一点，以形成描边效果
                   ),
-                ],
-              )),
+            ],
+          )),
         ),
       ),
     );
+
   }
 
   GestureDetector _buildExpandButton() {
@@ -945,7 +944,7 @@ class _MaterialControlsState extends State<MaterialControls>
         duration: const Duration(milliseconds: 300),
         child: Container(
           height: barHeight + (chewieController.isFullScreen ? 15.0 : 0),
-          margin: const EdgeInsets.only(right: 12.0),
+          margin: const EdgeInsets.only(right: 6.0),
           padding: const EdgeInsets.only(
             left: 8.0,
             right: 8.0,
@@ -953,14 +952,6 @@ class _MaterialControlsState extends State<MaterialControls>
           child: Center(
               child: Stack(
             children: <Widget>[
-              // 黑色描边图标
-              // Icon(
-              //   chewieController.isFullScreen
-              //       ? Icons.fullscreen_exit
-              //       : Icons.fullscreen,
-              //   color: Colors.black,
-              //   size: 26.0, // 描边图标稍微大一点
-              // ),
               // 白色图标
               Icon(
                 isBackgroundBlurred ? Icons.visibility_off : Icons.visibility,
@@ -1051,6 +1042,7 @@ class _MaterialControlsState extends State<MaterialControls>
     final chosenSpeed = await showModalBottomSheet<double>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       useRootNavigator: chewieController.useRootNavigator,
       builder: (context) => PlaybackSpeedDialog(
         speeds: chewieController.playbackSpeeds,

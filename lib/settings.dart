@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-10 21:22:02
+ * @LastEditTime: 2025-03-12 14:09:12
  * @Description: file content
  */
 import 'dart:convert';
@@ -16,7 +16,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'theme_provider.dart'; // 假设你已经有一个ThemeProvider
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
+enum SortType {
+  none,
+  name,
+  modifiedDate
+}
 
+enum SortOrder {
+  ascending,
+  descending
+}
 class SettingsService {
   static const String _fontSizeKey = 'subtitle_font_size';
   static const String _backgroundPlayKey = 'background_play';
@@ -29,6 +38,8 @@ class SettingsService {
   static const String _usePlaylist = 'use_playlist';
   static const String _useSeekToLatest = 'use_seek_to_latest';
   static const String _useInnerThumbnail = 'use_inner_thumbnail';
+  static const String _versionName = '2.0.1';
+  static const int _versionNumber = 23;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -58,7 +69,7 @@ class SettingsService {
     // 假设返回的是一个 Base64 字符串
     const platform = MethodChannel('samples.flutter.dev/ffmpegplugin');
     final String base64String =
-        await platform.invokeMethod<String>('fetchCover', {'uri': uri})??"";
+        await platform.invokeMethod<String>('fetchCover', {'uri': uri}) ?? "";
     return base64String;
   }
 
@@ -72,14 +83,13 @@ class SettingsService {
     try {
       // 调用 fetchCover 获取 Base64 字符串
       final String base64String = await fetchCover(uri);
-      if(base64String == ""){
+      if (base64String == "") {
         return null;
       }
       // 将 Base64 字符串转换为 Uint8List
       final Uint8List uint8List = base64ToUint8List(base64String);
 
       return uint8List;
-
     } catch (e) {
       print('Error: $e');
       return null;
@@ -685,7 +695,7 @@ class _SettingsTabState extends State<SettingsTab> {
                   SizedBox(height: 8),
                   Text('AloePlayer', style: TextStyle(fontSize: 16)),
                   SizedBox(height: 4),
-                  Text('版本号: 2.0.0',
+                  Text('版本号: ${SettingsService._versionName}',
                       style: TextStyle(fontSize: 14, color: Colors.grey)),
                   SizedBox(height: 4),
                   Text('尽享视听盛宴',
@@ -750,6 +760,24 @@ class _SettingsTabState extends State<SettingsTab> {
                     },
                     child: Text(
                       '沪ICP备2025110508号-2A',
+                      style: TextStyle(
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  GestureDetector(
+                    onTap: () {
+                      showLicensePage(
+                        context: context,
+                        applicationName: 'AloePlayer',
+                        applicationVersion: SettingsService._versionName,
+                        applicationLegalese: '© 2025 Aloereed',
+                      );
+                    },
+                    child: Text(
+                      '开源项目和许可',
                       style: TextStyle(
                         color: Colors.blue,
                         decoration: TextDecoration.underline,

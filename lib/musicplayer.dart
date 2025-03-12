@@ -10,6 +10,8 @@ import 'package:audio_metadata_reader/audio_metadata_reader.dart'
 import 'package:rxdart/rxdart.dart';
 import 'settings.dart';
 import 'audio_player_service.dart';
+import 'package:flutter_lyric/lyrics_reader.dart';
+import 'lyrics_page.dart';
 // enum LoopMode { off, all, one }
 
 class BlurredIconButton extends StatelessWidget {
@@ -91,7 +93,196 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
   List<Map<String, String>> _playlist = [];
   final AudioPlayerService _audioService = AudioPlayerService();
   late StreamSubscription<String> _controllerChangeSubscription;
+  late dynamic _lyricModel;
+  final UINetease _lyricUI = UINetease();
+  late LyricUISettings _lyricSettings;
+  bool _isLoadingSettings = true;
+  bool _isTapProgressBar = false;
+  bool _hasInitializedLyrics = false;
   // 定义循环模式
+  // 初始化歌词UI样式
+  void _setLyricUI() {
+    _lyricUI.defaultSize = _lyricSettings.defaultSize; // 主歌词字体大小
+    _lyricUI.defaultExtSize = _lyricSettings.defaultExtSize; // 副歌词字体大小
+    _lyricUI.lineGap = _lyricSettings.lineGap; // 行间距
+    _lyricUI.inlineGap = _lyricSettings.inlineGap; // 主副歌词间距
+    _lyricUI.lyricAlign = _lyricSettings.lyricAlign; // 歌词对齐方式
+    _lyricUI.highlightDirection = _lyricSettings.highlightDirection; // 高亮方向
+    _lyricUI.highlight = _lyricSettings.highlight; // 启用高亮
+    _lyricUI.bias = _lyricSettings.bias; // 选中行偏移比例
+    _lyricUI.lyricBaseLine = _lyricSettings.lyricBaseLine; // 偏移基准线
+  }
+
+  Future<void> _loadSettings() async {
+    _lyricSettings = await LyricUISettings.loadFromPrefs();
+    setState(() {
+      _isLoadingSettings = false;
+      _setLyricUI();
+    });
+  }
+
+  void _showLyricSettings() async {
+    if (_isLoadingSettings) return;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: LyricSettingsDialog(
+            initialSettings: _lyricSettings,
+            onApplySettings: (settings) {
+              setState(() {
+                _lyricSettings = settings;
+                _setLyricUI();
+              });
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Map<String, String> parseDualLanguageLyrics(String lrcContent) {
+    // Output maps for original and translated lyrics
+    Map<int, String> originalLyricsMap = {};
+    Map<int, String> translationLyricsMap = {};
+    bool hasDualLanguage = false;
+
+    // Support flexible time formats, including hours, minutes, seconds, milliseconds
+    final RegExp timeTagRegex = RegExp(r'\[(\d+):(\d+)(?::(\d+))?\.(\d+)\]');
+    final lines = lrcContent.split('\n');
+
+    for (var line in lines) {
+      if (line.trim().isEmpty) continue;
+      final matches = timeTagRegex.allMatches(line);
+      if (matches.isEmpty) continue;
+
+      String text = line.replaceAll(timeTagRegex, '').trim();
+      if (text.isEmpty) continue;
+
+      for (var match in matches) {
+        String group1 = match.group(1)!;
+        String group2 = match.group(2)!;
+        String? group3 = match.group(3);
+        String fraction = match.group(4)!;
+
+        // Parse hours, minutes, seconds
+        int hours = 0;
+        int minutes = 0;
+        int seconds = 0;
+        int milliseconds = 0;
+
+        if (group3 != null) {
+          hours = int.parse(group1);
+          minutes = int.parse(group2);
+          seconds = int.parse(group3);
+        } else {
+          minutes = int.parse(group1);
+          seconds = int.parse(group2);
+        }
+
+        // Process milliseconds with different precisions
+        switch (fraction.length) {
+          case 1:
+            milliseconds =
+                int.parse(fraction) * 100; // 0.1 second -> 100 milliseconds
+            break;
+          case 2:
+            milliseconds =
+                int.parse(fraction) * 10; // 0.01 second -> 10 milliseconds
+            break;
+          default:
+            milliseconds = int.parse(
+                fraction.substring(0, 3)); // Take the first three digits
+        }
+
+        // Calculate total milliseconds
+        int totalMs =
+            hours * 3600000 + minutes * 60000 + seconds * 1000 + milliseconds;
+
+        // Check if the timestamp already has lyrics (dual language check)
+        if (originalLyricsMap.containsKey(totalMs)) {
+          // If this timestamp already has original lyrics, we consider this as translation
+          translationLyricsMap.update(
+            totalMs,
+            (existing) => '$existing\n$text',
+            ifAbsent: () => text,
+          );
+          hasDualLanguage = true;
+        } else {
+          // First occurrence is considered original language
+          originalLyricsMap[totalMs] = text;
+        }
+      }
+    }
+
+    // Rebuild LRC content for both languages
+    String originalLrcContent = '';
+    String translationLrcContent = '';
+
+    // Sort timestamps to maintain correct order
+    List<int> sortedTimestamps = originalLyricsMap.keys.toList()..sort();
+
+    for (var timestamp in sortedTimestamps) {
+      String timeTag = _formatTimeTag(timestamp);
+      originalLrcContent += '$timeTag${originalLyricsMap[timestamp]}\n';
+
+      if (hasDualLanguage && translationLyricsMap.containsKey(timestamp)) {
+        translationLrcContent += '$timeTag${translationLyricsMap[timestamp]}\n';
+      }
+    }
+
+    return {
+      'original': originalLrcContent.trim(),
+      'translation': hasDualLanguage ? translationLrcContent.trim() : '',
+    };
+  }
+
+// Helper function to format timestamp back to LRC time tag
+  String _formatTimeTag(int milliseconds) {
+    int totalSeconds = milliseconds ~/ 1000;
+    int minutes = totalSeconds ~/ 60;
+    int seconds = totalSeconds % 60;
+    int remainingMillis = milliseconds % 1000;
+
+    return '[${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}.${remainingMillis.toString().padLeft(3, '0')}]';
+  }
+
+  // 替换原来的_parseLyrics方法
+  void _parseLyrics(String lrcContent) {
+    if (lrcContent.isEmpty) {
+      setState(() {
+        _lyricModel = LyricsModelBuilder.create().getModel();
+        _hasInitializedLyrics = true;
+      });
+      return;
+    }
+
+    // 使用flutter_lyric包解析歌词
+    Map<String, String> lyricsMap = parseDualLanguageLyrics(lrcContent);
+    String originalLyrics = lyricsMap['original'] ?? '';
+    String translationLyrics = lyricsMap['translation'] ?? '';
+    if (translationLyrics.isNotEmpty) {
+      setState(() {
+        _lyricModel = LyricsModelBuilder.create()
+            .bindLyricToMain(originalLyrics)
+            .bindLyricToExt(translationLyrics)
+            .getModel();
+        _hasInitializedLyrics = true;
+      });
+      return;
+    }
+    setState(() {
+      _lyricModel =
+          LyricsModelBuilder.create().bindLyricToMain(lrcContent).getModel();
+      _hasInitializedLyrics = true;
+    });
+  }
 
   // LoopMode _loopMode get {}
   // 设置get方法 loopMode 返回_audioService.loopMode
@@ -109,6 +300,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
   @override
   void initState() async {
     super.initState();
+    _loadSettings();
     _usePlaylist = await _settingsService.getUsePlaylist();
     _getPlaylist(widget.filePath);
     _initPlayer();
@@ -368,8 +560,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
           print("lyrics: $lyrics");
           if (lyrics == '') {
             setState(() {
-              _lrcContent = '暂无歌词';
-              _lyrics = [LyricsLine(timeMs: 0, text: '暂无歌词')];
+              _lrcContent = '[00:00.000]暂无歌词';
+              _parseLyrics(_lrcContent);
             });
           } else {
             setState(() {
@@ -379,16 +571,16 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
           }
         } catch (e) {
           setState(() {
-            _lrcContent = '暂无歌词';
-            _lyrics = [LyricsLine(timeMs: 0, text: '暂无歌词')];
+            _lrcContent = '[00:00.000]暂无歌词';
+            _parseLyrics(_lrcContent);
           });
         }
       }
     } catch (e) {
       print('加载歌词失败: $e');
       setState(() {
-        _lrcContent = '加载歌词失败';
-        _lyrics = [LyricsLine(timeMs: 0, text: '加载歌词失败')];
+        _lrcContent = '[00:00.000]暂无歌词';
+        _parseLyrics(_lrcContent);
       });
     }
   }
@@ -657,111 +849,121 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     startNewPlay(song['path']!);
   }
 
-  void _parseLyrics(String lrcContent) {
-    Map<int, String> lyricsMap = {};
+  // void _parseLyrics(String lrcContent) {
+  //   Map<int, String> lyricsMap = {};
 
-    // 支持灵活的时间格式，包括小时、分钟、秒、毫秒
-    final RegExp timeTagRegex = RegExp(r'\[(\d+):(\d+)(?::(\d+))?\.(\d+)\]');
+  //   // 支持灵活的时间格式，包括小时、分钟、秒、毫秒
+  //   final RegExp timeTagRegex = RegExp(r'\[(\d+):(\d+)(?::(\d+))?\.(\d+)\]');
 
-    final lines = lrcContent.split('\n');
+  //   final lines = lrcContent.split('\n');
 
-    for (var line in lines) {
-      if (line.trim().isEmpty) continue;
+  //   for (var line in lines) {
+  //     if (line.trim().isEmpty) continue;
 
-      final matches = timeTagRegex.allMatches(line);
-      if (matches.isEmpty) continue;
+  //     final matches = timeTagRegex.allMatches(line);
+  //     if (matches.isEmpty) continue;
 
-      String text = line.replaceAll(timeTagRegex, '').trim();
-      if (text.isEmpty) continue;
+  //     String text = line.replaceAll(timeTagRegex, '').trim();
+  //     if (text.isEmpty) continue;
 
-      for (var match in matches) {
-        String group1 = match.group(1)!;
-        String group2 = match.group(2)!;
-        String? group3 = match.group(3);
-        String fraction = match.group(4)!;
+  //     for (var match in matches) {
+  //       String group1 = match.group(1)!;
+  //       String group2 = match.group(2)!;
+  //       String? group3 = match.group(3);
+  //       String fraction = match.group(4)!;
 
-        int hours = 0;
-        int minutes = 0;
-        int seconds = 0;
-        int milliseconds = 0;
+  //       int hours = 0;
+  //       int minutes = 0;
+  //       int seconds = 0;
+  //       int milliseconds = 0;
 
-        // 解析小时、分钟、秒
-        if (group3 != null) {
-          hours = int.parse(group1);
-          minutes = int.parse(group2);
-          seconds = int.parse(group3);
-        } else {
-          minutes = int.parse(group1);
-          seconds = int.parse(group2);
-        }
+  //       // 解析小时、分钟、秒
+  //       if (group3 != null) {
+  //         hours = int.parse(group1);
+  //         minutes = int.parse(group2);
+  //         seconds = int.parse(group3);
+  //       } else {
+  //         minutes = int.parse(group1);
+  //         seconds = int.parse(group2);
+  //       }
 
-        // 处理不同精度的毫秒
-        switch (fraction.length) {
-          case 1:
-            milliseconds = int.parse(fraction) * 100; // 0.1秒 -> 100毫秒
-            break;
-          case 2:
-            milliseconds = int.parse(fraction) * 10; // 0.01秒 -> 10毫秒
-            break;
-          default:
-            milliseconds = int.parse(fraction.substring(0, 3)); // 截取前三位
-        }
+  //       // 处理不同精度的毫秒
+  //       switch (fraction.length) {
+  //         case 1:
+  //           milliseconds = int.parse(fraction) * 100; // 0.1秒 -> 100毫秒
+  //           break;
+  //         case 2:
+  //           milliseconds = int.parse(fraction) * 10; // 0.01秒 -> 10毫秒
+  //           break;
+  //         default:
+  //           milliseconds = int.parse(fraction.substring(0, 3)); // 截取前三位
+  //       }
 
-        // 计算总毫秒数
-        int totalMs =
-            hours * 3600000 + minutes * 60000 + seconds * 1000 + milliseconds;
+  //       // 计算总毫秒数
+  //       int totalMs =
+  //           hours * 3600000 + minutes * 60000 + seconds * 1000 + milliseconds;
 
-        // 合并相同时间点的歌词
-        lyricsMap.update(
-          totalMs,
-          (existing) => '$existing\n$text',
-          ifAbsent: () => text,
-        );
-      }
-    }
+  //       // 合并相同时间点的歌词
+  //       lyricsMap.update(
+  //         totalMs,
+  //         (existing) => '$existing\n$text',
+  //         ifAbsent: () => text,
+  //       );
+  //     }
+  //   }
 
-    // 转换为有序列表
-    List<LyricsLine> lyrics = lyricsMap.entries
-        .map((e) => LyricsLine(timeMs: e.key, text: e.value))
-        .toList()
-      ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
+  //   // 转换为有序列表
+  //   List<LyricsLine> lyrics = lyricsMap.entries
+  //       .map((e) => LyricsLine(timeMs: e.key, text: e.value))
+  //       .toList()
+  //     ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
 
-    setState(() => _lyrics = lyrics);
-  }
+  //   setState(() => _lyrics = lyrics);
+  // }
 
+  // void _updateLyricPosition(Duration position) {
+  //   if (_lyrics.isEmpty || !_showLyrics) return;
+
+  //   // 找到当前时间对应的歌词
+  //   int currentIndex = 0;
+  //   for (int i = 0; i < _lyrics.length; i++) {
+  //     if (i == _lyrics.length - 1 ||
+  //         _lyrics[i + 1].timeMs > position.inMilliseconds) {
+  //       currentIndex = i;
+  //       break;
+  //     }
+  //   }
+
+  //   // 仅当显示歌词页面且控制器已初始化时滚动
+  //   if (_lyricsScrollController.hasClients) {
+  //     // 获取可视区域高度
+  //     final containerHeight = MediaQuery.of(context).size.height * 0.4;
+  //     final itemHeight = 60.0;
+
+  //     // 计算中心位置
+  //     final centerPosition = max(0,
+  //         currentIndex * itemHeight - (containerHeight / 2) + (itemHeight / 2));
+
+  //     // 使用带动画的滚动，但只有当位置变化较大或是关键歌词时才滚动
+  //     if ((currentIndex % 3 == 0) ||
+  //         (_lyricsScrollController.offset - centerPosition).abs() >
+  //             itemHeight) {
+  //       _lyricsScrollController.animateTo(
+  //         centerPosition * 1.0,
+  //         duration: Duration(milliseconds: 300),
+  //         curve: Curves.easeOutCubic,
+  //       );
+  //     }
+  //   }
+  // }
+
+  // 替换原来的_updateLyricPosition方法
   void _updateLyricPosition(Duration position) {
-    if (_lyrics.isEmpty || !_showLyrics) return;
-
-    // 找到当前时间对应的歌词
-    int currentIndex = 0;
-    for (int i = 0; i < _lyrics.length; i++) {
-      if (i == _lyrics.length - 1 ||
-          _lyrics[i + 1].timeMs > position.inMilliseconds) {
-        currentIndex = i;
-        break;
-      }
-    }
-
-    // 仅当显示歌词页面且控制器已初始化时滚动
-    if (_lyricsScrollController.hasClients) {
-      // 获取可视区域高度
-      final containerHeight = MediaQuery.of(context).size.height * 0.4;
-      final itemHeight = 60.0;
-
-      // 计算中心位置
-      final centerPosition = max(0,
-          currentIndex * itemHeight - (containerHeight / 2) + (itemHeight / 2));
-
-      // 使用带动画的滚动，但只有当位置变化较大或是关键歌词时才滚动
-      if ((currentIndex % 3 == 0) ||
-          (_lyricsScrollController.offset - centerPosition).abs() >
-              itemHeight) {
-        _lyricsScrollController.animateTo(
-          centerPosition * 1.0,
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-        );
-      }
+    // flutter_lyric包会自动处理歌词滚动，所以这个方法可以简化
+    if (!_isTapProgressBar) {
+      setState(() {
+        // 更新当前播放进度，用于歌词显示
+      });
     }
   }
 
@@ -800,36 +1002,72 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: GestureDetector(
-        onHorizontalDragEnd: (details) {
-          if (details.primaryVelocity! < 0) {
-            // 向左滑动，显示歌词
-            setState(() {
-              _showLyrics = true;
-            });
-          } else if (details.primaryVelocity! > 0) {
-            // 向右滑动，显示封面
-            setState(() {
-              _showLyrics = false;
-            });
-          }
-        },
-        onTap: () {
-          setState(() {
-            _showLyrics = !_showLyrics;
-          });
-        },
-        child: Stack(
-          children: [
-            // 背景 - 模糊的专辑封面
-            _buildBlurredBackground(),
+    // 获取屏幕宽度
+    final screenWidth = MediaQuery.of(context).size.width;
+    // 定义一个阈值，超过这个宽度就认为是平板布局
+    final isTabletLayout = screenWidth > 600; // 600dp是一个常用的平板判断阈值
 
-            // 主内容
-            _showLyrics ? _buildLyricsPage() : _buildPlayerPage(),
+    return Scaffold(
+      body: isTabletLayout
+          ? _buildTabletLayout() // 平板布局
+          : _buildPhoneLayout(), // 手机布局
+    );
+  }
+
+// 手机布局 - 保持原来的滑动切换逻辑
+  Widget _buildPhoneLayout() {
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        if (details.primaryVelocity! < 0) {
+          // 向左滑动，显示歌词
+          setState(() {
+            _showLyrics = true;
+          });
+        } else if (details.primaryVelocity! > 0) {
+          // 向右滑动，显示封面
+          setState(() {
+            _showLyrics = false;
+          });
+        }
+      },
+      onTap: () {
+        setState(() {
+          _showLyrics = !_showLyrics;
+        });
+      },
+      child: Stack(
+        children: [
+          // 背景 - 模糊的专辑封面
+          _buildBlurredBackground(),
+          // 主内容
+          _showLyrics ? _buildLyricsPage() : _buildPlayerPage(),
+        ],
+      ),
+    );
+  }
+
+// 平板布局 - 左边播放器，右边歌词
+  Widget _buildTabletLayout() {
+    return Stack(
+      children: [
+        // 背景 - 模糊的专辑封面
+        _buildBlurredBackground(),
+        // 分屏显示
+        Row(
+          children: [
+            // 左侧播放器，占用40%宽度
+            Expanded(
+              flex: 4,
+              child: _buildPlayerPage(),
+            ),
+            // 右侧歌词，占用60%宽度
+            Expanded(
+              flex: 6,
+              child: _buildLyricsPage(isPhone: false),
+            ),
           ],
         ),
-      ),
+      ],
     );
   }
 
@@ -884,120 +1122,225 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     );
   }
 
-  Widget _buildLyricsPage() {
+  // Widget _buildLyricsPage() {
+  //   return SafeArea(
+  //     child: Column(
+  //       children: [
+  //         // 歌曲信息
+  //         _buildSongInfo(),
+
+  //         // 小封面
+  //         Padding(
+  //           padding: const EdgeInsets.symmetric(vertical: 20),
+  //           child: ClipRRect(
+  //             borderRadius: BorderRadius.circular(20),
+  //             child: _coverBytes != null
+  //                 ? Image.memory(
+  //                     _coverBytes!,
+  //                     width: 120,
+  //                     height: 120,
+  //                     fit: BoxFit.cover,
+  //                   )
+  //                 : Container(
+  //                     width: 120,
+  //                     height: 120,
+  //                     color: Colors.grey.shade800,
+  //                     child: const Icon(Icons.music_note,
+  //                         size: 60, color: Colors.white),
+  //                   ),
+  //           ),
+  //         ),
+
+  //         // 歌词显示部分
+  //         Expanded(
+  //           child: Padding(
+  //             padding: const EdgeInsets.symmetric(horizontal: 20),
+  //             child: _buildSimpleLyricWidget(),
+  //           ),
+  //         ),
+
+  //         // 进度条
+  //         _buildProgressBar(),
+
+  //         // 播放控件
+  //         _buildPlayControls(),
+  //       ],
+  //     ),
+  //   );
+  // }
+
+  // Widget _buildSimpleLyricWidget() {
+  //   // 找到当前应该高亮显示的歌词索引
+  //   int currentIndex = 0;
+  //   for (int i = 0; i < _lyrics.length; i++) {
+  //     if (i == _lyrics.length - 1 ||
+  //         _lyrics[i + 1].timeMs > _position.inMilliseconds) {
+  //       currentIndex = i;
+  //       break;
+  //     }
+  //   }
+
+  //   // 计算可视区域高度
+  //   final screenHeight = MediaQuery.of(context).size.height;
+  //   // 预估的歌词容器高度 (考虑其他UI元素后的剩余空间)
+  //   final containerHeight = screenHeight * 0.4; // 假设歌词区域占屏幕高度的40%
+  //   final itemHeight = 60.0; // 每行歌词高度
+
+  //   // 如果需要滚动到当前播放的歌词
+  //   if (_lyricsScrollController.hasClients) {
+  //     // 计算中心位置
+  //     final centerPosition = max(0,
+  //         currentIndex * itemHeight - (containerHeight / 2) + (itemHeight / 2));
+
+  //     // 使用带动画的滚动
+  //     WidgetsBinding.instance.addPostFrameCallback((_) {
+  //       if (mounted && _lyricsScrollController.hasClients) {
+  //         _lyricsScrollController.animateTo(
+  //           centerPosition * 1.0,
+  //           duration: Duration(milliseconds: 300),
+  //           curve: Curves.easeOutCubic,
+  //         );
+  //       }
+  //     });
+  //   }
+
+  //   return LayoutBuilder(builder: (context, constraints) {
+  //     final availableHeight = constraints.maxHeight;
+
+  //     return ListView.builder(
+  //       controller: _lyricsScrollController,
+  //       itemCount: _lyrics.length,
+  //       itemBuilder: (context, index) {
+  //         // 当前播放的歌词使用不同样式
+  //         final isCurrentLyric = index == currentIndex;
+
+  //         return Container(
+  //           height: itemHeight,
+  //           alignment: Alignment.center,
+  //           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+  //           child: Text(
+  //             _lyrics[index].text,
+  //             style: TextStyle(
+  //               color: isCurrentLyric
+  //                   ? Colors.white
+  //                   : Colors.white.withOpacity(0.5),
+  //               fontSize: isCurrentLyric ? 18 : 16,
+  //               fontWeight:
+  //                   isCurrentLyric ? FontWeight.bold : FontWeight.normal,
+  //             ),
+  //             textAlign: TextAlign.center,
+  //             maxLines: 2,
+  //             overflow: TextOverflow.ellipsis,
+  //           ),
+  //         );
+  //       },
+  //     );
+  //   });
+  // }
+
+  // 替换原来的_buildLyricsPage方法
+  Widget _buildLyricsPage({bool isPhone = true}) {
     return SafeArea(
       child: Column(
         children: [
           // 歌曲信息
-          _buildSongInfo(),
+          if (isPhone) _buildSongInfo(),
 
           // 小封面
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: _coverBytes != null
-                  ? Image.memory(
-                      _coverBytes!,
-                      width: 120,
-                      height: 120,
-                      fit: BoxFit.cover,
-                    )
-                  : Container(
-                      width: 120,
-                      height: 120,
-                      color: Colors.grey.shade800,
-                      child: const Icon(Icons.music_note,
-                          size: 60, color: Colors.white),
-                    ),
+          if (isPhone)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: _coverBytes != null
+                    ? Image.memory(
+                        _coverBytes!,
+                        width: 120,
+                        height: 120,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        width: 120,
+                        height: 120,
+                        color: Colors.grey.shade800,
+                        child: const Icon(Icons.music_note,
+                            size: 60, color: Colors.white),
+                      ),
+              ),
             ),
-          ),
 
           // 歌词显示部分
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _buildSimpleLyricWidget(),
+              padding: EdgeInsets.symmetric(horizontal: 20,vertical: isPhone?0: 100),
+              child: _buildLyricWidget(isPhone: isPhone),
             ),
           ),
 
           // 进度条
-          _buildProgressBar(),
+          if (isPhone) _buildProgressBar(),
 
           // 播放控件
-          _buildPlayControls(),
+          if (isPhone) _buildPlayControls(),
         ],
       ),
     );
   }
 
-  Widget _buildSimpleLyricWidget() {
-    // 找到当前应该高亮显示的歌词索引
-    int currentIndex = 0;
-    for (int i = 0; i < _lyrics.length; i++) {
-      if (i == _lyrics.length - 1 ||
-          _lyrics[i + 1].timeMs > _position.inMilliseconds) {
-        currentIndex = i;
-        break;
-      }
-    }
-
-    // 计算可视区域高度
-    final screenHeight = MediaQuery.of(context).size.height;
-    // 预估的歌词容器高度 (考虑其他UI元素后的剩余空间)
-    final containerHeight = screenHeight * 0.4; // 假设歌词区域占屏幕高度的40%
-    final itemHeight = 60.0; // 每行歌词高度
-
-    // 如果需要滚动到当前播放的歌词
-    if (_lyricsScrollController.hasClients) {
-      // 计算中心位置
-      final centerPosition = max(0,
-          currentIndex * itemHeight - (containerHeight / 2) + (itemHeight / 2));
-
-      // 使用带动画的滚动
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _lyricsScrollController.hasClients) {
-          _lyricsScrollController.animateTo(
-            centerPosition * 1.0,
-            duration: Duration(milliseconds: 300),
-            curve: Curves.easeOutCubic,
-          );
-        }
-      });
-    }
-
-    return LayoutBuilder(builder: (context, constraints) {
-      final availableHeight = constraints.maxHeight;
-
-      return ListView.builder(
-        controller: _lyricsScrollController,
-        itemCount: _lyrics.length,
-        itemBuilder: (context, index) {
-          // 当前播放的歌词使用不同样式
-          final isCurrentLyric = index == currentIndex;
-
-          return Container(
-            height: itemHeight,
-            alignment: Alignment.center,
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-            child: Text(
-              _lyrics[index].text,
-              style: TextStyle(
-                color: isCurrentLyric
-                    ? Colors.white
-                    : Colors.white.withOpacity(0.5),
-                fontSize: isCurrentLyric ? 18 : 16,
-                fontWeight:
-                    isCurrentLyric ? FontWeight.bold : FontWeight.normal,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          );
-        },
+// 替换原来的_buildSimpleLyricWidget方法
+  Widget _buildLyricWidget({bool isPhone = true}) {
+    // 创建flutter_lyric包的歌词显示组件
+    if (!_hasInitializedLyrics) {
+      return Center(
+        child: CircularProgressIndicator(),
       );
-    });
+    }
+
+    return Stack(
+      children: [
+        // 如果需要背景效果，可以在这里添加背景
+        // 例如：毛玻璃效果等，参考示例中的buildReaderBackground()
+
+        LyricsReader(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          model: _lyricModel,
+          position: _position.inMilliseconds,
+          lyricUi: _lyricUI,
+          playing: _isPlaying,
+          size: Size(double.infinity, isPhone ? MediaQuery.of(context).size.height / 2: MediaQuery.of(context).size.height/1.2),
+          emptyBuilder: () => Center(
+            child: Text(
+              "暂无歌词",
+              style: _lyricUI.getOtherMainTextStyle(),
+            ),
+          ),
+          selectLineBuilder: (progress, confirm) {
+            return Row(
+              children: [
+                IconButton(
+                  onPressed: () {
+                    confirm.call();
+                    _controller.seekTo(Duration(milliseconds: progress));
+                  },
+                  icon: Icon(Icons.play_arrow, color: Colors.green),
+                ),
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(color: Colors.green),
+                    height: 1,
+                    width: double.infinity,
+                  ),
+                ),
+                Text(
+                  _formatDuration(Duration(milliseconds: progress)),
+                  style: TextStyle(color: Colors.green),
+                )
+              ],
+            );
+          },
+        ),
+      ],
+    );
   }
 
   Widget _buildSongInfo() {
@@ -1232,36 +1575,118 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true, // Allows more control over sheet height
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade900,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.speed, color: Colors.white70),
-                title:
-                    const Text('播放速度', style: TextStyle(color: Colors.white)),
-                trailing: Text(
-                  '${_playbackSpeed}x',
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                onTap: () {
-                  _showSpeedOptions();
-                },
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.65),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(32),
+                topRight: Radius.circular(32),
               ),
-              // 可以添加更多选项...
-            ],
+              border: Border.all(
+                color: Colors.white.withOpacity(0.1),
+                width: 0.5,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Sheet handle indicator
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+
+                // Playback speed option
+                _buildOptionTile(
+                  icon: Icons.speed,
+                  title: '播放速度',
+                  trailing: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      '${_playbackSpeed}x',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  onTap: _showSpeedOptions,
+                ),
+
+                const SizedBox(height: 8),
+
+                // Lyrics UI option
+                _buildOptionTile(
+                  icon: Icons.format_align_left,
+                  title: '滚动歌词效果',
+                  onTap: _showLyricSettings,
+                ),
+
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildOptionTile({
+    required IconData icon,
+    required String title,
+    Widget? trailing,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        splashColor: Colors.white.withOpacity(0.05),
+        highlightColor: Colors.white.withOpacity(0.05),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing,
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1269,25 +1694,117 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Colors.grey.shade900,
-          title: const Text('选择播放速度', style: TextStyle(color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-                .map((speed) => ListTile(
-                      title: Text('${speed}x',
-                          style: const TextStyle(color: Colors.white)),
-                      onTap: () {
-                        setState(() {
-                          _playbackSpeed = speed;
-                          // VideoPlayerController 设置播放速度
-                          _controller.setPlaybackSpeed(speed);
-                        });
-                        Navigator.pop(context);
-                      },
-                    ))
-                .toList(),
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.1),
+                  width: 0.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  )
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '选择播放速度',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.center,
+                    children: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) {
+                      final isSelected = _playbackSpeed == speed;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _playbackSpeed = speed;
+                            _controller.setPlaybackSpeed(speed);
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 75,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.white.withOpacity(0.2)
+                                : Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Colors.white.withOpacity(0.5)
+                                  : Colors.white.withOpacity(0.1),
+                              width: 1,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${speed}x',
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.8),
+                                fontSize: 16,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ButtonStyle(
+                      padding: MaterialStateProperty.all(
+                        const EdgeInsets.symmetric(
+                            vertical: 12, horizontal: 24),
+                      ),
+                      backgroundColor: MaterialStateProperty.all(
+                        Colors.white.withOpacity(0.1),
+                      ),
+                      shape: MaterialStateProperty.all(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    child: const Text(
+                      '取消',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         );
       },
