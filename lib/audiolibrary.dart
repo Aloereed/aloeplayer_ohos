@@ -1448,11 +1448,29 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                     if (audioService.currentFilePath != null) {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => MusicPlayerPage(
+                        PageRouteBuilder(
+                          pageBuilder:
+                              (context, animation, secondaryAnimation) =>
+                                  MusicPlayerPage(
                             filePath: audioService.currentFilePath!,
                             controller: audioService.controller,
                           ),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) {
+                            const begin = Offset(0.0, 1.0); // 从底部开始
+                            const end = Offset.zero;
+                            const curve = Curves.easeOut;
+
+                            var tween = Tween(begin: begin, end: end)
+                                .chain(CurveTween(curve: curve));
+                            var offsetAnimation = animation.drive(tween);
+
+                            return SlideTransition(
+                              position: offsetAnimation,
+                              child: child,
+                            );
+                          },
+                          transitionDuration: const Duration(milliseconds: 300),
                         ),
                       );
                     }
@@ -1575,6 +1593,15 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                   ),
                   onPressed: () {
                     // 播放该艺术家所有歌曲
+                    if (songs.isNotEmpty) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              MusicPlayerPage(filePath: songs[0].filePath),
+                        ),
+                      );
+                    }
                   },
                   tooltip: '播放全部',
                 ),
@@ -1787,6 +1814,15 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                       ),
                       onPressed: () {
                         // 播放该专辑所有歌曲
+                        if (songs.isNotEmpty) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  MusicPlayerPage(filePath: songs[0].filePath),
+                            ),
+                          );
+                        }
                       },
                       tooltip: '播放全部',
                     ),

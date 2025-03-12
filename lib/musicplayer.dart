@@ -11,6 +11,7 @@ import 'package:rxdart/rxdart.dart';
 import 'settings.dart';
 import 'audio_player_service.dart';
 import 'package:flutter_lyric/lyrics_reader.dart';
+import 'package:share_plus/share_plus.dart';
 import 'lyrics_page.dart';
 // enum LoopMode { off, all, one }
 
@@ -1635,6 +1636,18 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
                   icon: Icons.format_align_left,
                   title: '滚动歌词效果',
                   onTap: _showLyricSettings,
+                ),
+
+                const SizedBox(height: 8),
+
+                // Share the file option
+                _buildOptionTile(
+                  icon: Icons.share,
+                  title: '分享歌曲',
+                  onTap: () {
+                    // share_plus
+                    Share.shareFiles([widget.filePath]);
+                  }, 
                 ),
 
                 const SizedBox(height: 24),
