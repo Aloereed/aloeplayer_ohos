@@ -1308,11 +1308,11 @@ class _PlayerTabState extends State<PlayerTab>
       if (_useFfmpegForPlay) {
         if (_ffmpegExample == null) {
           _ffmpegExample = FfmpegExample(
-              initUri: convertUriToPath(widget.openfile),
+              initUri: convertUriToPath(uri),
               toggleFullScreen: this.toggleFullScreen);
         }
         _ffmpegExample?.controller?.sendMessageToOhosView(
-            "newPlay", convertUriToPath(widget.openfile));
+            "newPlay", convertUriToPath(uri));
       }
       _getPlaylist(originalUri);
       _recordPlayStart(originalUri, originalUri);

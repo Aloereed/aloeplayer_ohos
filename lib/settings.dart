@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-12 18:50:37
+ * @LastEditTime: 2025-03-13 11:00:11
  * @Description: file content
  */
 import 'dart:convert';
@@ -38,7 +38,7 @@ class SettingsService {
   static const String _usePlaylist = 'use_playlist';
   static const String _useSeekToLatest = 'use_seek_to_latest';
   static const String _useInnerThumbnail = 'use_inner_thumbnail';
-  static const String _versionName = '2.0.0';
+  static const String _versionName = '2.0.1';
   static const int _versionNumber = 23;
 
   Future<bool> activatePersistPermission(String uri) async {
