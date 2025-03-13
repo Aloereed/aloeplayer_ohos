@@ -17,3 +17,9 @@
 /src/main/cpp/libass/arm64-v8a/lib/*
 /src/main/cpp/libpng/arm64-v8a/lib/*
 /src/main/cpp/libpng/arm64-v8a/bin/*
+/src/main/cpp/*/arm64-v8a/bin/*
+/src/main/cpp/*/arm64-v8a/lib/*
+/src/main/cpp/*/armeabi-v7a/lib/*
+/src/main/cpp/*/armeabi-v7a/bin/*
+/src/main/cpp/backup/*
+/src/main/cpp/thirdparty/*
