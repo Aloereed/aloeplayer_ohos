@@ -400,7 +400,7 @@ class _SettingsTabState extends State<SettingsTab> {
                   ListTile(
                     leading: Icon(Icons.subtitles, color: Colors.lightBlue),
                     title: Text('库内抽取ASS字幕'),
-                    subtitle: Text('转换为MP4和抽取ASS字幕只能在一次会话中进行一次'),
+                    subtitle: Text('不选中则抽取SRT文本字幕'),
                     trailing: FutureBuilder<bool>(
                       future: _settingsService.getExtractAssSubtitle(),
                       builder: (context, snapshot) {

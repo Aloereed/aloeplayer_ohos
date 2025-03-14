@@ -32,7 +32,10 @@
 #include <limits.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <signal.h>
+#include <setjmp.h>
 extern __thread volatile int longjmp_value;
+static jmp_buf env_buf;
 
 
 #if HAVE_IO_H
@@ -41,7 +44,14 @@ extern __thread volatile int longjmp_value;
 #if HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+// SIGSEGV信号处理函数
+void sigsegv_handler(int signo) {
+    printf("捕获到段错误(SIGSEGV)! 信号编号: %d\n", signo);
+    printf("恢复程序执行...\n");
 
+    // 跳回到设置的位置，而不是终止程序
+    longjmp(env_buf, 1);
+}
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
 #include "libswresample/swresample.h"
@@ -3943,70 +3953,112 @@ static int64_t getmaxrss(void) {
 #endif
 }
 
+// 在ffmpeg_cleanup之后调用
+void reset_ffmpeg_state() {
+    // 重置关键标志
+    ffmpeg_exited = 0;
+    transcode_init_done = 0; // 假设这是原子变量，请根据实际情况调整
+
+    // 确保计数器归零
+    nb_filtergraphs = 0;
+    nb_input_files = 0;
+    nb_output_files = 0;
+
+    // 确保关键指针为NULL
+    filtergraphs = NULL;
+    input_files = NULL;
+    output_files = NULL;
+
+    // 重置其他可能影响下次执行的变量
+    received_sigterm = 0;
+
+
+    // 可能需要重置getopt状态，取决于您的实现
+
+    // 重置任何您发现问题的其他全局状态
+}
+
 int exe_ffmpeg_cmd(int argc, char **argv, Callbacks *callback) {
+    struct sigaction sa;
+    sa.sa_handler = sigsegv_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    if (sigaction(SIGSEGV, &sa, NULL) == -1) {
+        perror("无法设置信号处理器");
+        return 1;
+    }
+
     int i, ret;
     BenchmarkTimeStamps ti;
     int saveCode = setjmp(ex_buf__);
     if (saveCode == 0) {
-        init_dynload();
+        if (setjmp(env_buf) == 0) {
+            init_dynload();
 
-        register_exit(ffmpeg_cleanup);
+            register_exit(ffmpeg_cleanup);
 
-        setvbuf(stderr, NULL, _IONBF, 0); /* win32 runtime needs this */
+            setvbuf(stderr, NULL, _IONBF, 0); /* win32 runtime needs this */
 
-        av_log_set_flags(AV_LOG_SKIP_REPEATED);
-        parse_loglevel(argc, argv, options);
-        // if (argc > 1 && !strcmp(argv[1], "-d")) {
-        //     run_as_daemon = 1;
-        //     // av_log_set_callback(log_callback_null);
-        //     av_log_set_level(AV_LOG_QUIET);
-        //     argc--;
-        //     argv++;
-        // }
+            av_log_set_flags(AV_LOG_SKIP_REPEATED);
+            parse_loglevel(argc, argv, options);
+            // if (argc > 1 && !strcmp(argv[1], "-d")) {
+            //     run_as_daemon = 1;
+            //     // av_log_set_callback(log_callback_null);
+            //     av_log_set_level(AV_LOG_QUIET);
+            //     argc--;
+            //     argv++;
+            // }
 
 #if CONFIG_AVDEVICE
-        avdevice_register_all();
+            avdevice_register_all();
 #endif
-        avformat_network_init();
+            avformat_network_init();
 
-        show_banner(argc, argv, options);
+            show_banner(argc, argv, options);
 
-        /* parse options and open all input/output files */
-        ret = ffmpeg_parse_options(argc, argv);
-        if (ret < 0)
-            exit_program(1);
+            /* parse options and open all input/output files */
+            ret = ffmpeg_parse_options(argc, argv);
+            if (ret < 0)
+                exit_program(1);
 
-        if (nb_output_files <= 0 && nb_input_files == 0) {
-            show_usage();
-            av_log(NULL, AV_LOG_WARNING, "Use -h to get full help or, even better, run 'man %s'\n", program_name);
-            exit_program(1);
+            if (nb_output_files <= 0 && nb_input_files == 0) {
+                show_usage();
+                av_log(NULL, AV_LOG_WARNING, "Use -h to get full help or, even better, run 'man %s'\n", program_name);
+                exit_program(1);
+            }
+
+            /* file converter / grab */
+            if (nb_output_files <= 0) {
+                av_log(NULL, AV_LOG_FATAL, "At least one output file must be specified\n");
+                exit_program(1);
+            }
+
+            current_time = ti = get_benchmark_time_stamps();
+            if (transcode() < 0)
+                exit_program(1);
+            if (do_benchmark) {
+                int64_t utime, stime, rtime;
+                current_time = get_benchmark_time_stamps();
+                utime = current_time.user_usec - ti.user_usec;
+                stime = current_time.sys_usec - ti.sys_usec;
+                rtime = current_time.real_usec - ti.real_usec;
+                av_log(NULL, AV_LOG_INFO, "bench: utime=%0.3fs stime=%0.3fs rtime=%0.3fs\n", utime / 1000000.0,
+                       stime / 1000000.0, rtime / 1000000.0);
+            }
+            av_log(NULL, AV_LOG_DEBUG, "%" PRIu64 " frames successfully decoded, %" PRIu64 " decoding errors\n",
+                   decode_error_stat[0], decode_error_stat[1]);
+            if ((decode_error_stat[0] + decode_error_stat[1]) * max_error_rate < decode_error_stat[1])
+                exit_program(69);
+        } else {
+            printf("通过信号处理函数回到这里\n");
         }
-
-        /* file converter / grab */
-        if (nb_output_files <= 0) {
-            av_log(NULL, AV_LOG_FATAL, "At least one output file must be specified\n");
-            exit_program(1);
-        }
-
-        current_time = ti = get_benchmark_time_stamps();
-        if (transcode() < 0)
-            exit_program(1);
-        if (do_benchmark) {
-            int64_t utime, stime, rtime;
-            current_time = get_benchmark_time_stamps();
-            utime = current_time.user_usec - ti.user_usec;
-            stime = current_time.sys_usec - ti.sys_usec;
-            rtime = current_time.real_usec - ti.real_usec;
-            av_log(NULL, AV_LOG_INFO, "bench: utime=%0.3fs stime=%0.3fs rtime=%0.3fs\n", utime / 1000000.0,
-                   stime / 1000000.0, rtime / 1000000.0);
-        }
-        av_log(NULL, AV_LOG_DEBUG, "%" PRIu64 " frames successfully decoded, %" PRIu64 " decoding errors\n",
-               decode_error_stat[0], decode_error_stat[1]);
-        if ((decode_error_stat[0] + decode_error_stat[1]) * max_error_rate < decode_error_stat[1])
-            exit_program(69);
         exit_program(received_nb_signals ? 255 : main_return_code);
     } else {
         main_return_code = (received_nb_signals ? 255 : main_return_code);
+        reset_ffmpeg_state();
     }
     return main_return_code;
+
+    return 0;
 }

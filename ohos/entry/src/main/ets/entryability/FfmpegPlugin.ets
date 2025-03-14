@@ -31,7 +31,7 @@ import { EventSink } from '@ohos/flutter_ohos/src/main/ets/plugin/common/EventCh
 import { picker } from '@kit.CoreFileKit';
 import { BusinessError, emitter } from '@kit.BasicServicesKit';
 import { taskpool } from '@kit.ArkTS';
-import { common , Want } from '@kit.AbilityKit';
+import { common, Want } from '@kit.AbilityKit';
 import { FfmpegFactory } from './FfmpegFactory';
 import { audio } from '@kit.AudioKit';
 import { image } from '@kit.ImageKit';
@@ -59,19 +59,19 @@ export default class FfmpegPlugin implements FlutterPlugin {
         switch (call.method) {
           case "getassold":
             console.info("getassold start");
-            that.api.getassold(result, call.argument("path") as string,call.argument("type") as string,call.argument("output"));
+            that.api.getassold(result, call.argument("path") as string, call.argument("type") as string, call.argument("output"));
             break;
           case "getsrtold":
             console.info("getsrtold start");
-            that.api.getsrtold(result, call.argument("path") as string,call.argument("type") as string);
+            that.api.getsrtold(result, call.argument("path") as string, call.argument("type") as string);
             break;
           case "getsrt":
             console.info("getsrt start");
-            that.api.getsrt(result, call.argument("path") as string,call.argument("type") as string);
+            that.api.getsrt(result, call.argument("path") as string, call.argument("type") as string, call.argument("track") as number);
             break;
           case "getass":
             console.info("getassstart");
-            that.api.getass(result, call.argument("path") as string,call.argument("type") as string,call.argument("output"));
+            that.api.getass(result, call.argument("path") as string, call.argument("type") as string, call.argument("output"));
             break;
           case "tomp4":
             console.info("tomp4 start");
@@ -177,6 +177,9 @@ export default class FfmpegPlugin implements FlutterPlugin {
           case "fetchCover":
             that.api.fetchCover(call.argument("uri") as string, result);
             break;
+          case "getaudiotrack":
+            that.api.getaudiotrack(result, call.argument("path") as string, call.argument("track") as number, call.argument("output") as string);
+            break;
           case "callEvent":
             that.eventSink?.success("Success at " + new Date());
             break;
@@ -188,7 +191,7 @@ export default class FfmpegPlugin implements FlutterPlugin {
       }
     })
     binding.getPlatformViewRegistry()?.
-    registerViewFactory('com.aloereed.aloeplayer/ffmpegView', new FfmpegFactory(binding.getBinaryMessenger(), StandardMessageCodec.INSTANCE));
+      registerViewFactory('com.aloereed.aloeplayer/ffmpegView', new FfmpegFactory(binding.getBinaryMessenger(), StandardMessageCodec.INSTANCE));
 
     // 初始化 EventChannel
     // this.eventChannel = new EventChannel(binding.getBinaryMessenger(), "samples.flutter.dev/ffmpegpluginevent");
@@ -253,12 +256,12 @@ function uriToPath(uri: string): string {
   return path;
 }
 @Concurrent
-async function StartExtractAss(command: string,typ:string,output:string): Promise<void> {
+async function StartExtractAss(command: string, typ: string, output: string): Promise<void> {
   emitter.on({ eventId: 1 }, () => {
     emitter.off(1)
   });
   const onFFmpegProgress = (progress: number) => {
-  console.log(`FFmpeg progress: ${progress}%`);
+    console.log(`FFmpeg progress: ${progress}%`);
   };
 
   const onFFmpegFail = (code: number, msg: string) => {
@@ -270,28 +273,28 @@ async function StartExtractAss(command: string,typ:string,output:string): Promis
   };
 
   const options: FFmpegCommandOptions = {
-    cmds:['ffmpeg', '-i', command , '-map', '0:s:0', output+"."+typ], // 替换为实际的 FFmpeg 命令
+    cmds: ['ffmpeg', '-i', command, '-map', '0:s:0', output + "." + typ,'-y'], // 替换为实际的 FFmpeg 命令
     onFFmpegProgress,
     onFFmpegFail,
     onFFmpegSuccess,
   };
 
   try {
-      const exitCode = await FFMpegUtils.executeFFmpegCommand(options);
-      console.log(`FFmpeg command exited with code: ${exitCode}`);
-    } catch (error) {
-      console.error('Failed to execute FFmpeg command:', error);
-    }
+    const exitCode = await FFMpegUtils.executeFFmpegCommand(options);
+    console.log(`FFmpeg command exited with code: ${exitCode}`);
+  } catch (error) {
+    console.error('Failed to execute FFmpeg command:', error);
+  }
 
   // testNthat.api.getsrt(command);
 }
 @Concurrent
-async function StartExtractSrt(command: string,typ:string): Promise<void> {
+async function StartExtractSrt(command: string, typ: string, track: number): Promise<void> {
   // emitter.on({ eventId: 1 }, () => {
   //   emitter.off(1)
   // });
   const onFFmpegProgress = (progress: number) => {
-  console.log(`FFmpeg progress: ${progress}%`);
+    console.log(`FFmpeg progress: ${progress}%`);
   };
 
   const onFFmpegFail = (code: number, msg: string) => {
@@ -303,26 +306,26 @@ async function StartExtractSrt(command: string,typ:string): Promise<void> {
   };
 
   const options: FFmpegCommandOptions = {
-    cmds:['ffmpeg', '-i', command , '-map', '0:s:0', command+"_1."+typ], // 替换为实际的 FFmpeg 命令
+    cmds: ['ffmpeg', '-i', command, '-map', `0:s:${track}`, command + `_${track + 1}.` + typ, '-y'], // 替换为实际的 FFmpeg 命令
     onFFmpegProgress,
     onFFmpegFail,
     onFFmpegSuccess,
   };
 
   try {
-      const exitCode = await FFMpegUtils.executeFFmpegCommand(options);
-      console.log(`FFmpeg command exited with code: ${exitCode}`);
-    } catch (error) {
-      console.error('Failed to execute FFmpeg command:', error);
-    }
+    const exitCode = await FFMpegUtils.executeFFmpegCommand(options);
+    console.log(`FFmpeg command exited with code: ${exitCode}`);
+  } catch (error) {
+    console.error('Failed to execute FFmpeg command:', error);
+  }
 }
 @Concurrent
-async function StartExtractAssOld(command: string,typ:string,output:string): Promise<void> {
+async function StartExtractAssOld(command: string, typ: string, output: string): Promise<void> {
   // emitter.on({ eventId: 1 }, () => {
   //   emitter.off(1)
   // });
   const onFFmpegProgress = (progress: number) => {
-  console.log(`FFmpeg progress: ${progress}%`);
+    console.log(`FFmpeg progress: ${progress}%`);
   };
 
   const onFFmpegFail = (code: number, msg: string) => {
@@ -332,30 +335,30 @@ async function StartExtractAssOld(command: string,typ:string,output:string): Pro
   const onFFmpegSuccess = () => {
     console.log('FFmpeg command executed successfully!');
   };
-  console.log("command:"+ command+" "+" "+output);
+  console.log("command:" + command + " " + " " + output);
   const options: FFmpegCommandOptions = {
-    cmds:['ffmpeg', command , output], // 替换为实际的 FFmpeg 命令
+    cmds: ['ffmpeg', command, output], // 替换为实际的 FFmpeg 命令
     onFFmpegProgress,
     onFFmpegFail,
     onFFmpegSuccess,
   };
 
   try {
-      const exitCode = await FFMpegUtils.executeFFmpegCommand2(options);
-      console.log(`FFmpeg command exited with code: ${exitCode}`);
-    } catch (error) {
-      console.error('Failed to execute FFmpeg command:', error);
-    }
+    const exitCode = await FFMpegUtils.executeFFmpegCommand2(options);
+    console.log(`FFmpeg command exited with code: ${exitCode}`);
+  } catch (error) {
+    console.error('Failed to execute FFmpeg command:', error);
+  }
 
   // testNthat.api.getsrt(command);
 }
 @Concurrent
-async function StartExtractSrtOld(command: string,typ:string): Promise<void> {
+async function StartExtractSrtOld(command: string, typ: string): Promise<void> {
   // emitter.on({ eventId: 1 }, () => {
   //   emitter.off(1)
   // });
   const onFFmpegProgress = (progress: number) => {
-  console.log(`FFmpeg progress: ${progress}%`);
+    console.log(`FFmpeg progress: ${progress}%`);
   };
 
   const onFFmpegFail = (code: number, msg: string) => {
@@ -367,18 +370,18 @@ async function StartExtractSrtOld(command: string,typ:string): Promise<void> {
   };
 
   const options: FFmpegCommandOptions = {
-    cmds:['ffmpeg', command , command], // 替换为实际的 FFmpeg 命令
+    cmds: ['ffmpeg', command, command], // 替换为实际的 FFmpeg 命令
     onFFmpegProgress,
     onFFmpegFail,
     onFFmpegSuccess,
   };
 
   try {
-      const exitCode = await FFMpegUtils.executeFFmpegCommand2(options);
-      console.log(`FFmpeg command exited with code: ${exitCode}`);
-    } catch (error) {
-      console.error('Failed to execute FFmpeg command:', error);
-    }
+    const exitCode = await FFMpegUtils.executeFFmpegCommand2(options);
+    console.log(`FFmpeg command exited with code: ${exitCode}`);
+  } catch (error) {
+    console.error('Failed to execute FFmpeg command:', error);
+  }
 }
 @Concurrent
 async function StartToMp4(command: string): Promise<void> {
@@ -386,7 +389,7 @@ async function StartToMp4(command: string): Promise<void> {
     emitter.off(1)
   });
   const onFFmpegProgress = (progress: number) => {
-  console.log(`FFmpeg progress: ${progress}%`);
+    console.log(`FFmpeg progress: ${progress}%`);
   };
 
   const onFFmpegFail = (code: number, msg: string) => {
@@ -398,38 +401,113 @@ async function StartToMp4(command: string): Promise<void> {
   };
 
   const options: FFmpegCommandOptions = {
-    cmds:[
-    'ffmpeg',
-    '-i', command,       
-    '-map', '0:v',          
-    '-map', '0:a:0',        
-    '-c:v', 'copy',         
-    '-c:a', 'copy',        
-    command+'.mp4'            
-]   , // 替换为实际的 FFmpeg 命令
+    cmds: [
+      'ffmpeg',
+      '-i', command,
+      '-map', '0:v',
+      '-map', '0:a:0',
+      '-c:v', 'copy',
+      '-c:a', 'copy',
+      command + '.mp4'
+    ], // 替换为实际的 FFmpeg 命令
     onFFmpegProgress,
     onFFmpegFail,
     onFFmpegSuccess,
   };
 
   try {
-      const exitCode = await FFMpegUtils.executeFFmpegCommand(options);
-      console.log(`FFmpeg command exited with code: ${exitCode}`);
-    } catch (error) {
-      console.error('Failed to execute FFmpeg command:', error);
-    }
+    const exitCode = await FFMpegUtils.executeFFmpegCommand(options);
+    console.log(`FFmpeg command exited with code: ${exitCode}`);
+  } catch (error) {
+    console.error('Failed to execute FFmpeg command:', error);
+  }
 
   // testNthat.api.getsrt(command);
 }
+@Concurrent
+async function StartExtractAudio(inputPath: string, outputPath: string, track: number): Promise<void> {
+  const onFFmpegProgress = (progress: number) => {
+    console.log(`音频提取进度: ${progress}%`);
+  };
+
+  const onFFmpegFail = (code: number, msg: string) => {
+    console.error(`音频提取失败，代码 ${code}: ${msg}`);
+  };
+
+  const onFFmpegSuccess = () => {
+    console.log('音频提取成功完成!');
+  };
+
+  // 使用FFmpeg内置编码器
+  // -acodec mp3: 使用内置MP3编码器
+  // 或者我们可以使用AAC编码器作为更广泛支持的替代方案
+
+
+
+
+
+  // 如果MP3编码失败，尝试使用AAC编码作为备选方案
+  try {
+    console.log('尝试使用AAC编码作为备选方案');
+    const aacOutputPath = outputPath.replace('.mp3', '.aac');
+
+    const aacOptions: FFmpegCommandOptions = {
+      cmds: [
+        'ffmpeg',
+        '-i', inputPath,
+        '-vn',
+        '-acodec', 'aac',
+        '-ar', '44100',
+        '-ab', '128k',
+        '-map', `0:a:${track}`,
+        '-y',
+        aacOutputPath
+      ],
+      onFFmpegProgress,
+      onFFmpegFail,
+      onFFmpegSuccess,
+    };
+
+    const aacExitCode = await FFMpegUtils.executeFFmpegCommand(aacOptions);
+    console.log(`AAC编码备选方案完成，退出代码: ${aacExitCode}`);
+  } catch (aacError) {
+    console.error('AAC编码备选方案也失败了:', aacError);
+  }
+
+}
 class FfmpegApi {
   private task1: taskpool.Task | undefined;
-  getass(result:MethodResult, path:string, typ:string,output:string){
+  private taskAudio: taskpool.Task | undefined;
+
+  getaudiotrack(result: MethodResult, path: string, track: number, output: string) {
+    let outputPath = `${output}_audio${track}.mp3`;
+    this.taskAudio = new taskpool.Task(StartExtractAudio, path, outputPath, track);
+    taskpool.execute(this.taskAudio, taskpool.Priority.LOW);
+
+    // 获取UIAbilityContext
+    let context = getContext(this) as common.UIAbilityContext;
+    Log.i(TAG, "开始提取音轨为MP3: " + path);
+
+    let wrapped: Map<String, Any> = new Map<String, Any>();
+
+    if (outputPath != null) {
+      result.success(outputPath);
+    } else {
+      Log.i(TAG, "getaudiotrackmp3 else");
+      wrapped.set("UNAVAILABLE", "无法提取音轨到MP3。");
+      result.error("UNAVAILABLE", "无法提取音轨到MP3。", null)
+    }
+    Log.i(TAG, "getaudiotrackmp3 finish");
+  }
+
+
+  getass(result: MethodResult, path: string, typ: string, output: string) {
     let command = `./getsrt "${path}" "${path}"`;
-    this.task1 = new taskpool.Task(StartExtractAss, path,typ,output);
+    this.task1 = new taskpool.Task(StartExtractAss, path, typ, output);
     taskpool.execute(this.task1, taskpool.Priority.LOW);
     let uri: string = '';
     // 请确保 getContext(this) 返回结果为 UIAbilityContext
-    let context = getContext(this) as common.UIAbilityContext; 
+    let context = getContext(this) as common.UIAbilityContext;
     // let voctrl = AVFfmpegPanel({
     //       ffmpegLevel: 0,
     //     })
@@ -445,13 +523,13 @@ class FfmpegApi {
     }
     Log.i(TAG, "getFfmpegPermission finish");
   }
-  getassold(result:MethodResult, path:string, typ:string,output:string){
+  getassold(result: MethodResult, path: string, typ: string, output: string) {
     let command = `./getsrt "${path}" "${path}"`;
-    this.task1 = new taskpool.Task(StartExtractAssOld, path,typ,output);
+    this.task1 = new taskpool.Task(StartExtractAssOld, path, typ, output);
     taskpool.execute(this.task1, taskpool.Priority.LOW);
     let uri: string = '';
     // 请确保 getContext(this) 返回结果为 UIAbilityContext
-    let context = getContext(this) as common.UIAbilityContext; 
+    let context = getContext(this) as common.UIAbilityContext;
     // let voctrl = AVFfmpegPanel({
     //       ffmpegLevel: 0,
     //     })
@@ -467,13 +545,13 @@ class FfmpegApi {
     }
     Log.i(TAG, "getFfmpegPermission finish");
   }
-  getsrtold(result:MethodResult, path:string, typ:string){
+  getsrtold(result: MethodResult, path: string, typ: string) {
     let command = `./getsrt "${path}" "${path}"`;
-    this.task1 = new taskpool.Task(StartExtractSrtOld, path,typ);
+    this.task1 = new taskpool.Task(StartExtractSrtOld, path, typ);
     taskpool.execute(this.task1, taskpool.Priority.LOW);
     let uri: string = '';
     // 请确保 getContext(this) 返回结果为 UIAbilityContext
-    let context = getContext(this) as common.UIAbilityContext; 
+    let context = getContext(this) as common.UIAbilityContext;
     // let voctrl = AVFfmpegPanel({
     //       ffmpegLevel: 0,
     //     })
@@ -489,13 +567,13 @@ class FfmpegApi {
     }
     Log.i(TAG, "getFfmpegPermission finish");
   }
-  getsrt(result:MethodResult, path:string, typ:string){
+  getsrt(result: MethodResult, path: string, typ: string, track: number) {
     let command = `./getsrt "${path}" "${path}"`;
-    this.task1 = new taskpool.Task(StartExtractSrt, path,typ);
+    this.task1 = new taskpool.Task(StartExtractSrt, path, typ, track);
     taskpool.execute(this.task1, taskpool.Priority.LOW);
     let uri: string = '';
     // 请确保 getContext(this) 返回结果为 UIAbilityContext
-    let context = getContext(this) as common.UIAbilityContext; 
+    let context = getContext(this) as common.UIAbilityContext;
     // let voctrl = AVFfmpegPanel({
     //       ffmpegLevel: 0,
     //     })
@@ -511,13 +589,13 @@ class FfmpegApi {
     }
     Log.i(TAG, "getFfmpegPermission finish");
   }
-  tomp4(result:MethodResult, path:string){
+  tomp4(result: MethodResult, path: string) {
     let command = `./getsrt "${path}" "${path}"`;
     this.task1 = new taskpool.Task(StartToMp4, path);
     taskpool.execute(this.task1, taskpool.Priority.LOW);
     let uri: string = '';
     // 请确保 getContext(this) 返回结果为 UIAbilityContext
-    let context = getContext(this) as common.UIAbilityContext; 
+    let context = getContext(this) as common.UIAbilityContext;
     // let voctrl = AVFfmpegPanel({
     //       ffmpegLevel: 0,
     //     })
@@ -540,7 +618,7 @@ class FfmpegApi {
     // documentSaveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD; 
     let uri: string = '';
     // 请确保 getContext(this) 返回结果为 UIAbilityContext
-    let context = getContext(this) as common.UIAbilityContext; 
+    let context = getContext(this) as common.UIAbilityContext;
     // let voctrl = AVFfmpegPanel({
     //       ffmpegLevel: 0,
     //     })
@@ -590,7 +668,7 @@ class FfmpegApi {
   getTitle(filename: string, result: MethodResult) {
     console.log("getTitle start");
     libAddon.getTitle(filename).then((title: string) => {
-      console.log("getTitle end: "+title);
+      console.log("getTitle end: " + title);
       result.success(title);
     }).catch((error: Error) => {
       result.error("UNAVAILABLE", "Failed to get title", error);
@@ -598,385 +676,385 @@ class FfmpegApi {
   }
 
   setTitle(filename: string, title: string, result: MethodResult) {
-      libAddon.setTitle(filename, title).then(() => {
-          console.log("setTitle end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set title", error);
-        });
+    libAddon.setTitle(filename, title).then(() => {
+      console.log("setTitle end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set title", error);
+    });
   }
 
 
-    getArtist(filename: string, result: MethodResult) {
-        console.log("getArtist start");
-        libAddon.getArtist(filename).then((artist: string) => {
-          console.log("getArtist end: " + artist);
-          result.success(artist);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get artist", error);
-        });
-    }
+  getArtist(filename: string, result: MethodResult) {
+    console.log("getArtist start");
+    libAddon.getArtist(filename).then((artist: string) => {
+      console.log("getArtist end: " + artist);
+      result.success(artist);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get artist", error);
+    });
+  }
 
-    setArtist(filename: string, artist: string, result: MethodResult) {
-        console.log("setArtist start");
-        libAddon.setArtist(filename, artist).then(() => {
-          console.log("setArtist end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set artist", error);
-        });
-    }
-
-    getAlbum(filename: string, result: MethodResult) {
-        console.log("getAlbum start");
-        libAddon.getAlbum(filename).then((album: string) => {
-          console.log("getAlbum end: " + album);
-          result.success(album);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get album", error);
-        });
-    }
-
-    setAlbum(filename: string, album: string, result: MethodResult) {
-        console.log("setAlbum start");
-        libAddon.setAlbum(filename, album).then(() => {
-          console.log("setAlbum end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set album", error);
-        });
-    }
-
-    getYear(filename: string, result: MethodResult) {
-        console.log("getYear start");
-        libAddon.getYear(filename).then((year: number) => {
-          console.log("getYear end: " + year);
-          result.success(year);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get year", error);
-        });
-    }
-
-    setYear(filename: string, year: number, result: MethodResult) {
-        console.log("setYear start");
-        libAddon.setYear(filename, year).then(() => {
-          console.log("setYear end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set year", error);
-        });
-    }
-
-    getTrack(filename: string, result: MethodResult) {
-        console.log("getTrack start");
-        libAddon.getTrack(filename).then((track: number) => {
-          console.log("getTrack end: " + track);
-          result.success(track);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get track", error);
-        });
-    }
-
-    setTrack(filename: string, track: number, result: MethodResult) {
-        console.log("setTrack start");
-        libAddon.setTrack(filename, track).then(() => {
-          console.log("setTrack end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set track", error);
-        });
-    }
-
-    getDisc(filename: string, result: MethodResult) {
-        console.log("getDisc start");
-        libAddon.getDisc(filename).then((disc: number) => {
-          console.log("getDisc end: " + disc);
-          result.success(disc);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get disc", error);
-        });
-    }
-
-    setDisc(filename: string, disc: number, result: MethodResult) {
-        console.log("setDisc start");
-        libAddon.setDisc(filename, disc).then(() => {
-          console.log("setDisc end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set disc", error);
-        });
-    }
-
-    getGenre(filename: string, result: MethodResult) {
-        console.log("getGenre start");
-        libAddon.getGenre(filename).then((genre: string) => {
-          console.log("getGenre end: " + genre);
-          result.success(genre);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get genre", error);
-        });
-    }
-
-    setGenre(filename: string, genre: string, result: MethodResult) {
-        console.log("setGenre start");
-        libAddon.setGenre(filename, genre).then(() => {
-          console.log("setGenre end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set genre", error);
-        });
-    }
-
-    getAlbumArtist(filename: string, result: MethodResult) {
-        console.log("getAlbumArtist start");
-        libAddon.getAlbumArtist(filename).then((albumArtist: string) => {
-          console.log("getAlbumArtist end: " + albumArtist);
-          result.success(albumArtist);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get album artist", error);
-        });
-    }
-
-    setAlbumArtist(filename: string, albumArtist: string, result: MethodResult) {
-        console.log("setAlbumArtist start");
-        libAddon.setAlbumArtist(filename, albumArtist).then(() => {
-          console.log("setAlbumArtist end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set album artist", error);
-        });
-    }
-
-    getComposer(filename: string, result: MethodResult) {
-        console.log("getComposer start");
-        libAddon.getComposer(filename).then((composer: string) => {
-          console.log("getComposer end: " + composer);
-          result.success(composer);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get composer", error);
-        });
-    }
-
-    setComposer(filename: string, composer: string, result: MethodResult) {
-        console.log("setComposer start");
-        libAddon.setComposer(filename, composer).then(() => {
-          console.log("setComposer end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set composer", error);
-        });
-    }
-
-    getLyricist(filename: string, result: MethodResult) {
-        console.log("getLyricist start");
-        libAddon.getLyricist(filename).then((lyricist: string) => {
-          console.log("getLyricist end: " + lyricist);
-          result.success(lyricist);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get lyricist", error);
-        });
-    }
-
-    setLyricist(filename: string, lyricist: string, result: MethodResult) {
-        console.log("setLyricist start");
-        libAddon.setLyricist(filename, lyricist).then(() => {
-          console.log("setLyricist end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set lyricist", error);
-        });
-    }
-
-    getComment(filename: string, result: MethodResult) {
-        console.log("getComment start");
-        libAddon.getComment(filename).then((comment: string) => {
-          console.log("getComment end: " + comment);
-          result.success(comment);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get comment", error);
-        });
-    }
-
-    setComment(filename: string, comment: string, result: MethodResult) {
-        console.log("setComment start");
-        libAddon.setComment(filename, comment).then(() => {
-          console.log("setComment end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set comment", error);
-        });
-    }
-
-    getLyrics(filename: string, result: MethodResult) {
-        console.log("getLyrics start: " + filename);
-        libAddon.getLyrics(filename).then((lyrics: string) => {
-          console.log("getLyrics end: " + lyrics);
-          result.success(lyrics);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get lyrics", error);
-        });
-    }
-
-    setLyrics(filename: string, lyrics: string, result: MethodResult) {
-        console.log("setLyrics start");
-        libAddon.setLyrics(filename, lyrics).then(() => {
-          console.log("setLyrics end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set lyrics", error);
-        });
-    }
-
-    getCover(filename: string, result: MethodResult) {
-        console.log("getCover start");
-        libAddon.getCover(filename).then((cover: string) => {
-          console.log("getCover end: " + cover);
-          result.success(cover);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to get cover", error);
-        });
-    }
-
-    setCover(filename: string, coverBase64: string, result: MethodResult) {
-        console.log("setCover start");
-        libAddon.setCover(filename, coverBase64).then(() => {
-          console.log("setCover end");
-          result.success(null);
-        }).catch((error: Error) => {
-          result.error("UNAVAILABLE", "Failed to set cover", error);
-        });
-    }
-    // export const init_libass: (assFilename: string, width: number, height: number) => any;
-    // export const get_png_data_at_time: (time: number, width: number, height: number) => any;
-    // export const cleanup_libass: () => any;
-    initLibass(assFilename: string, width: number, height: number, result: MethodResult) {
-      console.warn("initLibass start");
-      libAddon.init_libass(assFilename, width, height).then((isSuccess: boolean) => {
-        console.warn("initLibass end: " + isSuccess);
-        result.success(isSuccess);
-      }).catch((error: Error) => {
-        result.error("UNAVAILABLE", "Failed to init libass", error);
-      });
-    }
-    getPngDataAtTime(time: number, width: number, height: number, result: MethodResult) {
-      libAddon.get_png_data_at_time(time, width, height).then((pngData: string) => {
-        console.warn("Png size:" + pngData.length);
-        result.success(pngData);
-      }).catch((error: Error) => {
-        result.error("UNAVAILABLE", "Failed to get PNG data", error);
-      });
-    }
-    cleanupLibass(result: MethodResult) {
-      libAddon.cleanup_libass();
+  setArtist(filename: string, artist: string, result: MethodResult) {
+    console.log("setArtist start");
+    libAddon.setArtist(filename, artist).then(() => {
+      console.log("setArtist end");
       result.success(null);
-    }
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set artist", error);
+    });
+  }
 
-    async fetchCover(filename: string,result: MethodResult) {
-        if (canIUse("SystemCapability.Multimedia.Media.AVMetadataExtractor")) {
-            // 创建AVMetadataExtractor对象
-            let avMetadataExtractor: media.AVMetadataExtractor =
-                await media.createAVMetadataExtractor()
-            // 设置fdSrc
-            if (filename != null && filename.startsWith("file")) {
-                console.log(`trying to get metadata from file: ${filename}`)
-                let file = fs.openSync(filename, fs.OpenMode.READ_ONLY)
-                let state = fs.statSync(file.fd)
-                let avFileDescriptor: media.AVFileDescriptor = {
-                    fd: file.fd,
-                    offset: 0,
-                    length: state.size,
-                }
-                avMetadataExtractor.fdSrc = avFileDescriptor
-            }  else {
-                avMetadataExtractor.release()
-                result.success("")
-                return
-            }
+  getAlbum(filename: string, result: MethodResult) {
+    console.log("getAlbum start");
+    libAddon.getAlbum(filename).then((album: string) => {
+      console.log("getAlbum end: " + album);
+      result.success(album);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get album", error);
+    });
+  }
 
-            // avMetadataExtractor.fdSrc = await getContext(this).resourceManager.getRawFd(filename);
+  setAlbum(filename: string, album: string, result: MethodResult) {
+    console.log("setAlbum start");
+    libAddon.setAlbum(filename, album).then(() => {
+      console.log("setAlbum end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set album", error);
+    });
+  }
 
-            // 获取元数据（promise模式）
-            let metadata = await avMetadataExtractor.fetchMetadata()
-            console.info(TAG, `get meta data, hasAudio: ${metadata.hasAudio}`)
+  getYear(filename: string, result: MethodResult) {
+    console.log("getYear start");
+    libAddon.getYear(filename).then((year: number) => {
+      console.log("getYear end: " + year);
+      result.success(year);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get year", error);
+    });
+  }
 
-            // 获取专辑封面（promise模式）
-            try {
-                if (metadata.hasVideo == "yes") {
-                    let avImageGenerator: media.AVImageGenerator =
-                        await media.createAVImageGenerator()
-                    if (filename != null && filename.startsWith("file")) {
-                        console.log(
-                            `trying to get video cover from file: ${filename}`
-                        )
-                        let file = fs.openSync(filename, fs.OpenMode.READ_ONLY)
-                        let state = fs.statSync(file.fd)
-                        let avFileDescriptor: media.AVFileDescriptor = {
-                            fd: file.fd,
-                            offset: 0,
-                            length: state.size,
-                        }
-                        avImageGenerator.fdSrc = avFileDescriptor
-                    } 
-                    // 初始化入参
-                    let timeUs = 0
-                    let queryOption =
-                        media.AVImageQueryOptions.AV_IMAGE_QUERY_NEXT_SYNC
-                    let param: media.PixelMapParams = {
-                        width: 300,
-                        height: 300,
-                    }
+  setYear(filename: string, year: number, result: MethodResult) {
+    console.log("setYear start");
+    libAddon.setYear(filename, year).then(() => {
+      console.log("setYear end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set year", error);
+    });
+  }
 
-                    // 获取缩略图（promise模式）
-                    let pixelMap = await avImageGenerator.fetchFrameByTime(
-                        timeUs,
-                        queryOption,
-                        param
-                    )
+  getTrack(filename: string, result: MethodResult) {
+    console.log("getTrack start");
+    libAddon.getTrack(filename).then((track: number) => {
+      console.log("getTrack end: " + track);
+      result.success(track);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get track", error);
+    });
+  }
 
-                    // 创建 ImagePacker 实例
-                    const imagePacker = image.createImagePacker();
+  setTrack(filename: string, track: number, result: MethodResult) {
+    console.log("setTrack start");
+    libAddon.setTrack(filename, track).then(() => {
+      console.log("setTrack end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set track", error);
+    });
+  }
 
-                    // 将 PixelMap 编码为图像数据
-                    const packedData = await imagePacker.packing(pixelMap, {
-                      format: "image/jpeg", // 你可以根据需要选择其他格式，如 "image/png"
-                      quality: 100 // 图像质量，范围是 1 到 100
-                    });
+  getDisc(filename: string, result: MethodResult) {
+    console.log("getDisc start");
+    libAddon.getDisc(filename).then((disc: number) => {
+      console.log("getDisc end: " + disc);
+      result.success(disc);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get disc", error);
+    });
+  }
 
-                    // 将 Uint8Array 转换为 Base64 字符串
-                    const base64String = buffer.from(packedData).toString('base64');
-                    result.success(base64String);
-                    // 释放资源（promise模式）
-                    avImageGenerator.release()
-                    
-                    console.info(TAG, `release success.`)
-                    return;
-                } else {
-                    let pixelMap = await avMetadataExtractor.fetchAlbumCover()
-                     // 创建 ImagePacker 实例
-                    const imagePacker = image.createImagePacker();
+  setDisc(filename: string, disc: number, result: MethodResult) {
+    console.log("setDisc start");
+    libAddon.setDisc(filename, disc).then(() => {
+      console.log("setDisc end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set disc", error);
+    });
+  }
 
-                    // 将 PixelMap 编码为图像数据
-                    const packedData = await imagePacker.packing(pixelMap, {
-                      format: "image/jpeg", // 你可以根据需要选择其他格式，如 "image/png"
-                      quality: 100 // 图像质量，范围是 1 到 100
-                    });
+  getGenre(filename: string, result: MethodResult) {
+    console.log("getGenre start");
+    libAddon.getGenre(filename).then((genre: string) => {
+      console.log("getGenre end: " + genre);
+      result.success(genre);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get genre", error);
+    });
+  }
 
-                    // 将 Uint8Array 转换为 Base64 字符串
-                    const base64String = buffer.from(packedData).toString('base64');
-                    result.success(base64String);
-                    return;
-                }
-            } catch (e) {
-                result.success("");
-                
-                console.error(TAG, `fetchAlbumCover failed: ${e}`)
-                return;
-            }
-            result.success("");
-            // 释放资源（promise模式）
-            avMetadataExtractor.release()
-            console.info(TAG, `release success.`)
+  setGenre(filename: string, genre: string, result: MethodResult) {
+    console.log("setGenre start");
+    libAddon.setGenre(filename, genre).then(() => {
+      console.log("setGenre end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set genre", error);
+    });
+  }
+
+  getAlbumArtist(filename: string, result: MethodResult) {
+    console.log("getAlbumArtist start");
+    libAddon.getAlbumArtist(filename).then((albumArtist: string) => {
+      console.log("getAlbumArtist end: " + albumArtist);
+      result.success(albumArtist);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get album artist", error);
+    });
+  }
+
+  setAlbumArtist(filename: string, albumArtist: string, result: MethodResult) {
+    console.log("setAlbumArtist start");
+    libAddon.setAlbumArtist(filename, albumArtist).then(() => {
+      console.log("setAlbumArtist end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set album artist", error);
+    });
+  }
+
+  getComposer(filename: string, result: MethodResult) {
+    console.log("getComposer start");
+    libAddon.getComposer(filename).then((composer: string) => {
+      console.log("getComposer end: " + composer);
+      result.success(composer);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get composer", error);
+    });
+  }
+
+  setComposer(filename: string, composer: string, result: MethodResult) {
+    console.log("setComposer start");
+    libAddon.setComposer(filename, composer).then(() => {
+      console.log("setComposer end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set composer", error);
+    });
+  }
+
+  getLyricist(filename: string, result: MethodResult) {
+    console.log("getLyricist start");
+    libAddon.getLyricist(filename).then((lyricist: string) => {
+      console.log("getLyricist end: " + lyricist);
+      result.success(lyricist);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get lyricist", error);
+    });
+  }
+
+  setLyricist(filename: string, lyricist: string, result: MethodResult) {
+    console.log("setLyricist start");
+    libAddon.setLyricist(filename, lyricist).then(() => {
+      console.log("setLyricist end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set lyricist", error);
+    });
+  }
+
+  getComment(filename: string, result: MethodResult) {
+    console.log("getComment start");
+    libAddon.getComment(filename).then((comment: string) => {
+      console.log("getComment end: " + comment);
+      result.success(comment);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get comment", error);
+    });
+  }
+
+  setComment(filename: string, comment: string, result: MethodResult) {
+    console.log("setComment start");
+    libAddon.setComment(filename, comment).then(() => {
+      console.log("setComment end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set comment", error);
+    });
+  }
+
+  getLyrics(filename: string, result: MethodResult) {
+    console.log("getLyrics start: " + filename);
+    libAddon.getLyrics(filename).then((lyrics: string) => {
+      console.log("getLyrics end: " + lyrics);
+      result.success(lyrics);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get lyrics", error);
+    });
+  }
+
+  setLyrics(filename: string, lyrics: string, result: MethodResult) {
+    console.log("setLyrics start");
+    libAddon.setLyrics(filename, lyrics).then(() => {
+      console.log("setLyrics end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set lyrics", error);
+    });
+  }
+
+  getCover(filename: string, result: MethodResult) {
+    console.log("getCover start");
+    libAddon.getCover(filename).then((cover: string) => {
+      console.log("getCover end: " + cover);
+      result.success(cover);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get cover", error);
+    });
+  }
+
+  setCover(filename: string, coverBase64: string, result: MethodResult) {
+    console.log("setCover start");
+    libAddon.setCover(filename, coverBase64).then(() => {
+      console.log("setCover end");
+      result.success(null);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to set cover", error);
+    });
+  }
+  // export const init_libass: (assFilename: string, width: number, height: number) => any;
+  // export const get_png_data_at_time: (time: number, width: number, height: number) => any;
+  // export const cleanup_libass: () => any;
+  initLibass(assFilename: string, width: number, height: number, result: MethodResult) {
+    console.warn("initLibass start");
+    libAddon.init_libass(assFilename, width, height).then((isSuccess: boolean) => {
+      console.warn("initLibass end: " + isSuccess);
+      result.success(isSuccess);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to init libass", error);
+    });
+  }
+  getPngDataAtTime(time: number, width: number, height: number, result: MethodResult) {
+    libAddon.get_png_data_at_time(time, width, height).then((pngData: string) => {
+      console.warn("Png size:" + pngData.length);
+      result.success(pngData);
+    }).catch((error: Error) => {
+      result.error("UNAVAILABLE", "Failed to get PNG data", error);
+    });
+  }
+  cleanupLibass(result: MethodResult) {
+    libAddon.cleanup_libass();
+    result.success(null);
+  }
+
+  async fetchCover(filename: string, result: MethodResult) {
+    if (canIUse("SystemCapability.Multimedia.Media.AVMetadataExtractor")) {
+      // 创建AVMetadataExtractor对象
+      let avMetadataExtractor: media.AVMetadataExtractor =
+        await media.createAVMetadataExtractor()
+      // 设置fdSrc
+      if (filename != null && filename.startsWith("file")) {
+        console.log(`trying to get metadata from file: ${filename}`)
+        let file = fs.openSync(filename, fs.OpenMode.READ_ONLY)
+        let state = fs.statSync(file.fd)
+        let avFileDescriptor: media.AVFileDescriptor = {
+          fd: file.fd,
+          offset: 0,
+          length: state.size,
         }
+        avMetadataExtractor.fdSrc = avFileDescriptor
+      } else {
+        avMetadataExtractor.release()
+        result.success("")
+        return
+      }
+
+      // avMetadataExtractor.fdSrc = await getContext(this).resourceManager.getRawFd(filename);
+
+      // 获取元数据（promise模式）
+      let metadata = await avMetadataExtractor.fetchMetadata()
+      console.info(TAG, `get meta data, hasAudio: ${metadata.hasAudio}`)
+
+      // 获取专辑封面（promise模式）
+      try {
+        if (metadata.hasVideo == "yes") {
+          let avImageGenerator: media.AVImageGenerator =
+            await media.createAVImageGenerator()
+          if (filename != null && filename.startsWith("file")) {
+            console.log(
+              `trying to get video cover from file: ${filename}`
+            )
+            let file = fs.openSync(filename, fs.OpenMode.READ_ONLY)
+            let state = fs.statSync(file.fd)
+            let avFileDescriptor: media.AVFileDescriptor = {
+              fd: file.fd,
+              offset: 0,
+              length: state.size,
+            }
+            avImageGenerator.fdSrc = avFileDescriptor
+          }
+          // 初始化入参
+          let timeUs = 0
+          let queryOption =
+            media.AVImageQueryOptions.AV_IMAGE_QUERY_NEXT_SYNC
+          let param: media.PixelMapParams = {
+            width: 300,
+            height: 300,
+          }
+
+          // 获取缩略图（promise模式）
+          let pixelMap = await avImageGenerator.fetchFrameByTime(
+            timeUs,
+            queryOption,
+            param
+          )
+
+          // 创建 ImagePacker 实例
+          const imagePacker = image.createImagePacker();
+
+          // 将 PixelMap 编码为图像数据
+          const packedData = await imagePacker.packing(pixelMap, {
+            format: "image/jpeg", // 你可以根据需要选择其他格式，如 "image/png"
+            quality: 100 // 图像质量，范围是 1 到 100
+          });
+
+          // 将 Uint8Array 转换为 Base64 字符串
+          const base64String = buffer.from(packedData).toString('base64');
+          result.success(base64String);
+          // 释放资源（promise模式）
+          avImageGenerator.release()
+
+          console.info(TAG, `release success.`)
+          return;
+        } else {
+          let pixelMap = await avMetadataExtractor.fetchAlbumCover()
+          // 创建 ImagePacker 实例
+          const imagePacker = image.createImagePacker();
+
+          // 将 PixelMap 编码为图像数据
+          const packedData = await imagePacker.packing(pixelMap, {
+            format: "image/jpeg", // 你可以根据需要选择其他格式，如 "image/png"
+            quality: 100 // 图像质量，范围是 1 到 100
+          });
+
+          // 将 Uint8Array 转换为 Base64 字符串
+          const base64String = buffer.from(packedData).toString('base64');
+          result.success(base64String);
+          return;
+        }
+      } catch (e) {
+        result.success("");
+
+        console.error(TAG, `fetchAlbumCover failed: ${e}`)
+        return;
+      }
+      result.success("");
+      // 释放资源（promise模式）
+      avMetadataExtractor.release()
+      console.info(TAG, `release success.`)
     }
+  }
 
 }

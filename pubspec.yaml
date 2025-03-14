@@ -118,6 +118,14 @@ dependency_overrides:
       path: packages/webview_flutter/webview_flutter
       url: https://gitee.com/openharmony-sig/flutter_packages.git
   win32: 5.5.4
+  # media_kit:
+  #   path: ../media-kit-ohos/media_kit
+  # media_kit_video:
+  #   path: ../media-kit-ohos/media_kit_video
+  # media_kit_libs_video:
+  #   path: ../media-kit-ohos/libs/universal/media_kit_libs_video
+  # media_kit_libs_ohos_video:
+  #   path: ../media-kit-ohos/libs/ohos/media_kit_libs_ohos_video
 description: A new Flutter project.
 dev_dependencies:
   flutter_lints: ^3.0.0
@@ -131,6 +139,7 @@ flutter:
   - Assets/icon.png
   - Assets/privacy_policy.html
   - Assets/thanksfor.txt
+  - Assets/Montserrat-Bold.ttf
   uses-material-design: true
 name: aloeplayer
 publish_to: none

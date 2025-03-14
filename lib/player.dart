@@ -166,6 +166,7 @@ class _PlayerTabState extends State<PlayerTab>
   @override
   // bool get wantKeepAlive => true;
   VideoPlayerController? _videoController;
+  VideoPlayerController? _audioTrackController;
   double _volume = 1.0;
   double _systemVolume = 7.5;
   double _systemMaxVolume = 15;
@@ -365,7 +366,7 @@ class _PlayerTabState extends State<PlayerTab>
         .receiveBroadcastStream()
         .listen(_onVolumeChanged, onError: _onError);
     final _platform = const MethodChannel('samples.flutter.dev/volumeplugin');
-// 调用方法 getBatteryLevel
+// 调用原生方法
     _systemMaxVolume =
         ((await _platform.invokeMethod<int>('getMaxVolume')) ?? 15).toDouble();
     _openUri(widget.openfile);
@@ -396,17 +397,68 @@ class _PlayerTabState extends State<PlayerTab>
   Future<void> _openAudioTrackDialog() async {
     if (_videoController == null) return;
     print('打开音轨列表');
-    Fluttertoast.showToast(msg: '打开音轨列表...');
 
-    print('获取音轨列表...');
-    List<String> audioTracks = await _videoController!.getAudioTracks();
-    print('音轨列表: $audioTracks');
+    List<String> audioTracks = ['0', '1', '2', '3', '4', '5'];
+    List<String> externalAudioTracks = [];
+    String videoBaseName = '';
 
-    // 如果音轨列表为空，则默认显示 0, 1, 2, 3, 4, 5
-    // if (audioTracks.isEmpty) {
-    audioTracks = ['0', '1', '2', '3', '4', '5'];
-    // }
+    // 获取内置音轨
+    print('获取内置音轨列表...');
+    try {
+      audioTracks = await _videoController!.getAudioTracks();
+      print('内置音轨列表: $audioTracks, 长度: ${audioTracks.length}');
 
+      // 如果音轨列表为空，则默认显示 0, 1, 2, 3, 4, 5
+      if (audioTracks.isEmpty) {
+        audioTracks = ['0', '1', '2', '3', '4', '5'];
+      }
+    } catch (e) {
+      print('获取内置音轨列表失败: $e');
+      audioTracks = ['0', '1', '2', '3', '4', '5'];
+    }
+
+    // 获取外置音轨
+    print('获取外置音轨列表...');
+    try {
+      videoBaseName = path.basenameWithoutExtension(widget.openfile);
+      final cacheDir = await getTemporaryDirectory();
+      final directoryPath = cacheDir.path;
+
+      // 扫描目录中的所有文件
+      final directory = Directory(directoryPath);
+      final files = directory.listSync();
+
+      // 筛选出符合条件的AAC文件
+      for (final file in files) {
+        if (file is File &&
+            (file.path.toLowerCase().endsWith('.aac') ||
+                file.path.toLowerCase().endsWith('.mp3') ||
+                file.path.toLowerCase().endsWith('.m4a')) &&
+            path.basename(file.path).startsWith(videoBaseName)) {
+          externalAudioTracks.add(file.path);
+          print('找到外置音轨: ${file.path}');
+        }
+      }
+
+      // 然后尝试在文件同级目录下查找
+      final parentDir = Directory(path.dirname(widget.openfile));
+      final parentFiles = parentDir.listSync();
+
+      for (final file in parentFiles) {
+        if (file is File &&
+            (file.path.toLowerCase().endsWith('.aac') ||
+                file.path.toLowerCase().endsWith('.mp3') ||
+                file.path.toLowerCase().endsWith('.m4a')) &&
+            path.basename(file.path).startsWith(videoBaseName)) {
+          externalAudioTracks.add(file.path);
+          print('找到外置音轨: ${file.path}');
+        }
+      }
+    } catch (e) {
+      print('获取外置音轨失败: $e');
+    }
+
+    // 显示选择对话框
     String? selectedTrack = await showDialog<String>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.5),
@@ -455,6 +507,22 @@ class _PlayerTabState extends State<PlayerTab>
                       style: TextStyle(color: Colors.red, fontSize: 14),
                     ),
                   ),
+                  if (externalAudioTracks.isNotEmpty) ...[
+                    const SizedBox(height: 15),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border:
+                            Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: const Text(
+                        '发现外置音轨文件，选择它们将会替换视频原有声音',
+                        style: TextStyle(color: Colors.green, fontSize: 14),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 15),
                   ConstrainedBox(
                     constraints: BoxConstraints(
@@ -463,39 +531,41 @@ class _PlayerTabState extends State<PlayerTab>
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       child: Column(
-                        children: audioTracks.map((track) {
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.05),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: Colors.blue.withOpacity(0.2),
+                        children: [
+                          // 内置音轨
+                          ...audioTracks.map((track) {
+                            return _buildTrackTile(
+                              track,
+                              '内置音轨 $track',
+                              Icons.audio_file,
+                              Colors.blue,
+                              context,
+                            );
+                          }).toList(),
+
+                          // 分隔线（如果同时存在内置和外置音轨）
+                          if (audioTracks.isNotEmpty &&
+                              externalAudioTracks.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: Container(
+                                height: 1,
+                                color: Colors.grey.withOpacity(0.3),
                               ),
                             ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 4),
-                              leading: const Icon(Icons.audio_file,
-                                  color: Colors.blue),
-                              title: Text(
-                                track,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              trailing: const Icon(Icons.chevron_right,
-                                  color: Colors.blue),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              onTap: () {
-                                Navigator.of(context).pop(track);
-                              },
-                            ),
-                          );
-                        }).toList(),
+
+                          // 外置音轨
+                          ...externalAudioTracks.map((trackPath) {
+                            final fileName = path.basename(trackPath);
+                            return _buildTrackTile(
+                              trackPath,
+                              '外置音轨: $fileName',
+                              Icons.music_note,
+                              Colors.green,
+                              context,
+                            );
+                          }).toList(),
+                        ],
                       ),
                     ),
                   ),
@@ -526,11 +596,154 @@ class _PlayerTabState extends State<PlayerTab>
       },
     );
 
+    // 处理选择结果
     if (selectedTrack != null) {
-      // 在这里处理选中的音轨
-      print('选中的音轨: $selectedTrack');
-      // 你可以在这里调用 _videoController.setAudioTrack(selectedTrack) 来设置音轨
-      _videoController?.setAudioTrack(selectedTrack);
+      await _handleTrackSelection(selectedTrack, externalAudioTracks);
+    }
+  }
+
+  Widget _buildTrackTile(String value, String displayName, IconData icon,
+      Color color, BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: color.withOpacity(0.2),
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Icon(icon, color: color),
+        title: Text(
+          displayName,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Icon(Icons.chevron_right, color: color),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        onTap: () {
+          Navigator.of(context).pop(value);
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleTrackSelection(
+      String selectedTrack, List<String> externalAudioTracks) async {
+    // 判断是内置音轨还是外置音轨
+    if (externalAudioTracks.contains(selectedTrack)) {
+      // 选择的是外置音轨
+      await _setupExternalAudioTrack(selectedTrack);
+    } else {
+      // 选择的是内置音轨
+      await _setupInternalAudioTrack(int.tryParse(selectedTrack) ?? 0);
+    }
+  }
+
+  Future<void> _setupExternalAudioTrack(String audioFilePath) async {
+    try {
+      print('设置外置音轨: $audioFilePath');
+
+      // 如果已有外置音轨控制器，先释放
+      if (_audioTrackController != null) {
+        await _audioTrackController!.dispose();
+        _audioTrackController = null;
+      }
+
+      // 创建外置音轨控制器
+      _audioTrackController = VideoPlayerController.file(File(audioFilePath));
+      await _audioTrackController!.initialize();
+
+      // 记录当前视频位置和播放状态
+      final currentPosition = _videoController!.value.position;
+      final wasPlaying = _videoController!.value.isPlaying;
+      final currentPlaybackSpeed = _videoController!.value.playbackSpeed;
+
+      // 设置视频静音
+      await _videoController!.setVolume(0.0);
+
+      // 设置音频轨道到相同位置并应用相同的播放速度
+      await _audioTrackController!.setPlaybackSpeed(currentPlaybackSpeed);
+      await _audioTrackController!.seekTo(currentPosition);
+
+      // 添加监听器以同步视频和音频播放
+      _videoController!.removeListener(_syncAudioTrack);
+      _videoController!.addListener(_syncAudioTrack);
+
+      // 如果视频在播放，则启动音频
+      if (wasPlaying) {
+        await _audioTrackController!.play();
+      }
+
+      setState(() {});
+    } catch (e) {
+      print('设置外置音轨失败: $e');
+      // 出错时恢复视频声音
+      if (_videoController != null) {
+        await _videoController!.setVolume(1.0);
+      }
+    }
+  }
+
+  Future<void> _setupInternalAudioTrack(int trackIndex) async {
+    try {
+      print('设置内置音轨: $trackIndex');
+
+      // 如果有外置音轨控制器，停止并释放
+      if (_audioTrackController != null) {
+        await _audioTrackController!.pause();
+        await _audioTrackController!.dispose();
+        _audioTrackController = null;
+      }
+
+      // 恢复视频声音
+      await _videoController!.setVolume(1.0);
+
+      // 设置内置音轨
+      await _videoController!.setAudioTrack(trackIndex.toString());
+
+      // 移除同步监听器
+      _videoController!.removeListener(_syncAudioTrack);
+
+      setState(() {});
+    } catch (e) {
+      print('设置内置音轨失败: $e');
+    }
+  }
+
+  void _syncAudioTrack() {
+    if (_videoController == null || _audioTrackController == null) return;
+
+    // 同步播放/暂停状态
+    if (_videoController!.value.isPlaying &&
+        !_audioTrackController!.value.isPlaying) {
+      _audioTrackController!.play();
+    } else if (!_videoController!.value.isPlaying &&
+        _audioTrackController!.value.isPlaying) {
+      _audioTrackController!.pause();
+    }
+
+    // 同步播放速度
+    if (_videoController!.value.playbackSpeed !=
+        _audioTrackController!.value.playbackSpeed) {
+      _audioTrackController!
+          .setPlaybackSpeed(_videoController!.value.playbackSpeed);
+    }
+
+    // 检查是否需要同步位置(差距大于1秒)
+    final videoDuration = _videoController!.value.position;
+    final audioDuration = _audioTrackController!.value.position;
+
+    if ((videoDuration - audioDuration).abs().inMilliseconds > 1000) {
+      _audioTrackController!.seekTo(videoDuration);
     }
   }
 
@@ -883,196 +1096,213 @@ class _PlayerTabState extends State<PlayerTab>
     //     "getMessageFromFlutterView", convertPathToOhosUri(this.widget.openfile));
   }
 
+  /// 尝试读取字幕文件，带有重试机制
   Future<void> readFileWithRetry(String path) async {
-    // 提取文件名
-    String fileName = path.split('/').last;
+    // 提取文件名和不带扩展名的文件名
+    final String fileName = path.split('/').last;
+    final String fileNameWithoutExt =
+        fileName.substring(0, fileName.lastIndexOf('.'));
 
-    // 构造文件目录
-    String directoryPath = '/data/storage/el2/base/haps/entry/cache/';
+    // 首先从缓存目录读取字幕
+    await _readSubtitlesFromCache(fileName);
+
+    // 然后从视频所在目录读取字幕（注意：这里不受缓存目录结果的影响，始终会执行）
+    final String videoDirectory = path.substring(0, path.lastIndexOf('/'));
+    await _readSubtitlesFromVideoDirectory(videoDirectory, fileNameWithoutExt);
+
+    // 设置默认字幕
+    _setDefaultSubtitle();
+  }
+
+  /// 从缓存目录读取字幕文件，会尝试多次（因为字幕可能正在被提取）
+  Future<void> _readSubtitlesFromCache(String fileName) async {
+    // 先等待一段时间，给字幕提取留出时间
     await Future.delayed(Duration(seconds: 2));
 
-    // 尝试读取文件
+    // 尝试最多3次读取文件
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
-        // 查找是否有以 fileName 为前缀的 .ass 或 .srt 文件
+        // 获取缓存目录路径
         final cacheDir = await getTemporaryDirectory();
-        final directoryPath = cacheDir.path; // 缓存目录路径
-
+        final String directoryPath = cacheDir.path;
         print('缓存目录路径: $directoryPath');
+
+        // 列出目录中的所有文件
         Directory directory = Directory(directoryPath);
         List<FileSystemEntity> files = await directory.list().toList();
 
-        // 过滤出符合条件的文件
-        List<File> matchingFiles = files.whereType<File>().where((file) {
-          String name = file.path.split('/').last;
-          return (name.startsWith(fileName) &&
-              (name.endsWith('.ass') || name.endsWith('.srt')));
-        }).toList();
+        // 查找匹配的字幕文件
+        List<File> matchingFiles = _findSubtitleFiles(files, fileName);
 
-        // 遍历并打印匹配文件
+        // 打印找到的字幕文件
         if (matchingFiles.isNotEmpty) {
-          print('找到 ${matchingFiles.length} 个匹配的文件：');
+          print('在缓存目录中找到 ${matchingFiles.length} 个匹配的字幕文件：');
           for (var file in matchingFiles) {
             print(file.path);
           }
-        } else {
-          print('未找到匹配的文件。');
-        }
 
-        // 如果找到符合条件的文件，加载所有匹配的字幕
-        if (matchingFiles.isNotEmpty) {
-          for (var file in matchingFiles) {
-            String content = await file.readAsString();
+          // 处理所有找到的字幕文件
+          await _processSubtitleFiles(matchingFiles);
 
-            // 创建字幕数据对象
-            SubtitleData subtitleData = SubtitleData(
-              name: file.path.split('/').last,
-              content: content,
-              extension: file.path.split('.').last,
-            );
-
-            // 解析字幕内容
-            if (subtitleData.extension == 'ass') {
-              subtitleData.subtitles = await ass2srt(content);
-              final result = AssParserPlus.parseAssContent(content);
-              subtitleData.styles = result.$1;
-              subtitleData.assSubtitles = result.$2;
-            } else if (subtitleData.extension == 'srt') {
-              SubtitleController controller = SubtitleController.string(
-                content,
-                format: SubtitleFormat.srt,
-              );
-              subtitleData.subtitles = controller.subtitles
-                  .map(
-                    (e) => Subtitle(
-                      index: e.number,
-                      start: Duration(milliseconds: e.start),
-                      end: Duration(milliseconds: e.end),
-                      text: e.text.replaceAll('\\N', '\n'),
-                    ),
-                  )
-                  .toList();
-            }
-
-            // 将字幕添加到列表中
-            _subtitles.add(subtitleData);
-          }
-
-          // 如果当前没有启用的字幕，则默认启用第一个匹配的字幕
-          // if (_currentSubtitleIndex == -1 && _subtitles.isNotEmpty) {
-          //   _currentSubtitleIndex = 0;
-          //   _chewieController!.setSubtitle(_subtitles[0].subtitles!);
-          // }
-
-          // // 更新 UI
-          // setState(() {});
-
-          // 文件加载成功，退出循环
+          // 找到字幕文件，跳出重试循环
           break;
         } else {
-          // 如果没有找到文件，抛出异常
-          throw FileSystemException('文件不存在', directoryPath);
+          // 如果没有找到文件，抛出异常以触发重试
+          throw FileSystemException('缓存中未找到字幕文件', directoryPath);
         }
       } catch (e) {
-        // 如果文件不存在，等待3秒后重试
-        if (e is FileSystemException && e.osError?.errorCode == 2) {
-          print('文件不存在，等待3秒后重试...');
+        // 打印错误信息
+        print('尝试 ${attempt + 1}/3 从缓存读取字幕失败: $e');
+
+        // 如果是文件不存在错误，等待3秒后重试
+        if (e is FileSystemException) {
+          print('等待3秒后重试...');
           await Future.delayed(Duration(seconds: 3));
         } else {
-          // 其他异常，直接抛出
+          // 其他类型的错误，直接抛出
           rethrow;
         }
       }
-    }
 
-    // 然后尝试在path的同级文件夹里面找
+      // 最后一次尝试后，如果仍未成功
+      if (attempt == 2) {
+        print('从缓存读取字幕文件失败，已尝试3次');
+      }
+    }
+  }
+
+  /// 从视频所在目录读取字幕文件
+  Future<void> _readSubtitlesFromVideoDirectory(
+      String directoryPath, String fileNameWithoutExt) async {
     try {
-      directoryPath = path.substring(0, path.lastIndexOf('/'));
+      print('尝试从视频目录读取字幕: $directoryPath');
+
+      // 列出目录中的所有文件
       Directory directory = Directory(directoryPath);
       List<FileSystemEntity> files = await directory.list().toList();
-      // 过滤出符合条件的文件
+
+      // 查找匹配的字幕文件
       List<File> matchingFiles = files.whereType<File>().where((file) {
         String name = file.path.split('/').last;
-        return (name
-                .startsWith(fileName.substring(0, fileName.lastIndexOf('.'))) &&
-            (name.endsWith('.ass') || name.endsWith('.srt')));
+        return (name.startsWith(fileNameWithoutExt) &&
+            (name.toLowerCase().endsWith('.ass') ||
+                name.toLowerCase().endsWith('.srt')));
       }).toList();
 
-      // 遍历并打印匹配文件
+      // 打印找到的字幕文件
       if (matchingFiles.isNotEmpty) {
-        print('找到 ${matchingFiles.length} 个匹配的文件：');
+        print('在视频目录中找到 ${matchingFiles.length} 个匹配的字幕文件：');
         for (var file in matchingFiles) {
           print(file.path);
         }
+
+        // 处理所有找到的字幕文件
+        await _processSubtitleFiles(matchingFiles);
+      } else {
+        print('在视频目录中未找到匹配的字幕文件');
       }
+    } catch (e) {
+      print('从视频目录读取字幕时出错: $e');
+    }
+  }
 
-      // 如果找到符合条件的文件，加载所有匹配的字幕
-      if (matchingFiles.isNotEmpty) {
-        for (var file in matchingFiles) {
-          String content = await file.readAsString();
+  /// 查找匹配的字幕文件
+  List<File> _findSubtitleFiles(List<FileSystemEntity> files, String fileName) {
+    return files.whereType<File>().where((file) {
+      String name = file.path.split('/').last;
+      return (name.startsWith(fileName) &&
+          (name.toLowerCase().endsWith('.ass') ||
+              name.toLowerCase().endsWith('.srt')));
+    }).toList();
+  }
 
-          // 创建字幕数据对象
-          SubtitleData subtitleData = SubtitleData(
-            name: file.path.split('/').last,
-            content: content,
-            extension: file.path.split('.').last,
+  /// 处理找到的字幕文件列表
+  Future<void> _processSubtitleFiles(List<File> files) async {
+    for (var file in files) {
+      await _processSubtitleFile(file);
+    }
+  }
+
+  /// 处理单个字幕文件，错误不会阻塞其他文件的处理
+  Future<void> _processSubtitleFile(File file) async {
+    try {
+      // 读取文件内容
+      String content = await file.readAsString();
+      String name = file.path.split('/').last;
+      String extension = file.path.split('.').last.toLowerCase();
+
+      // 创建字幕数据对象
+      SubtitleData subtitleData = SubtitleData(
+        name: name,
+        content: content,
+        extension: extension,
+      );
+
+      // 根据扩展名解析字幕
+      if (extension == 'ass') {
+        try {
+          subtitleData.subtitles = await ass2srt(content);
+          final result = AssParserPlus.parseAssContent(content);
+          subtitleData.styles = result.$1;
+          subtitleData.assSubtitles = result.$2;
+        } catch (e) {
+          print('解析 ASS 字幕失败: $e');
+          // 继续处理，不阻塞其他字幕
+          return;
+        }
+      } else if (extension == 'srt') {
+        try {
+          SubtitleController controller = SubtitleController.string(
+            content,
+            format: SubtitleFormat.srt,
           );
-          // 解析字幕内容
-          if (subtitleData.extension == 'ass') {
-            subtitleData.subtitles = await ass2srt(content);
-            final result = AssParserPlus.parseAssContent(content);
-            subtitleData.styles = result.$1;
-            subtitleData.assSubtitles = result.$2;
-          } else if (subtitleData.extension == 'srt') {
-            SubtitleController controller = SubtitleController.string(
-              content,
-              format: SubtitleFormat.srt,
-            );
-            subtitleData.subtitles = controller.subtitles
-                .map(
-                  (e) => Subtitle(
+          subtitleData.subtitles = controller.subtitles
+              .map((e) => Subtitle(
                     index: e.number,
                     start: Duration(milliseconds: e.start),
                     end: Duration(milliseconds: e.end),
                     text: e.text.replaceAll('\\N', '\n'),
-                  ),
-                )
-                .toList();
-          }
-          // 将字幕添加到列表中
-          _subtitles.add(subtitleData);
+                  ))
+              .toList();
+        } catch (e) {
+          print('解析 SRT 字幕失败: $e');
+          // 继续处理，不阻塞其他字幕
+          return;
         }
       }
-    } catch (e) {
-      print(e);
-    }
 
-    // 如果当前没有启用的字幕，则优先启用第一个ASS字幕，若没有则启用第一个普通字幕
+      // 将处理好的字幕添加到列表
+      _subtitles.add(subtitleData);
+    } catch (e) {
+      print('处理字幕文件 ${file.path} 时出错: $e');
+      // 继续处理其他字幕文件
+    }
+  }
+
+  /// 设置默认字幕
+  void _setDefaultSubtitle() {
     if (_currentSubtitleIndex == -1 && _subtitles.isNotEmpty) {
-      // 尝试查找第一个ASS字幕
+      // 优先使用第一个 ASS 字幕
       int assSubtitleIndex =
           _subtitles.indexWhere((subtitle) => subtitle.assSubtitles != null);
 
       if (assSubtitleIndex != -1) {
-        // 找到了ASS字幕
+        // 找到了 ASS 字幕
         _currentSubtitleIndex = assSubtitleIndex;
-        final subtitleData = _subtitles[assSubtitleIndex];
-        _chewieController!.setSubtitle(subtitleData.subtitles!);
-        _chewieController!.assStyles = subtitleData.styles;
-        _chewieController!.assSubtitles = subtitleData.assSubtitles;
       } else {
-        // 没有找到ASS字幕，使用第一个普通字幕
+        // 没有 ASS 字幕，使用第一个普通字幕
         _currentSubtitleIndex = 0;
-        final subtitleData = _subtitles[0];
-        _chewieController!.setSubtitle(subtitleData.subtitles!);
-        _chewieController!.assStyles = subtitleData.styles;
-        _chewieController!.assSubtitles = subtitleData.assSubtitles;
       }
-    }
 
-    // 如果3次尝试都失败，返回null
-    print('文件读取失败，放弃尝试。');
-    return;
+      // 应用选择的字幕
+      final subtitleData = _subtitles[_currentSubtitleIndex];
+      _chewieController!.setSubtitle(subtitleData.subtitles!);
+      _chewieController!.assStyles = subtitleData.styles;
+      _chewieController!.assSubtitles = subtitleData.assSubtitles;
+
+      // 更新 UI
+      // setState(() {});
+    }
   }
 
   String convertUriToPath(String uri) {
@@ -1311,8 +1541,8 @@ class _PlayerTabState extends State<PlayerTab>
               initUri: convertUriToPath(uri),
               toggleFullScreen: this.toggleFullScreen);
         }
-        _ffmpegExample?.controller?.sendMessageToOhosView(
-            "newPlay", convertUriToPath(uri));
+        _ffmpegExample?.controller
+            ?.sendMessageToOhosView("newPlay", convertUriToPath(uri));
       }
       _getPlaylist(originalUri);
       _recordPlayStart(originalUri, originalUri);
@@ -1321,12 +1551,18 @@ class _PlayerTabState extends State<PlayerTab>
       final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
       final cacheDir = await getTemporaryDirectory();
       final directoryPath = cacheDir.path; // 缓存目录路径
-      // 调用方法 getBatteryLevel
-      final result2 = await _platform.invokeMethod<String>('getassold', {
+      // 调用原生方法
+      await _platform.invokeMethod<String>('getassold', {
         "path": uri,
         "type": "srt",
         "output": path.join(directoryPath, fileName)
       });
+      await _platform.invokeMethod<String>('getass', {
+        "path": uri,
+        "type": "ass",
+        "output": path.join(directoryPath, fileName)
+      });
+      // getAudioTrack(uri, path.join(directoryPath, fileName), 0);
       if (await _settingsService.getAutoLoadSubtitle() == true) {
         readFileWithRetry(uri);
       }
@@ -1336,6 +1572,14 @@ class _PlayerTabState extends State<PlayerTab>
     // await audioHandler.setLoopingSilence();
     // await audioHandler.play();
     Wakelock.enable();
+  }
+
+  Future<void> getAudioTrack(
+      String filePath, String outputPrefix, int trackNum) async {
+    final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
+    // 调用原生方法
+    await _platform.invokeMethod<String>('getaudiotrack',
+        {"path": filePath, "output": outputPrefix, "track": trackNum});
   }
 
   // Future<void> _openFile() async {
@@ -1658,17 +1902,17 @@ class _PlayerTabState extends State<PlayerTab>
       height: _videoController!.value.size.height.toInt(),
       fonts: [_assFontFile!],
     );
-    final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
-    print("ASS: start init libass");
-    // 调用方法 getBatteryLevel
-    final initAssRenderSuccess =
-        await _platform.invokeMethod<bool>('initLibass', {
-      "assFilename": _assFile!.path,
-      "width": _videoController!.value.size.width.toInt(),
-      "height": _videoController!.value.size.height.toInt()
-    });
+    // final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
+    // print("ASS: start init libass");
+    // // 调用原生方法
+    // final initAssRenderSuccess =
+    //     await _platform.invokeMethod<bool>('initLibass', {
+    //   "assFilename": _assFile!.path,
+    //   "width": _videoController!.value.size.width.toInt(),
+    //   "height": _videoController!.value.size.height.toInt()
+    // });
     await _assRenderer!.init();
-    // bool initAssRenderSuccess = true;
+    bool initAssRenderSuccess = true;
     if (initAssRenderSuccess ?? false) {
       print("Assrendered init done");
       _assInit = true;
@@ -1680,8 +1924,8 @@ class _PlayerTabState extends State<PlayerTab>
       //     }) ??
       //     "NullImage";
       // print("AssImage:" + img);
-      final img = await getAssFrame(125000);
-      // final img = _assRenderer!.getFrame(125000);
+      // final img = await getAssFrame(125000);
+      final img = _assRenderer!.getFrame(125000);
       ByteData? pngBytes = await img.toByteData(format: ui.ImageByteFormat.png);
       print("Byte: " + pngBytes.toString());
       File('/storage/Users/currentUser/Download/com.aloereed.aloeplayer/test.png')
@@ -1998,6 +2242,8 @@ class _PlayerTabState extends State<PlayerTab>
   @override
   void dispose() {
     _videoController?.removeListener(_updatePlaybackState);
+    _videoController?.removeListener(_syncAudioTrack);
+    _audioTrackController?.dispose();
     _videoController?.dispose();
     _chewieController?.dispose();
     _volumeSliderTimer?.cancel();

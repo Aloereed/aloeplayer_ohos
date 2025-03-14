@@ -23,6 +23,7 @@ import 'favorite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'history_page.dart';
 
+// import 'mpvplayer.dart';
 // import 'package:path/path.dart';
 class VideoLibraryTab extends StatefulWidget {
   final Function(String) getopenfile;
@@ -334,6 +335,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               extension != '.jpeg' &&
               extension != '.gif' &&
               extension != '.bmp' &&
+              extension != '.aac' &&
               !item.path.contains('.ux_store')) {
             if (extension == '.lnk') {
               // 作为string读取lnk文件为uri
@@ -2789,6 +2791,21 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
             widget.startPlayerPage(context);
           },
         ),
+        // _buildOptionTile(
+        //   icon: Icons.play_arrow,
+        //   color: Colors.green,
+        //   title: '使用MPV播放',
+        //   onTap: () {
+        //     Navigator.pop(context);
+        //     Navigator.push(
+        //       context,
+        //       MaterialPageRoute(
+        //         builder: (context) =>
+        //             MPVPlayer(filePath: file.path),
+        //       ),
+        //     );
+        //   },
+        // ),
         _buildOptionTile(
           icon: Icons.file_download,
           color: Colors.blue,
@@ -2806,6 +2823,15 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
           onTap: () {
             Navigator.pop(context);
             _showExtractSubtitleDialog(file);
+          },
+        ),
+        _buildOptionTile(
+          icon: Icons.music_note,
+          color: Colors.yellow,
+          title: '抽取音轨',
+          onTap: () {
+            Navigator.pop(context);
+            _showExtractAudioTrackDialog(file);
           },
         ),
         _buildOptionTile(
@@ -2993,7 +3019,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                       .invokeMethod<String>('tomp4', {"path": file.path});
 
                   setState(() {
-                    isFFmpeged = true;
+                    // isFFmpeged = true;
                   });
 
                   // Close progress dialog
@@ -3082,270 +3108,469 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   void _showExtractSubtitleDialog(File file) {
+    int selectedTrack = 1; // 默认选择轨道1
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.subtitles, color: Colors.purple),
-              SizedBox(width: 10),
-              Text('抽取内挂字幕'),
-            ],
-          ),
-          content: Text('确定要抽取该视频的内挂字幕吗？'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: Text('取消', style: TextStyle(color: Colors.grey)),
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: AlertDialog(
+            backgroundColor: Colors.white.withOpacity(0.9),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-
-                // Show progress dialog
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(height: 16),
-                          CircularProgressIndicator(),
-                          SizedBox(height: 24),
-                          Text('正在抽取字幕...'),
-                        ],
-                      ),
-                    );
-                  },
-                );
-
-                try {
-                  if (await _settingsService.getExtractAssSubtitle()) {
-                    if (isFFmpeged) {
-                      Navigator.pop(context); // Close progress dialog
-
-                      showDialog(
-                        context: context,
-                        builder: (context) {
-                          return AlertDialog(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            title: Row(
-                              children: [
-                                Icon(Icons.warning, color: Colors.orange),
-                                SizedBox(width: 10),
-                                Text('操作受限'),
-                              ],
-                            ),
-                            content: Text(
-                                '由于当前限制，ASS内挂字幕抽取功能每次只能运行一次，请重启应用或关闭ASS抽取。'),
-                            actions: [
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                },
-                                child: Text('确定',
-                                    style: TextStyle(
-                                        color: Theme.of(context).primaryColor)),
-                              ),
-                            ],
+            title: Row(
+              children: [
+                Icon(Icons.subtitles, color: Theme.of(context).primaryColor),
+                SizedBox(width: 12),
+                Text('抽取内挂字幕', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: StatefulBuilder(
+                builder: (BuildContext context, StateSetter setState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('请选择要抽取的字幕轨道号：'),
+                  SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: selectedTrack,
+                        isExpanded: true,
+                        icon: Icon(Icons.arrow_drop_down,
+                            color: Theme.of(context).primaryColor),
+                        items: List.generate(30, (index) => index + 1)
+                            .map((int value) {
+                          return DropdownMenuItem<int>(
+                            value: value,
+                            child: Text("轨道 $value"),
                           );
+                        }).toList(),
+                        onChanged: (int? newValue) {
+                          if (newValue != null) {
+                            setState(() {
+                              selectedTrack = newValue;
+                            });
+                          }
                         },
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text('确定要抽取该视频的内挂字幕吗？(SRT字幕会抽取全部字幕轨道)',
+                      style: TextStyle(color: Colors.grey[600])),
+                ],
+              );
+            }),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text('取消', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  // 显示进度对话框
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (BuildContext context) {
+                      return BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: AlertDialog(
+                          backgroundColor: Colors.white.withOpacity(0.9),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(height: 20),
+                              CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Theme.of(context).primaryColor),
+                              ),
+                              SizedBox(height: 24),
+                              Text(
+                                '正在抽取字幕轨道 $selectedTrack...',
+                                style: TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              SizedBox(height: 10),
+                            ],
+                          ),
+                        ),
                       );
-                      return;
-                    }
+                    },
+                  );
 
+                  try {
                     final _platform =
                         const MethodChannel('samples.flutter.dev/ffmpegplugin');
                     String filePath = file.path;
+
                     if (file.path.endsWith('.lnk')) {
-                      Navigator.pop(context);
-                      // 提示暂不支持链接文件
-                      showDialog(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return AlertDialog(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16.0),
-                            ),
-                            title: const Text(
-                              '暂不支持链接文件',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            content: const Text(
-                              '当前暂不支持处理链接文件 (.lnk)，请选择其他文件。',
-                              style: TextStyle(
-                                fontSize: 16,
-                              ),
-                            ),
-                            actions: <Widget>[
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                },
-                                child: const Text(
-                                  '确定',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    }
-                    await _platform.invokeMethod<String>(
-                        'getsrt', {"path": filePath, "type": "ass"});
-                    setState(() {
-                      isFFmpeged = true;
-                    });
-                  } else {
-                    final _platform =
-                        const MethodChannel('samples.flutter.dev/ffmpegplugin');
-                    String filePath = file.path;
-                    if (file.path.endsWith('.lnk')) {
-                      Navigator.pop(context);
-                      // 作为String读取file
-                      showDialog(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return AlertDialog(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16.0),
-                            ),
-                            title: const Text(
-                              '暂不支持链接文件',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            content: const Text(
-                              '当前暂不支持处理链接文件 (.lnk)，请选择其他文件。',
-                              style: TextStyle(
-                                fontSize: 16,
-                              ),
-                            ),
-                            actions: <Widget>[
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                },
-                                child: const Text(
-                                  '确定',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      );
+                      Navigator.pop(context); // 关闭进度对话框
+                      _showLinkFileErrorDialog();
                       return;
                     }
-                    await _platform.invokeMethod<String>(
-                        'getsrtold', {"path": filePath, "type": "ass"});
+
+                    if (await _settingsService.getExtractAssSubtitle()) {
+                      await _platform.invokeMethod<String>('getsrt', {
+                        "path": filePath,
+                        "type": "ass",
+                        "track": selectedTrack-1
+                      });
+                    } else {
+                      await _platform.invokeMethod<String>('getsrtold', {
+                        "path": filePath,
+                        "type": "srt",
+                      });
+                    }
+
+                    // 关闭进度对话框
+                    Navigator.pop(context);
+                    // 显示成功对话框
+                    _showSuccessDialog();
+                  } catch (e) {
+                    // 关闭进度对话框
+                    Navigator.pop(context);
+                    // 显示错误对话框
+                    _showErrorDialog(e.toString());
                   }
-
-                  // Close progress dialog
-                  Navigator.pop(context);
-
-                  // Show success dialog
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      return AlertDialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        title: Row(
-                          children: [
-                            Icon(Icons.check_circle, color: Colors.green),
-                            SizedBox(width: 10),
-                            Text('抽取完成'),
-                          ],
-                        ),
-                        content: Text('内挂字幕抽取已启动，请自行到库文件夹检查结果。'),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                            child: Text('确定',
-                                style: TextStyle(
-                                    color: Theme.of(context).primaryColor)),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                } catch (e) {
-                  // Close progress dialog
-                  Navigator.pop(context);
-
-                  // Show error dialog
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      return AlertDialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        title: Row(
-                          children: [
-                            Icon(Icons.error, color: Colors.red),
-                            SizedBox(width: 10),
-                            Text('抽取失败'),
-                          ],
-                        ),
-                        content: Text('字幕抽取失败: $e'),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                            child: Text('确定',
-                                style: TextStyle(
-                                    color: Theme.of(context).primaryColor)),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                child: Text(
+                  '开始抽取',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600),
                 ),
               ),
-              child: Text(
-                '开始抽取',
-                style: TextStyle(color: Colors.white),
-              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showExtractAudioTrackDialog(File file) {
+    int selectedTrack = 1; // 默认选择轨道1
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: AlertDialog(
+            backgroundColor: Colors.white.withOpacity(0.9),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-          ],
+            title: Row(
+              children: [
+                Icon(Icons.music_note, color: Theme.of(context).primaryColor),
+                SizedBox(width: 12),
+                Text('抽取音轨', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: StatefulBuilder(
+                builder: (BuildContext context, StateSetter setState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('请选择要抽取的音轨号：'),
+                  SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: selectedTrack,
+                        isExpanded: true,
+                        icon: Icon(Icons.arrow_drop_down,
+                            color: Theme.of(context).primaryColor),
+                        items: List.generate(30, (index) => index + 1)
+                            .map((int value) {
+                          return DropdownMenuItem<int>(
+                            value: value,
+                            child: Text("轨道 $value"),
+                          );
+                        }).toList(),
+                        onChanged: (int? newValue) {
+                          if (newValue != null) {
+                            setState(() {
+                              selectedTrack = newValue;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text('确定要抽取该视频的音轨吗（本功能极其不稳定）？',
+                      style: TextStyle(color: Colors.grey[600])),
+                ],
+              );
+            }),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text('取消', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  // 显示进度对话框
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (BuildContext context) {
+                      return BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: AlertDialog(
+                          backgroundColor: Colors.white.withOpacity(0.9),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(height: 20),
+                              CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Theme.of(context).primaryColor),
+                              ),
+                              SizedBox(height: 24),
+                              Text(
+                                '正在抽取音频轨道 $selectedTrack...',
+                                style: TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              SizedBox(height: 10),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+
+                  try {
+                    final _platform =
+                        const MethodChannel('samples.flutter.dev/ffmpegplugin');
+                    String filePath = file.path;
+
+                    if (file.path.endsWith('.lnk')) {
+                      Navigator.pop(context); // 关闭进度对话框
+                      _showLinkFileErrorDialog();
+                      return;
+                    }
+
+                      await _platform.invokeMethod<String>('getaudiotrack', {
+                        "path": filePath,
+                        "track": selectedTrack-1,
+                        "output": filePath
+                      });
+                    
+
+                    // 关闭进度对话框
+                    Navigator.pop(context);
+                    // 显示成功对话框
+                    _showSuccessDialog();
+                  } catch (e) {
+                    // 关闭进度对话框
+                    Navigator.pop(context);
+                    // 显示错误对话框
+                    _showErrorDialog(e.toString());
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                child: Text(
+                  '开始抽取',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showLinkFileErrorDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: AlertDialog(
+            backgroundColor: Colors.white.withOpacity(0.9),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.link_off, color: Colors.orange),
+                SizedBox(width: 12),
+                Text(
+                  '暂不支持链接文件',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              '当前暂不支持处理链接文件 (.lnk)，请选择其他文件。',
+              style: TextStyle(fontSize: 16),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: Text(
+                  '确定',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Theme.of(context).primaryColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: AlertDialog(
+            backgroundColor: Colors.white.withOpacity(0.9),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green),
+                SizedBox(width: 12),
+                Text('抽取完成', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text('内挂字幕抽取已启动，请自行到库文件夹检查结果。'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text(
+                  '确定',
+                  style: TextStyle(
+                    color: Theme.of(context).primaryColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showErrorDialog(String error) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: AlertDialog(
+            backgroundColor: Colors.white.withOpacity(0.9),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red),
+                SizedBox(width: 12),
+                Text('抽取失败', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('字幕抽取失败:'),
+                SizedBox(height: 8),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    error,
+                    style: TextStyle(fontFamily: 'monospace', fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text(
+                  '确定',
+                  style: TextStyle(
+                    color: Theme.of(context).primaryColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );

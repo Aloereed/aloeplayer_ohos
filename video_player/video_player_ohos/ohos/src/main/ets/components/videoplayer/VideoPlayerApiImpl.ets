@@ -258,29 +258,27 @@ export class VideoPlayerApiImpl {
     return audioTracksMessage;
   }
 
-  naiveAudioTracks(arg: number): string {
+  naiveAudioTracks(arg: number, callback: (tracks: string) => void): void {
     let videoPlayer = this.videoPlayers.get(arg.toString());
-    // Log.d(TAG, "audioTracks, id=" + arg.getTextureId() + ", videoPlayer=" + videoPlayer);
-    // let audioTracksMessage = new AudioTracksMessage();
     let audioTrackIndexs: string = '';
     if (videoPlayer.avPlayer == null) {
-      console.error("audioTracks videoPlayer is null");
-      return audioTrackIndexs;
+        console.error("audioTracks videoPlayer is null");
+        callback(audioTrackIndexs);
+        return;
     }
     videoPlayer.avPlayer.getTrackDescription((error: BusinessError, arrList: Array<media.MediaDescription>) => {
-      if (arrList != null) {
-        for (let i = 0; i < arrList.length; i++) {
-            // 获取音频轨道列表
-            audioTrackIndexs=audioTrackIndexs+arrList[i][media.MediaDescriptionKey.MD_KEY_TRACK_INDEX].toString()+";";
-            console.info(`audioTracks index: ${arrList[i][media.MediaDescriptionKey.MD_KEY_TRACK_INDEX]}`);
+        if (arrList != null) {
+            for (let i = 0; i < arrList.length; i++) {
+                audioTrackIndexs += arrList[i][media.MediaDescriptionKey.MD_KEY_TRACK_INDEX].toString() + ";";
+                console.info(`audioTracks index: ${arrList[i][media.MediaDescriptionKey.MD_KEY_TRACK_INDEX]}`);
+            }
+            callback(audioTrackIndexs);
+        } else {
+            console.error(`audio getTrackDescription fail, error:${error}`);
+            callback('');
         }
-      } else {
-        console.error(`audio getTrackDescription fail, error:${error}`);
-      }
     });
-
-    return audioTrackIndexs;
-  }
+}
 
   naiveSetAudioTrack(arg: number, track: string) {
     let videoPlayer = this.videoPlayers.get(arg.toString());

@@ -34,8 +34,11 @@ export class VideoPlayerPlugin implements FlutterPlugin, AbilityAware {
       onMethodCall(call: MethodCall, result: MethodResult) {
         switch (call.method) {
           case "getAudioTracks":
-            let tracks = that.videoPlayerApi?.naiveAudioTracks(call.argument("tid") as number)
-            result.success(tracks);
+            that.videoPlayerApi?.naiveAudioTracks(call.argument("tid") as number, (tracks) => {
+                console.log(`getAudioTracks: ${tracks}`)
+                result.success(tracks);
+            });
+            break;
             break;
           case "setAudioTrack":
             that.videoPlayerApi?.naiveSetAudioTrack(call.argument("tid") as number, call.argument("track") as string)

@@ -26,7 +26,9 @@
     "libentry.so": "file:./src/main/cpp/types/libentry",
     "@ohos/aki": "^1.2.15",
     "@ohos/ijkplayer": "2.0.6",
-    "sqflite": "file:../har/sqflite.har"
+    "sqflite": "file:../har/sqflite.har",
+    "media_kit_libs_ohos_video": "file:../har/media_kit_libs_ohos_video.har",
+    "media_kit_video": "file:../har/media_kit_video.har"
   },
   "devDependencies": {},
   "dynamicDependencies": {}
