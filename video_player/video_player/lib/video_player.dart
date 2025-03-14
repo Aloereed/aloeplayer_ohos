@@ -550,6 +550,10 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   Future<void> setAudioTrack(String audioTrack) async {
     return _videoPlayerPlatform.setAudioTrack(_textureId, audioTrack);
   }
+  Future<void> closeLatestAVSession() async {
+    return _videoPlayerPlatform.closeLatestAVSession();
+  }
+
 
   /// Sets whether or not the video should loop after playing once. See also
   /// [VideoPlayerValue.isLooping].

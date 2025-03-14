@@ -115,6 +115,9 @@ abstract class VideoPlayerPlatform extends PlatformInterface {
   Future<void> setAudioTrack(int textureId, String audioTrack) {
     throw UnimplementedError('setAudioTrack() has not been implemented.');
   }
+  Future<void> closeLatestAVSession() {
+    throw UnimplementedError('closeLatestAVSession() has not been implemented.');
+  }
 }
 
 class _PlaceholderImplementation extends VideoPlayerPlatform {}

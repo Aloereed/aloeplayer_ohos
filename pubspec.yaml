@@ -27,6 +27,9 @@ dependencies:
   webdav_client: null
   xml: null
   intl: any
+  castscreen: 
+    path: ./castscreen-1.0.2
+  dio: any
 dependency_overrides:
   audio_service:
     git:
@@ -143,4 +146,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 2.0.1+24
+version: 2.0.2+25

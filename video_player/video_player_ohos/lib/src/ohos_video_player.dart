@@ -140,6 +140,14 @@ class OhosVideoPlayer extends VideoPlayerPlatform {
   }
 
   @override
+  Future<void> closeLatestAVSession() async {
+    print("start send to ohos closeLatestAVSession"); 
+    final MethodChannel _channel = MethodChannel('samples.flutter.dev/videoplayerplugin');
+    await _channel.invokeMethod<String>('closeLatestAVSession');
+    print("response from ohos closeLatestAVSession: ");
+  }
+
+  @override
   Stream<VideoEvent> videoEventsFor(int textureId) {
     return _eventChannelFor(textureId)
         .receiveBroadcastStream()

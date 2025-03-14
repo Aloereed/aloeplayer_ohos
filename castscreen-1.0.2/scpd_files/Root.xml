@@ -1,0 +1,72 @@
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+    <specVersion>
+        <major>1</major>
+        <minor>0</minor>
+    </specVersion>
+    <device>
+        <deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>
+        <presentationURL>/</presentationURL>
+        <friendlyName>客厅的小米电视</friendlyName>
+        <manufacturer>Xiaomi</manufacturer>
+        <manufacturerURL>http://www.xiaomi.com/</manufacturerURL>
+        <modelDescription>Xiaomi MediaRenderer</modelDescription>
+        <modelName>Xiaomi MediaRenderer</modelName>
+        <modelURL>http://www.xiaomi.com/hezi</modelURL>
+        <UPC>000000000000</UPC>
+        <UDN>uuid:4b363f50-e15b-37b8-0b7c-0154aba720bb</UDN>
+        <serviceList>
+            <service>
+                <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+                <serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
+                <controlURL>_urn:schemas-upnp-org:service:AVTransport_control</controlURL>
+                <SCPDURL>_urn:schemas-upnp-org:service:AVTransport_scpd.xml</SCPDURL>
+                <eventSubURL>_urn:schemas-upnp-org:service:AVTransport_event</eventSubURL>
+            </service>
+            <service>
+                <serviceType>urn:schemas-upnp-org:service:ConnectionManager:1</serviceType>
+                <serviceId>urn:upnp-org:serviceId:ConnectionManager</serviceId>
+                <SCPDURL>_urn:schemas-upnp-org:service:ConnectionManager_scpd.xml</SCPDURL>
+                <controlURL>_urn:schemas-upnp-org:service:ConnectionManager_control</controlURL>
+                <eventSubURL>_urn:schemas-upnp-org:service:ConnectionManager_event</eventSubURL>
+            </service>
+            <service>
+                <serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
+                <serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
+                <SCPDURL>_urn:schemas-upnp-org:service:RenderingControl_scpd.xml</SCPDURL>
+                <controlURL>_urn:schemas-upnp-org:service:RenderingControl_control</controlURL>
+                <eventSubURL>_urn:schemas-upnp-org:service:RenderingControl_event</eventSubURL>
+            </service>
+            <service>
+                <serviceType>urn:mi-com:service:RController:1</serviceType>
+                <serviceId>urn:upnp-org:serviceId:RController</serviceId>
+                <SCPDURL></SCPDURL>
+                <controlURL>_urn:schemas-upnp-org:service:RenderingControl_control</controlURL>
+                <eventSubURL>_urn:schemas-upnp-org:service:RenderingControl_event</eventSubURL>
+            </service>
+        </serviceList>
+        <iconList>
+            <icon>
+                <mimetype>image/format</mimetype>
+                <width>horizontal pixels</width>
+                <height>vertical pixels</height>
+                <depth>color depth</depth>
+                <url>URL to icon</url>
+            </icon>
+        </iconList>
+        <av:X_RController_DeviceInfo xmlns:av="urn:mi-com:av">
+            <av:X_RController_Version>1.0</av:X_RController_Version>
+            <av:X_RController_ServiceList>
+                <av:X_RController_Service>
+                    <av:X_RController_ServiceType>controller</av:X_RController_ServiceType>
+                    <av:X_RController_ActionList_URL>192.168.100.114:6095/</av:X_RController_ActionList_URL>
+                </av:X_RController_Service>
+                <av:X_RController_Service>
+                    <av:X_RController_ServiceType>data</av:X_RController_ServiceType>
+                    <av:X_RController_ActionList_URL>http://api.tv.duokanbox.com/bolt/3party/
+                    </av:X_RController_ActionList_URL>
+                </av:X_RController_Service>
+            </av:X_RController_ServiceList>
+        </av:X_RController_DeviceInfo>
+    </device>
+    <URLBase>http://192.168.100.114:49152</URLBase>
+</root>

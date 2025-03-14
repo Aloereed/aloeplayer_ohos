@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-13 11:00:11
+ * @LastEditTime: 2025-03-14 22:49:27
  * @Description: file content
  */
 import 'dart:convert';
@@ -38,8 +38,8 @@ class SettingsService {
   static const String _usePlaylist = 'use_playlist';
   static const String _useSeekToLatest = 'use_seek_to_latest';
   static const String _useInnerThumbnail = 'use_inner_thumbnail';
-  static const String _versionName = '2.0.1';
-  static const int _versionNumber = 23;
+  static const String _versionName = '2.0.2';
+  static const int _versionNumber = 25;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -135,7 +135,7 @@ class SettingsService {
 
   Future<bool> getExtractAssSubtitle() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_extractAssSubtitleKey) ?? false; // 默认值为false
+    return prefs.getBool(_extractAssSubtitleKey) ?? true; // 默认值为true
   }
 
   Future<void> saveUseFfmpegForPlay(bool useFfmpeg) async {
@@ -671,6 +671,37 @@ class _SettingsTabState extends State<SettingsTab> {
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.amber[800],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 4),
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border:
+                  Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: Colors.orange[800],
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '请不要从“最近”选项卡导入文件',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.orange[800],
                       fontWeight: FontWeight.w500,
                     ),
                   ),

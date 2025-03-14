@@ -1,4 +1,11 @@
 /*
+ * @Author: 
+ * @Date: 2025-02-17 13:28:54
+ * @LastEditors: 
+ * @LastEditTime: 2025-03-14 18:31:39
+ * @Description: file content
+ */
+/*
  * Copyright (c) 2023 Hunan OpenValley Digital Industry Development Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +28,7 @@ import { UIAbility, AbilityConstant, Want } from "@kit.AbilityKit"
 import DownloadPlugin from "./DownloadPlugin"
 import VolumePlugin from "./VolumePlugin"
 import FfmpegPlugin from "./FfmpegPlugin"
+import CastPlugin from "./CastPlugin"
 let wantInfo: Want
 
 function createFile(openuri: string): void {
@@ -58,6 +66,7 @@ export default class EntryAbility extends FlutterAbility {
         this.addPlugin(this.myDownloadPlugin)
         this.addPlugin(new VolumePlugin())
         this.addPlugin(new FfmpegPlugin())
+        this.addPlugin(new CastPlugin())
     }
     onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam) {
         let uri = want.uri

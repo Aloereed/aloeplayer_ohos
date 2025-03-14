@@ -290,6 +290,7 @@ export class VideoPlayer {
         let context = getContext(this) as Context
         if (this.sessionName == null) {
             this.sessionName = this.createGuid()
+            // this.sessionName = "AloePlayer"
         }
 
         this.session = await avSession.createAVSession(
@@ -297,6 +298,7 @@ export class VideoPlayer {
             this.sessionName,
             type
         )
+        
         console.info(`session get done : sessionName : ${this.sessionName}`)
         await this.fetchMetadataFromFdSrcByPromise()
         // 设置必要的媒体信息
@@ -321,6 +323,9 @@ export class VideoPlayer {
         await this.RegisterSessionListener()
         // 激活接口要在元数据、控制命令注册完成之后再执行
         await this.session.activate()
+        this.session.setExtras({
+            requireAbilityList: ['url-cast'],
+          });
         console.info(
             `session create done : sessionId : ${this.session.sessionId}`
         )

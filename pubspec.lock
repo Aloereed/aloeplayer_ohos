@@ -84,6 +84,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.2.6"
+  castscreen:
+    dependency: "direct main"
+    description:
+      path: "castscreen-1.0.2"
+      relative: true
+    source: path
+    version: "1.0.2"
   characters:
     dependency: transitive
     description:
@@ -187,7 +194,7 @@ packages:
     source: hosted
     version: "0.7.11"
   dio:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: dio
       sha256: "253a18bbd4851fecba42f7343a1df3a9a4c1d31a2c1b37e221086b4fa8c8dbc9"

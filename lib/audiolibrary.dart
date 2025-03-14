@@ -27,6 +27,7 @@ import 'package:lpinyin/lpinyin.dart'; // Add this package for Chinese pinyin co
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'mini_player.dart';
 import 'audio_player_service.dart';
+import 'screens/cast_screen_page.dart';
 
 String pathToUri(String path) {
   if (path.contains(':')) {
@@ -844,9 +845,113 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     });
   }
 
+  Future<void> _pickAudioWithFileManager(BuildContext context) async {
+    await _ensureAudioDirectoryExists();
+
+    // 显示美观的对话框
+    bool shouldProceed = await _showImportInfoDialog(context);
+
+    if (shouldProceed) {
+      // 创建实例
+      final _platform =
+          const MethodChannel('samples.flutter.dev/downloadplugin');
+      // 调用方法
+      await _platform.invokeMethod<String>('openFileManager');
+    }
+  }
+
+  Future<bool> _showImportInfoDialog(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+              child: Dialog(
+                backgroundColor: Colors.white.withOpacity(0.9),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20.0),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        color: Colors.blue,
+                        size: 48.0,
+                      ),
+                      const SizedBox(height: 16.0),
+                      const Text(
+                        "文件导入说明",
+                        style: TextStyle(
+                          fontSize: 22.0,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16.0),
+                      const Text(
+                        "使用文件管理器进行复制导入是最快捷和方便的方式：\n\n"
+                        "• 在 /下载/AloePlayer/Videos 下可以复制导入视频\n"
+                        "• 在 /下载/AloePlayer/Audios 下可以复制导入音频\n\n"
+                        "由于开发者使用平板开发，平板端和手机端系统文件管理器的差别越来越大，使用应用内导入可能不稳定（例如不能导入\"最近\"里的视频会崩溃无法复现），尽情谅解。\n\n"
+                        "导入后请下拉刷新。",
+                        style: TextStyle(fontSize: 16.0),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24.0),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop(false);
+                            },
+                            child: const Text(
+                              "取消",
+                              style: TextStyle(fontSize: 16.0),
+                            ),
+                          ),
+                          const SizedBox(width: 16.0),
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(context).pop(true);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24.0, vertical: 12.0),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30.0),
+                              ),
+                            ),
+                            child: const Text(
+                              "确定",
+                              style: TextStyle(fontSize: 16.0),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ) ??
+        false; // 如果对话框被异常关闭，默认返回false
+  }
+
   // 使用file_picker选择音频文件
   Future<void> _pickAudioWithFilePicker() async {
     await _ensureAudioDirectoryExists();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('请不要从"最近"选项卡中选择文件'),
+        duration: Duration(seconds: 3),
+      ),
+    );
     // 使用 FilePicker 选择多个视频文件
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -1112,6 +1217,12 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
 
   Future<void> _openFile() async {
     // 使用 FilePicker 选择文件
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('请不要从"最近"选项卡中选择文件'),
+        duration: Duration(seconds: 3),
+      ),
+    );
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
@@ -1360,6 +1471,17 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                                 ),
                               ),
                               const Divider(height: 1, thickness: 1),
+                              // Add files from File Manager
+                              _buildActionMenuItem(
+                                context: context,
+                                title: '从文件管理器添加',
+                                icon: Icons.folder_open_rounded,
+                                iconColor: Colors.lightBlue,
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _pickAudioWithFileManager(context);
+                                },
+                              ),
 
                               // Add local video
                               _buildActionMenuItem(
@@ -2909,6 +3031,24 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                     ).then((_) => _loadItems());
                   },
                 ),
+                _buildDivider(theme),
+                _buildOptionTile(
+                    icon: Icons.cast,
+                    iconColor: Colors.cyan,
+                    title: '投播（测试）',
+                    theme: theme,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CastScreenPage(
+                            mediaPath: file.path,
+                          ),
+                        ),
+                      );
+                    }),
+
                 _buildDivider(theme),
                 _buildOptionTile(
                   icon: Icons.share,

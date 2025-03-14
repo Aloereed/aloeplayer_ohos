@@ -258,6 +258,17 @@ export class VideoPlayerApiImpl {
     return audioTracksMessage;
   }
 
+  closeLatestAVSession():void{
+    try {
+      if(this.latestAVSession!=null)
+        this.latestAVSession.destroy(); 
+      console.info('Destroy : SUCCESS ');
+      this.latestAVSession = null;
+    } catch (err) {
+      console.error(`Destroy BusinessError: code: ${err.code}, message: ${err.message}`);
+    }
+  }
+
   naiveAudioTracks(arg: number, callback: (tracks: string) => void): void {
     let videoPlayer = this.videoPlayers.get(arg.toString());
     let audioTrackIndexs: string = '';

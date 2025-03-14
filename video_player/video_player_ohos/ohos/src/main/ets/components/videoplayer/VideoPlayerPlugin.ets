@@ -40,6 +40,10 @@ export class VideoPlayerPlugin implements FlutterPlugin, AbilityAware {
             });
             break;
             break;
+          case "closeLatestAVSession":
+            that.videoPlayerApi?.closeLatestAVSession()
+            result.success(null);
+            break;
           case "setAudioTrack":
             that.videoPlayerApi?.naiveSetAudioTrack(call.argument("tid") as number, call.argument("track") as string)
             result.success(null);
