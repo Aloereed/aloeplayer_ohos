@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-16 18:31:43
+ * @LastEditTime: 2025-03-17 16:43:04
  * @Description: file content
  */
 /*
@@ -39,6 +39,7 @@ import 'package:flutter_subtitle/flutter_subtitle.dart' hide Subtitle;
 import 'package:path/path.dart' as path;
 import 'videolibrary.dart';
 import 'audiolibrary.dart';
+import 'smblibrary.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:vivysub_utils/vivysub_utils.dart';
@@ -74,6 +75,7 @@ void main() async {
     androidNotificationChannelName: 'Audio playback',
     androidNotificationOngoing: true,
   );
+  
 
   runApp(
     ChangeNotifierProvider(
@@ -876,10 +878,12 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isFullScreen = false;
   String _openfile = '';
   bool _isPolicyAccepted = false;
+  final _settingsService = SettingsService();
   final EventChannel _eventChannel2 = EventChannel('com.example.app/events');
   @override
   void initState() {
     super.initState();
+    _settingsService.loadAllFonts();
     _checkPrivacyPolicyStatus();
     _checkAndOpenUriFile();
     _eventChannel2
@@ -1120,6 +1124,10 @@ class _HomeScreenState extends State<HomeScreen>
                 toggleFullScreen: () {},
                 startPlayerPage: startPlayerPage,
               ),
+              // MediaLibraryPage(
+              //   getopenfile: _getopenfile,
+              //   startPlayerPage: startPlayerPage,
+              // ),
               SettingsTab(),
             ],
           ),
@@ -1150,6 +1158,10 @@ class _HomeScreenState extends State<HomeScreen>
                       icon: Icon(Icons.library_music),
                       label: '音频库',
                     ),
+                    // BottomNavigationBarItem(
+                    //   icon: Icon(Icons.library_books),
+                    //   label: '网络媒体库' 
+                    // ),
                     BottomNavigationBarItem(
                       icon: Icon(Icons.settings),
                       label: '设置',

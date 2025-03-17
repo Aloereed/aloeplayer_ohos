@@ -169,6 +169,7 @@ class _PlayerTabState extends State<PlayerTab>
   File? _assFontFile;
   bool _showPlaylist = false;
   bool _usePlaylist = true;
+  String? subtitleFontFamily;
   SortType _sortType = SortType.name; // 默认按名称排序
   SortOrder _sortOrder = SortOrder.ascending; // 默认升序
   final _historyService = HistoryService();
@@ -329,6 +330,7 @@ class _PlayerTabState extends State<PlayerTab>
 // 调用原生方法
     _systemMaxVolume =
         ((await _platform.invokeMethod<int>('getMaxVolume')) ?? 15).toDouble();
+    subtitleFontFamily =  await _settingsService.loadFontFromFile(await _settingsService.getSubtitleFont());
     _openUri(widget.openfile);
     // _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
     // _ffmpegExample = FfmpegExample(initUri: '');
@@ -865,6 +867,7 @@ class _PlayerTabState extends State<PlayerTab>
       showControls: _showControls,
       allowFullScreen: true,
       zoomAndPan: true,
+      subtitleFontFamily: subtitleFontFamily,
       subtitleFontsize: await _settingsService.getSubtitleFontSize(),
       customToggleFullScreen: toggleFullScreen,
       playNextItem: _usePlaylist ? _playNextItem : null,
@@ -895,7 +898,7 @@ class _PlayerTabState extends State<PlayerTab>
         return nextVolume;
       },
       subtitleBuilder: (context, subtitle) {
-        return SubtitleBuilder(subtitle: subtitle);
+        return SubtitleBuilder(subtitle: subtitle, fontFamily: subtitleFontFamily,);
       },
       additionalOptions: (context) {
         return <OptionItem>[
@@ -985,7 +988,7 @@ class _PlayerTabState extends State<PlayerTab>
                     ? Icons.repeat
                     : Icons.repeat_one,
             title: _isLooping == 0
-                ? '播放完当前媒体停止'
+                ? '循环模式(不循环)'
                 : _isLooping == 1
                     ? '列表循环'
                     : '单曲循环',
@@ -3171,8 +3174,9 @@ class _PlayerTabState extends State<PlayerTab>
 
 class SubtitleBuilder extends StatefulWidget {
   final String subtitle;
+  final String? fontFamily;
 
-  SubtitleBuilder({required this.subtitle});
+  SubtitleBuilder({required this.subtitle,this.fontFamily});
 
   @override
   _SubtitleBuilderState createState() => _SubtitleBuilderState();
@@ -3194,18 +3198,18 @@ class _SubtitleBuilderState extends State<SubtitleBuilder> {
       future: _fontSizeFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildSubtitle(18.0); // 默认字体大小
+          return _buildSubtitle(18.0,widget.fontFamily); // 默认字体大小
         } else if (snapshot.hasError) {
           return _buildErrorSubtitle();
         } else {
           final fontSize = snapshot.data ?? 18.0; // 如果获取失败，使用默认值
-          return _buildSubtitle(fontSize);
+          return _buildSubtitle(fontSize,widget.fontFamily);
         }
       },
     );
   }
 
-  Widget _buildSubtitle(double fontSize) {
+  Widget _buildSubtitle(double fontSize, String? fontFamily) {
     return Container(
       padding: const EdgeInsets.all(10.0),
       alignment: Alignment.center, // 使文本居中
@@ -3217,6 +3221,7 @@ class _SubtitleBuilderState extends State<SubtitleBuilder> {
             textAlign: TextAlign.center, // 文本居中
             style: TextStyle(
               fontSize: fontSize,
+              fontFamily: fontFamily,
               foreground: Paint()
                 ..style = PaintingStyle.stroke
                 ..strokeWidth = 1.5 // 描边宽度
@@ -3230,6 +3235,8 @@ class _SubtitleBuilderState extends State<SubtitleBuilder> {
             style: TextStyle(
               color: Colors.white,
               fontSize: fontSize,
+              fontFamily: fontFamily,
+
             ),
           ),
         ],

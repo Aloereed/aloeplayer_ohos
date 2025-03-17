@@ -328,6 +328,7 @@ class ChewieController extends ChangeNotifier {
     this.assStyles,
     this.assSubtitles,
     this.subtitleFontsize = 18,
+    this.subtitleFontFamily,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
           'The playbackSpeeds values must all be greater than 0',
@@ -397,6 +398,7 @@ class ChewieController extends ChangeNotifier {
     List<AssStyle>? assStyles,
     List<AssSubtitle>? assSubtitles,
     double? subtitleFontsize,
+    String? subtitleFontFamily,
   }) {
     return ChewieController(
       draggableProgressBar: draggableProgressBar ?? this.draggableProgressBar,
@@ -465,6 +467,7 @@ class ChewieController extends ChangeNotifier {
       assStyles: assStyles ?? this.assStyles,
       assSubtitles: assSubtitles ?? this.assSubtitles,
       subtitleFontsize: subtitleFontsize ?? this.subtitleFontsize,
+      subtitleFontFamily: subtitleFontFamily ?? this.subtitleFontFamily,
     );
   }
 
@@ -477,6 +480,7 @@ class ChewieController extends ChangeNotifier {
   int ffmpeg = 0;
   FfmpegExample? sendToFfmpegPlayer;
   HdrExample? sendToHdrPlayer;
+  String? subtitleFontFamily;
 
   Function? playNextItem;
   Function? playPreviousItem;

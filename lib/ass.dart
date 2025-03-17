@@ -707,6 +707,7 @@ class AssSubtitleRenderer extends StatelessWidget {
   final Duration currentPosition;
   final Size videoSize;
   final double subtitleScale;
+  final String? fontFamily;
 
   const AssSubtitleRenderer({
     Key? key,
@@ -714,6 +715,7 @@ class AssSubtitleRenderer extends StatelessWidget {
     required this.currentPosition,
     required this.videoSize,
     this.subtitleScale = 1.0,
+    this.fontFamily
   }) : super(key: key);
 
   @override
@@ -760,6 +762,7 @@ class AssSubtitleRenderer extends StatelessWidget {
             shadowWidth,
             underline,
             strikeOut,
+            fontFamily,
           );
 
           // 检查是否有精确位置
@@ -820,6 +823,7 @@ class AssSubtitleRenderer extends StatelessWidget {
     double shadowWidth,
     bool underline,
     bool strikeOut,
+    String? fontFamily,
   ) {
     // 创建文本装饰
     final TextDecoration? decoration = underline
@@ -873,6 +877,7 @@ class AssSubtitleRenderer extends StatelessWidget {
         fontSize: fontSize,
         fontWeight: fontWeight,
         fontStyle: fontStyle,
+        fontFamily: fontFamily,
         shadows: shadows,
         decoration: decoration,
         decorationColor: color,

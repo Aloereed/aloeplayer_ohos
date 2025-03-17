@@ -15,6 +15,8 @@ dependencies:
   lpinyin: any
   lrc: any
   marquee: any
+  flutter_secure_storage: any
+  google_fonts: any
   ns_danmaku:
     git:
       ref: master
@@ -30,6 +32,7 @@ dependencies:
   castscreen: 
     path: ./castscreen-1.0.2
   dio: any
+  smb_connect: ^0.0.9
 dependency_overrides:
   audio_service:
     git:
@@ -142,8 +145,7 @@ flutter:
   - Assets/icon.png
   - Assets/privacy_policy.html
   - Assets/thanksfor.txt
-  - Assets/Montserrat-Bold.ttf
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 2.0.2+25
+version: 2.0.3+26

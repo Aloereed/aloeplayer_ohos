@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-16 18:44:22
+ * @LastEditTime: 2025-03-17 16:47:50
  * @Description: file content
  */
 import 'dart:convert';
@@ -17,10 +17,47 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'theme_provider.dart'; // 假设你已经有一个ThemeProvider
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:file_picker_ohos/file_picker_ohos.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 
 enum SortType { none, name, modifiedDate }
 
 enum SortOrder { ascending, descending }
+
+// 将字体缓存添加到全局状态，方便管理已加载的字体
+class FontCache {
+  static final Map<String, String> _loadedFonts = {}; // 路径到fontFamily的映射
+
+  // 获取所有已加载字体的fontFamily
+  static List<String> get loadedFontFamilies => _loadedFonts.values.toList();
+
+  // 通过路径获取fontFamily
+  static String? getFontFamily(String fontPath) {
+    return _loadedFonts[fontPath];
+  }
+
+  // 添加字体到缓存
+  static void addFont(String fontPath, String fontFamily) {
+    _loadedFonts[fontPath] = fontFamily;
+  }
+
+  // 从缓存移除字体
+  static void removeFont(String fontPath) {
+    _loadedFonts.remove(fontPath);
+  }
+
+  // 检查字体是否已加载
+  static bool isFontLoaded(String fontPath) {
+    return _loadedFonts.containsKey(fontPath);
+  }
+
+  // 清空缓存
+  static void clear() {
+    _loadedFonts.clear();
+  }
+}
 
 class SettingsService {
   static const String _fontSizeKey = 'subtitle_font_size';
@@ -35,6 +72,7 @@ class SettingsService {
   static const String _useSeekToLatest = 'use_seek_to_latest';
   static const String _useInnerThumbnail = 'use_inner_thumbnail';
   static const String _disableThumbnail = 'disable_thumbnail';
+  static const String _subtitleFont = 'subtitle_font';
   static const String _versionName = '2.0.2';
   static const int _versionNumber = 25;
 
@@ -133,6 +171,17 @@ class SettingsService {
   Future<bool> getExtractAssSubtitle() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_extractAssSubtitleKey) ?? true; // 默认值为true
+  }
+
+  Future<void> saveSubtitleFont(String subtitleFont) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_subtitleFont, subtitleFont);
+  }
+
+  Future<String> getSubtitleFont() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_subtitleFont) ??
+        ""; // 默认值为"assets/fonts/NotoSansSC-Regular.ttf"
   }
 
   Future<void> saveUseFfmpegForPlay(int useFfmpeg) async {
@@ -249,6 +298,87 @@ class SettingsService {
     const cachePath = '/data/storage/el2/base/haps/entry/cache/';
     await deleteCacheDirectory(cachePath);
   }
+
+// 应用启动时加载所有字体
+  Future<void> loadAllFonts() async {
+    final fontPaths = await _getCustomFonts();
+    for (final fontPath in fontPaths) {
+      await loadFontFromFile(fontPath);
+    }
+    print('已加载${fontPaths.length}个自定义字体');
+  }
+
+// 从文件加载字体
+  Future<String?> loadFontFromFile(String fontPath) async {
+    try {
+      if (fontPath.isEmpty) return null;
+
+      // 检查字体是否已加载
+      if (FontCache.isFontLoaded(fontPath)) {
+        return FontCache.getFontFamily(fontPath);
+      }
+
+      final File file = File(fontPath);
+      if (!await file.exists()) {
+        debugPrint('字体文件不存在: $fontPath');
+        return null;
+      }
+
+      final fontFileName = path.basenameWithoutExtension(fontPath);
+      // 生成唯一的fontFamily名称，避免冲突
+      final String fontFamily =
+          'custom_font_${DateTime.now().millisecondsSinceEpoch}_$fontFileName';
+
+      final Uint8List bytes = await file.readAsBytes();
+      final FontLoader loader = FontLoader(fontFamily);
+      loader.addFont(Future.value(ByteData.view(bytes.buffer)));
+      await loader.load();
+
+      // 缓存已加载的字体
+      FontCache.addFont(fontPath, fontFamily);
+      debugPrint('成功加载字体: $fontFamily (路径: $fontPath)');
+      return fontFamily;
+    } catch (e) {
+      debugPrint('加载字体出错: $e (路径: $fontPath)');
+      return null;
+    }
+  }
+
+  // 获取显示的字体名称
+  String getDisplayFontName(String fontPath) {
+    if (fontPath.isEmpty) return '系统默认';
+    // 尝试从缓存获取字体名称，否则使用文件名
+    final cachedFamily = FontCache.getFontFamily(fontPath);
+    if (cachedFamily != null) return cachedFamily;
+    return path.basenameWithoutExtension(fontPath);
+  }
+
+// 获取字体目录
+  Future<Directory> get _fontsDir async {
+    final Directory appDocDir = await getApplicationDocumentsDirectory();
+    final Directory fontsDir = Directory('${appDocDir.path}/fonts');
+    if (!await fontsDir.exists()) {
+      await fontsDir.create(recursive: true);
+    }
+    return fontsDir;
+  }
+
+// 列出所有自定义字体
+  Future<List<String>> _getCustomFonts() async {
+    try {
+      final dir = await _fontsDir;
+      final List<FileSystemEntity> entities = await dir.list().toList();
+      return entities
+          .whereType<File>()
+          .where((file) => ['.ttf', '.otf']
+              .contains(path.extension(file.path).toLowerCase()))
+          .map((file) => file.path)
+          .toList();
+    } catch (e) {
+      debugPrint('获取字体列表出错: $e');
+      return [];
+    }
+  }
 }
 
 class SettingsTab extends StatefulWidget {
@@ -336,6 +466,345 @@ class _SettingsTabState extends State<SettingsTab> {
         ),
       ),
     );
+  }
+
+// 应用启动时加载所有字体
+  Future<void> loadAllFonts() async {
+    final fontPaths = await _getCustomFonts();
+    for (final fontPath in fontPaths) {
+      await loadFontFromFile(fontPath);
+    }
+    print('已加载${fontPaths.length}个自定义字体');
+  }
+
+// 获取显示的字体名称
+  String getDisplayFontName(String fontPath) {
+    if (fontPath.isEmpty) return '系统默认';
+    // 尝试从缓存获取字体名称，否则使用文件名
+    final cachedFamily = FontCache.getFontFamily(fontPath);
+    if (cachedFamily != null) return cachedFamily;
+    return path.basenameWithoutExtension(fontPath);
+  }
+
+// 获取字体目录
+  Future<Directory> get _fontsDir async {
+    final Directory appDocDir = await getApplicationDocumentsDirectory();
+    final Directory fontsDir = Directory('${appDocDir.path}/fonts');
+    if (!await fontsDir.exists()) {
+      await fontsDir.create(recursive: true);
+    }
+    return fontsDir;
+  }
+
+// 列出所有自定义字体
+  Future<List<String>> _getCustomFonts() async {
+    try {
+      final dir = await _fontsDir;
+      final List<FileSystemEntity> entities = await dir.list().toList();
+      return entities
+          .whereType<File>()
+          .where((file) => ['.ttf', '.otf']
+              .contains(path.extension(file.path).toLowerCase()))
+          .map((file) => file.path)
+          .toList();
+    } catch (e) {
+      debugPrint('获取字体列表出错: $e');
+      return [];
+    }
+  }
+
+// 从文件加载字体
+  Future<String?> loadFontFromFile(String fontPath) async {
+    try {
+      if (fontPath.isEmpty) return null;
+
+      // 检查字体是否已加载
+      if (FontCache.isFontLoaded(fontPath)) {
+        return FontCache.getFontFamily(fontPath);
+      }
+
+      final File file = File(fontPath);
+      if (!await file.exists()) {
+        debugPrint('字体文件不存在: $fontPath');
+        return null;
+      }
+
+      final fontFileName = path.basenameWithoutExtension(fontPath);
+      // 生成唯一的fontFamily名称，避免冲突
+      final String fontFamily =
+          'custom_font_${DateTime.now().millisecondsSinceEpoch}_$fontFileName';
+
+      final Uint8List bytes = await file.readAsBytes();
+      final FontLoader loader = FontLoader(fontFamily);
+      loader.addFont(Future.value(ByteData.view(bytes.buffer)));
+      await loader.load();
+
+      // 缓存已加载的字体
+      FontCache.addFont(fontPath, fontFamily);
+      debugPrint('成功加载字体: $fontFamily (路径: $fontPath)');
+      return fontFamily;
+    } catch (e) {
+      debugPrint('加载字体出错: $e (路径: $fontPath)');
+      return null;
+    }
+  }
+
+// 导入字体文件
+  Future<String?> _importFont() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['ttf', 'otf'],
+      );
+
+      if (result != null) {
+        File sourceFile = File(result.files.single.path!);
+        final fontFileName = path.basename(sourceFile.path);
+        final dir = await _fontsDir;
+        final targetPath = path.join(dir.path, fontFileName);
+
+        // 检查文件是否已存在
+        if (await File(targetPath).exists()) {
+          // 可以添加提示用户文件已存在的逻辑
+          debugPrint('字体文件已存在: $targetPath');
+          // 仍然加载字体
+          await loadFontFromFile(targetPath);
+          return targetPath;
+        }
+
+        // 复制字体文件到应用的字体目录
+        await sourceFile.copy(targetPath);
+
+        // 立即加载新导入的字体
+        await loadFontFromFile(targetPath);
+
+        return targetPath;
+      }
+    } catch (e) {
+      debugPrint('导入字体出错: $e');
+    }
+    return null;
+  }
+
+// 删除字体
+  Future<bool> _deleteFont(String fontPath) async {
+    try {
+      final file = File(fontPath);
+      if (await file.exists()) {
+        await file.delete();
+        // 从缓存中移除字体
+        FontCache.removeFont(fontPath);
+        return true;
+      }
+    } catch (e) {
+      debugPrint('删除字体出错: $e');
+    }
+    return false;
+  }
+
+// 优雅的字体选择对话框
+  void _showFontSelectionDialog(BuildContext context) async {
+    final currentFont = await _settingsService.getSubtitleFont();
+    final customFonts = await _getCustomFonts();
+
+    // 添加系统默认选项
+    final allFonts = [''].followedBy(customFonts).toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Dialog(
+          backgroundColor: Theme.of(context).brightness == Brightness.dark
+              ? Colors.black.withOpacity(0.8)
+              : Colors.white.withOpacity(0.9),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: FractionallySizedBox(
+            widthFactor: 0.95,
+            child: Container(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '字幕字体管理',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.add_circle_outline),
+                        color: Colors.lightBlue,
+                        tooltip: '导入字体',
+                        onPressed: () async {
+                          final newFont = await _importFont();
+                          if (newFont != null) {
+                            Navigator.of(context).pop();
+                            _showFontSelectionDialog(context); // 刷新对话框
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 10),
+                  Divider(),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.5,
+                    ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: allFonts.length,
+                      itemBuilder: (context, index) {
+                        final String fontPath = allFonts[index];
+                        final bool isSelected = fontPath == currentFont;
+                        final bool isDefault = fontPath.isEmpty;
+
+                        return FutureBuilder<String?>(
+                          // 对于非默认字体，确保字体已加载
+                          future: isDefault
+                              ? Future.value(null)
+                              : loadFontFromFile(fontPath),
+                          builder: (context, snapshot) {
+                            final String? fontFamily = snapshot.data;
+                            final bool fontLoaded =
+                                fontFamily != null || isDefault;
+
+                            return ListTile(
+                              title: Text(
+                                isDefault
+                                    ? '系统默认'
+                                    : getDisplayFontName(fontPath),
+                                style: TextStyle(
+                                  fontFamily: isDefault ? null : fontFamily,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Text(
+                                isDefault ? '使用系统默认字体' : '示例文字：中文English123',
+                                style: TextStyle(
+                                  fontFamily: isDefault ? null : fontFamily,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!fontLoaded)
+                                    SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2))
+                                  else if (isSelected)
+                                    Icon(Icons.check_circle,
+                                        color: Colors.lightBlue),
+                                  if (!isDefault)
+                                    IconButton(
+                                      icon: Icon(Icons.delete_outline,
+                                          color: Colors.redAccent),
+                                      onPressed: () async {
+                                        bool deleted =
+                                            await _deleteFont(fontPath);
+                                        if (deleted) {
+                                          if (fontPath == currentFont) {
+                                            await _settingsService
+                                                .saveSubtitleFont('');
+                                          }
+                                          Navigator.of(context).pop();
+                                          _showFontSelectionDialog(
+                                              context); // 刷新对话框
+                                        }
+                                      },
+                                    ),
+                                ],
+                              ),
+                              onTap: () async {
+                                if (fontLoaded) {
+                                  await _settingsService
+                                      .saveSubtitleFont(fontPath);
+                                  setState(() {});
+                                  Navigator.of(context).pop();
+                                }
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  Divider(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Text(
+                      '提示: 点击字体选择，点击加号导入新字体',
+                      style: TextStyle(
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: TextButton(
+                      child: Text('关闭'),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+// 字体选择Tile
+  ListTile buildFontSelectionTile() {
+    return ListTile(
+      leading: Icon(Icons.font_download_outlined, color: Colors.lightBlue),
+      title: Text('字幕字体'),
+      subtitle: FutureBuilder<String>(
+        future: _settingsService.getSubtitleFont(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return Text(snapshot.data!.isEmpty
+                ? '系统默认'
+                : getDisplayFontName(snapshot.data!));
+          } else {
+            return const Text('加载中...');
+          }
+        },
+      ),
+      onTap: () {
+        _showFontSelectionDialog(context);
+      },
+    );
+  }
+
+// 获取字幕文本样式的辅助方法
+  Future<TextStyle> getSubtitleTextStyle([TextStyle? baseStyle]) async {
+    final fontPath = await _settingsService.getSubtitleFont();
+    if (fontPath.isEmpty) {
+      // 使用默认样式
+      return baseStyle ?? TextStyle();
+    }
+
+    // 确保字体已加载
+    final fontFamily = await loadFontFromFile(fontPath);
+    if (fontFamily == null) {
+      return baseStyle ?? TextStyle();
+    }
+
+    // 返回带有自定义字体的样式
+    return (baseStyle ?? TextStyle()).copyWith(fontFamily: fontFamily);
   }
 
   @override
@@ -481,6 +950,26 @@ class _SettingsTabState extends State<SettingsTab> {
                         }
                       },
                     ),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.font_download_outlined,
+                        color: Colors.lightBlue),
+                    title: Text('字幕字体'),
+                    subtitle: FutureBuilder<String>(
+                      future: _settingsService.getSubtitleFont(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return Text(snapshot.data!.isEmpty
+                              ? '系统默认'
+                              : getDisplayFontName(snapshot.data!));
+                        } else {
+                          return const Text('加载中...');
+                        }
+                      },
+                    ),
+                    onTap: () {
+                      _showFontSelectionDialog(context);
+                    },
                   ),
                 ],
               ),
