@@ -32,6 +32,8 @@ class _MiniPlayerState extends State<MiniPlayer> {
               return Icons.repeat_on_outlined;
             case LoopMode.one:
               return Icons.repeat_one_on_outlined;
+            case LoopMode.random:
+              return Icons.shuffle_on_outlined;
           }
         }
 

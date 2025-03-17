@@ -100,7 +100,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
               child: AspectRatio(
                 aspectRatio: chewieController.aspectRatio ??
                     chewieController.videoPlayerController.value.aspectRatio,
-                child: !chewieController.ffmpeg!
+                child: (chewieController.ffmpeg==0)
                     ? VideoPlayer(chewieController.videoPlayerController)
                     : Container(color: Colors.transparent),
               ),

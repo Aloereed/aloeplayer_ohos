@@ -580,6 +580,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           if (extension != '.srt' &&
               extension != '.ass' &&
               extension != '.lrc' &&
+              extension != '.pdf' &&
               !item.path.contains('.ux_store') &&
               [
                 '.mp3',
@@ -3035,7 +3036,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                 _buildOptionTile(
                     icon: Icons.cast,
                     iconColor: Colors.cyan,
-                    title: '投播（测试）',
+                    title: '投播(测试)',
                     theme: theme,
                     onTap: () {
                       Navigator.pop(context);

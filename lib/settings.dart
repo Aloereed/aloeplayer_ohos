@@ -2,10 +2,11 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-14 22:49:27
+ * @LastEditTime: 2025-03-16 18:44:22
  * @Description: file content
  */
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,28 +17,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'theme_provider.dart'; // 假设你已经有一个ThemeProvider
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
-enum SortType {
-  none,
-  name,
-  modifiedDate
-}
 
-enum SortOrder {
-  ascending,
-  descending
-}
+enum SortType { none, name, modifiedDate }
+
+enum SortOrder { ascending, descending }
+
 class SettingsService {
   static const String _fontSizeKey = 'subtitle_font_size';
   static const String _backgroundPlayKey = 'background_play';
   static const String _autoLoadSubtitleKey = 'auto_load_subtitle';
   static const String _extractAssSubtitleKey = 'extract_ass_subtitle';
-  static const String _useFfmpegForPlayKey = 'use_ffmpeg_for_play';
+  static const String _useFfmpegForPlayKey = 'use_ffmpeg_for_play_2';
   static const String _autoFfmpegAfterVpFailed = 'auto_ffmpeg_after_vp_failed';
   static const String _autoFullscreenBeginPlay = 'auto_fullscreen_begin_play';
   static const String _defaultListmode = 'default_listmode';
   static const String _usePlaylist = 'use_playlist';
   static const String _useSeekToLatest = 'use_seek_to_latest';
   static const String _useInnerThumbnail = 'use_inner_thumbnail';
+  static const String _disableThumbnail = 'disable_thumbnail';
   static const String _versionName = '2.0.2';
   static const int _versionNumber = 25;
 
@@ -138,14 +135,14 @@ class SettingsService {
     return prefs.getBool(_extractAssSubtitleKey) ?? true; // 默认值为true
   }
 
-  Future<void> saveUseFfmpegForPlay(bool useFfmpeg) async {
+  Future<void> saveUseFfmpegForPlay(int useFfmpeg) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_useFfmpegForPlayKey, useFfmpeg);
+    await prefs.setInt(_useFfmpegForPlayKey, useFfmpeg);
   }
 
-  Future<bool> getUseFfmpegForPlay() async {
+  Future<int> getUseFfmpegForPlay() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_useFfmpegForPlayKey) ?? false; // 默认值为false
+    return prefs.getInt(_useFfmpegForPlayKey) ?? 0; // 默认值为false
   }
 
   Future<void> saveAutoFullscreenBeginPlay(bool autoFullscreen) async {
@@ -196,6 +193,16 @@ class SettingsService {
   Future<bool> getUseInnerThumbnail() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_useInnerThumbnail) ?? false; // 默认值为false
+  }
+
+  Future<void> saveDisableThumbnail(bool disableThumbnail) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_disableThumbnail, disableThumbnail);
+  }
+
+  Future<bool> getDisableThumbnail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_disableThumbnail) ?? false; // 默认值为false
   }
 
   // 清除缓存 递归删除“/data/storage/el2/base/haps/entry/cache/”下的所有文件
@@ -274,6 +281,61 @@ class _SettingsTabState extends State<SettingsTab> {
       // 重新触发 FutureBuilder 的 future
       _backgroundPlayFuture = _settingsService.getBackgroundPlay();
     });
+  }
+
+  // 辅助方法: 构建单个选项行
+  Widget _buildOptionTile(BuildContext context, int value, String label,
+      IconData icon, int groupValue, Function(int?) onChanged) {
+    final isSelected = value == groupValue;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => onChanged(value),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+              : Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
+                : Theme.of(context).dividerColor,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).iconTheme.color,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                  color:
+                      isSelected ? Theme.of(context).colorScheme.primary : null,
+                ),
+              ),
+            ),
+            if (isSelected)
+              Icon(
+                Icons.check_circle,
+                size: 20,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -378,7 +440,7 @@ class _SettingsTabState extends State<SettingsTab> {
                   ListTile(
                     leading: Icon(Icons.subtitles, color: Colors.lightBlue),
                     title: Text('自动尝试加载内挂和同级外挂字幕'),
-                    subtitle: Text('优先加载外挂ASS字幕'),
+                    subtitle: Text('打开视频闪退可尝试关闭此项'),
                     trailing: FutureBuilder<bool>(
                       future: _settingsService.getAutoLoadSubtitle(),
                       builder: (context, snapshot) {
@@ -398,7 +460,8 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   ),
                   ListTile(
-                    leading: Icon(Icons.subtitles, color: Colors.lightBlue),
+                    leading:
+                        Icon(Icons.subtitles_outlined, color: Colors.lightBlue),
                     title: Text('库内抽取ASS字幕'),
                     subtitle: Text('不选中则抽取SRT文本字幕'),
                     trailing: FutureBuilder<bool>(
@@ -437,27 +500,136 @@ class _SettingsTabState extends State<SettingsTab> {
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   SizedBox(height: 8),
-                  ListTile(
-                    leading:
-                        Icon(Icons.play_circle_filled, color: Colors.lightBlue),
-                    title: Text('使用FFmpeg软解播放（测试）'),
-                    subtitle: Text('可能导致循环模式异常、播放器卡顿和功能缺失'),
-                    trailing: FutureBuilder<bool>(
-                      future: _settingsService.getUseFfmpegForPlay(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: (value) {
-                              _settingsService.saveUseFfmpegForPlay(value);
-                              setState(() {});
+                  Card(
+                    margin:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: Theme.of(context).dividerColor.withOpacity(0.5),
+                        width: 1,
+                      ),
+                    ),
+                    child: Theme(
+                      data: Theme.of(context)
+                          .copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        collapsedShape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        leading: Icon(
+                          Icons.play_circle_filled,
+                          color: Colors.lightBlue,
+                          size: 26,
+                        ),
+                        title: Text(
+                          '播放器选择',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '选择视频播放引擎',
+                          style: TextStyle(
+                            fontSize: 14,
+                          ),
+                        ),
+                        children: [
+                          FutureBuilder<int>(
+                            future: _settingsService.getUseFfmpegForPlay(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) {
+                                return const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(16.0),
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                );
+                              }
+
+                              final currentValue = snapshot.data!;
+                              final options = [
+                                {
+                                  'value': 0,
+                                  'label': '系统播放能力(推荐)',
+                                  'icon': Icons.phone_android
+                                },
+                                {
+                                  'value': 1,
+                                  'label': 'FFmpeg软解',
+                                  'icon': Icons.settings_applications
+                                },
+                                {
+                                  'value': 2,
+                                  'label': '系统播放(PlatformView)',
+                                  'icon': Icons.view_module
+                                }
+                              ];
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).cardColor,
+                                  borderRadius: BorderRadius.only(
+                                    bottomLeft: Radius.circular(12),
+                                    bottomRight: Radius.circular(12),
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          16, 0, 16, 16),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            options.firstWhere((opt) =>
+                                                    opt['value'] ==
+                                                    currentValue)['icon']
+                                                as IconData,
+                                            color: Colors.lightBlue,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            '当前选择: ${options.firstWhere((opt) => opt['value'] == currentValue)['label']}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    ...options
+                                        .map((option) => _buildOptionTile(
+                                              context,
+                                              option['value'] as int,
+                                              option['label'] as String,
+                                              option['icon'] as IconData,
+                                              currentValue,
+                                              (value) {
+                                                if (value != null) {
+                                                  _settingsService
+                                                      .saveUseFfmpegForPlay(
+                                                          value);
+                                                  setState(() {});
+                                                }
+                                              },
+                                            ))
+                                        .toList(),
+                                    SizedBox(height: 4),
+                                  ],
+                                ),
+                              );
                             },
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   ListTile(
@@ -584,6 +756,27 @@ class _SettingsTabState extends State<SettingsTab> {
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   SizedBox(height: 8),
                   ListTile(
+                      leading: Icon(Icons.display_settings_rounded,
+                          color: Colors.lightBlue),
+                      title: Text('禁用视频库缩略图和时长获取'),
+                      subtitle: Text('临时缓解闪退'),
+                      trailing: FutureBuilder<bool>(
+                          future: _settingsService.getDisableThumbnail(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData) {
+                              return Switch(
+                                value: snapshot.data!,
+                                onChanged: (value) {
+                                  _settingsService.saveDisableThumbnail(value);
+                                  setState(() {});
+                                },
+                                activeColor: Colors.lightBlue,
+                              );
+                            } else {
+                              return const CircularProgressIndicator();
+                            }
+                          })),
+                  ListTile(
                       leading:
                           Icon(Icons.download_rounded, color: Colors.lightBlue),
                       title: Text('使用应用沙箱存储视频缩略图'),
@@ -698,7 +891,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '请不要从“最近”选项卡导入文件',
+                    '请不要从“最近”选项卡导入文件; AloePlayer的视频库除了链接文件外均为实际媒体文件，请慎重删改并做好备份。',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.orange[800],

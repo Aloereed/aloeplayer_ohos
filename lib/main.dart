@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-09 19:50:47
+ * @LastEditTime: 2025-03-16 18:31:43
  * @Description: file content
  */
 /*
@@ -1024,7 +1024,7 @@ class _HomeScreenState extends State<HomeScreen>
       context: context,
       barrierDismissible: false, // 禁止点击外部关闭对话框
       builder: (BuildContext context) {
-        return PrivacyPolicyDialog(
+        return OnboardingPrivacyDialog(
           onAccept: () async {
             SharedPreferences prefs = await SharedPreferences.getInstance();
             await prefs.setBool('privacy_policy_accepted', true);

@@ -2,11 +2,12 @@
  * @Author: 
  * @Date: 2025-03-08 16:38:50
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-10 13:52:40
+ * @LastEditTime: 2025-03-16 18:58:39
  * @Description: file content
  */
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +17,7 @@ import 'package:path/path.dart' as path;
 import 'settings.dart';
 
 // 循环模式枚举：关闭、全部循环、单曲循环
-enum LoopMode { off, all, one }
+enum LoopMode { off, all, one, random }
 
 class AudioPlayerService {
   static final AudioPlayerService _instance = AudioPlayerService._internal();
@@ -54,6 +55,9 @@ class AudioPlayerService {
         loopMode = LoopMode.one;
         break;
       case LoopMode.one:
+        loopMode = LoopMode.random;
+        break;
+      case LoopMode.random:
         loopMode = LoopMode.off;
         break;
     }
@@ -147,6 +151,7 @@ class AudioPlayerService {
             // 不循环，停止播放
             break;
           case LoopMode.all:
+          case LoopMode.random:
             // 循环整个列表
             if (!firstPlay) {
               // 使用延迟避免立即调用playNext
@@ -200,6 +205,7 @@ class AudioPlayerService {
             // 不循环，停止播放
             break;
           case LoopMode.all:
+          case LoopMode.random:
             // 循环整个列表
             if (!firstPlay) {
               Future.delayed(Duration(milliseconds: 100), () {
@@ -230,6 +236,14 @@ class AudioPlayerService {
   // 播放下一首歌
   Future<void> playNext() async {
     if (playlist.isEmpty || playlist.length == 1) {
+      return;
+    }
+
+    if(loopMode==LoopMode.random){
+      // 随机播放
+      Random random = Random();
+      int randomIndex = random.nextInt(playlist.length);
+      await startNewPlay(playlist[randomIndex]['path']!);
       return;
     }
 

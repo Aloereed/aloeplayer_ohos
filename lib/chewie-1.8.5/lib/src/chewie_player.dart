@@ -8,6 +8,7 @@ import 'package:aloeplayer/chewie-1.8.5/lib/src/models/subtitle_model.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/notifiers/player_notifier.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/player_with_controls.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
+import 'package:aloeplayer/chewie-1.8.5/lib/src/hdrview.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:aloeplayer/ass.dart';
 import 'package:aloeplayer/settings.dart';
+
 typedef ChewieRoutePageBuilder = Widget Function(
   BuildContext context,
   Animation<double> animation,
@@ -316,8 +318,9 @@ class ChewieController extends ChangeNotifier {
     this.setSystemVolume,
     this.customToggleFullScreen,
     this.danmakuContents,
-    this.ffmpeg,
+    this.ffmpeg = 0,
     this.sendToFfmpegPlayer,
+    this.sendToHdrPlayer,
     this.playNextItem,
     this.playPreviousItem,
     this.closePlaylist,
@@ -384,8 +387,9 @@ class ChewieController extends ChangeNotifier {
     double Function(double)? setSystemVolume,
     Function? customToggleFullScreen,
     List<Map<String, dynamic>>? danmakuContents,
-    bool? ffmpeg,
+    int ffmpeg =0,
     FfmpegExample? sendToFfmpegPlayer,
+    HdrExample? sendToHdrPlayer,
     Function? playNextItem,
     Function? playPreviousItem,
     Function? closePlaylist,
@@ -453,13 +457,14 @@ class ChewieController extends ChangeNotifier {
       danmakuContents: danmakuContents ?? this.danmakuContents,
       ffmpeg: ffmpeg ?? this.ffmpeg,
       sendToFfmpegPlayer: sendToFfmpegPlayer ?? this.sendToFfmpegPlayer,
-      playNextItem: playNextItem?? this.playNextItem,
-      playPreviousItem: playPreviousItem?? this.playPreviousItem,
-      closePlaylist: closePlaylist?? this.closePlaylist,
-      openPlaylist: openPlaylist?? this.openPlaylist,
-      assStyles: assStyles?? this.assStyles,
-      assSubtitles: assSubtitles?? this.assSubtitles,
-      subtitleFontsize: subtitleFontsize?? this.subtitleFontsize,
+      sendToHdrPlayer: sendToHdrPlayer ?? this.sendToHdrPlayer,
+      playNextItem: playNextItem ?? this.playNextItem,
+      playPreviousItem: playPreviousItem ?? this.playPreviousItem,
+      closePlaylist: closePlaylist ?? this.closePlaylist,
+      openPlaylist: openPlaylist ?? this.openPlaylist,
+      assStyles: assStyles ?? this.assStyles,
+      assSubtitles: assSubtitles ?? this.assSubtitles,
+      subtitleFontsize: subtitleFontsize ?? this.subtitleFontsize,
     );
   }
 
@@ -469,8 +474,9 @@ class ChewieController extends ChangeNotifier {
   /// won't be shown.
   final bool showOptions;
 
-  bool? ffmpeg = false;
-  FfmpegExample? sendToFfmpegPlayer; 
+  int ffmpeg = 0;
+  FfmpegExample? sendToFfmpegPlayer;
+  HdrExample? sendToHdrPlayer;
 
   Function? playNextItem;
   Function? playPreviousItem;
@@ -856,22 +862,48 @@ class ChewieController extends ChangeNotifier {
     if (isPlaying) {
       _danmakuController.resume();
       sendToFfmpegPlayer?.controller?.sendMessageToOhosView('resume', '');
+      sendToHdrPlayer?.controller?.sendMessageToOhosView('resume', '');
     } else {
       _danmakuController.pause();
       sendToFfmpegPlayer?.controller?.sendMessageToOhosView('pause', '');
+      sendToHdrPlayer?.controller?.sendMessageToOhosView('pause', '');
     }
 
-    int? kernelTime = sendToFfmpegPlayer?.controller?.currentPosition;
-    int? controllerTime = videoPlayerController.value.position.inMilliseconds;
-    print("kernelTime: $kernelTime, controllerTime: $controllerTime");
-    if(ffmpeg!&&kernelTime != null && controllerTime != null && (controllerTime - kernelTime).abs() > 1000) {
-      // await videoPlayerController.seekTo(Duration(milliseconds: kernelTime));
-      await videoPlayerController.pause();
-      await sendToFfmpegPlayer?.controller?.sendMessageToOhosView("seekTo", controllerTime.toString());
-      await videoPlayerController.play();
-      // seekTo(videoPlayerController.value.position);
+    if (ffmpeg == 1) {
+      int? kernelTime = sendToFfmpegPlayer?.controller?.currentPosition;
+      int? controllerTime = videoPlayerController.value.position.inMilliseconds;
+      print("kernelTime: $kernelTime, controllerTime: $controllerTime");
+      if ((ffmpeg == 1 || ffmpeg == 2) &&
+          kernelTime != null &&
+          controllerTime != null &&
+          (controllerTime - kernelTime).abs() > 3000) {
+        // await videoPlayerController.seekTo(Duration(milliseconds: kernelTime));
+        // await videoPlayerController.pause();
+        await sendToFfmpegPlayer?.controller
+            ?.sendMessageToOhosView("seekTo", controllerTime.toString());
+        // await videoPlayerController.play();
+        // seekTo(videoPlayerController.value.position);
+      }
+      sendToFfmpegPlayer?.controller?.sendMessageToOhosView("setSpeed",
+          videoPlayerController.value.playbackSpeed.toString() + "f");
+    } else if (ffmpeg == 2 && (sendToHdrPlayer!=null)&& (sendToHdrPlayer!.controller!=null)&& sendToHdrPlayer!.controller!.prepared) {
+      int? kernelTime = sendToHdrPlayer?.controller?.currentPosition;
+      int? controllerTime = videoPlayerController.value.position.inMilliseconds;
+      print("kernelTime: $kernelTime, controllerTime: $controllerTime");
+      if ((ffmpeg == 1 || ffmpeg == 2) &&
+          kernelTime != null &&
+          controllerTime != null &&
+          (controllerTime - kernelTime).abs() > 2500) {
+        // await videoPlayerController.seekTo(Duration(milliseconds: kernelTime));
+        // await videoPlayerController.pause();
+        await sendToHdrPlayer?.controller
+            ?.sendMessageToOhosView("seekTo", controllerTime.toString());
+        // await videoPlayerController.play();
+        // seekTo(videoPlayerController.value.position);
+      }
+      sendToHdrPlayer?.controller?.sendMessageToOhosView("setSpeed",
+          videoPlayerController.value.playbackSpeed.toString());
     }
-    sendToFfmpegPlayer?.controller?.sendMessageToOhosView("setSpeed", videoPlayerController.value.playbackSpeed.toString()+"f");
   }
 
   void startVolumeSliderTimer() {
@@ -934,7 +966,8 @@ class ChewieController extends ChangeNotifier {
   }
 
   Future<void> seekTo(Duration moment) async {
-    sendToFfmpegPlayer?.controller?.sendMessageToOhosView("seekTo", moment.inMilliseconds.toString());
+    sendToFfmpegPlayer?.controller
+        ?.sendMessageToOhosView("seekTo", moment.inMilliseconds.toString());
     await videoPlayerController.seekTo(moment);
   }
 

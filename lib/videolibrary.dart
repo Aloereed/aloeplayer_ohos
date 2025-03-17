@@ -71,6 +71,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   Map<String, bool> _favoriteStatus = {};
   bool _showOnlyFavorites = false;
   bool isFFmpeged = false;
+  bool disableThumbnail = false;
   @override
   void initState() async {
     super.initState();
@@ -323,6 +324,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     List<File> files = [];
     List<Directory> directories = [];
 
+    disableThumbnail = await _settingsService.getDisableThumbnail();
+
     if (await directory.exists()) {
       final items = directory.listSync();
       for (var item in items) {
@@ -337,6 +340,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               extension != '.gif' &&
               extension != '.bmp' &&
               extension != '.aac' &&
+              extension != '.pdf' &&
               !item.path.contains('.ux_store')) {
             if (extension == '.lnk') {
               // 作为string读取lnk文件为uri
@@ -839,6 +843,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 获取视频缩略图
   Future<Uint8List?> _getVideoThumbnail(File file) async {
+    if(disableThumbnail){
+      return null;
+    }
     // 从file.path提取文件名
     String fileName = path.basename(file.path);
     String filePath = file.path;
@@ -896,6 +903,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 获取视频时长
   Future<Duration> _getVideoDuration(File file) async {
+    if(disableThumbnail){
+      return Duration.zero;
+    }
     // // 创建 MediaInfo 实例
     // MediaInfo mediaInfo = MediaInfo();
 
@@ -2955,14 +2965,19 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         _buildOptionTile(
           icon: Icons.cast,
           color: Colors.blue,
-          title: '投播（测试）',
+          title: '投播(测试)',
           onTap: () {
             Navigator.pop(context);
+            // 如果file.path是lnk文件，按String读取成为新的path
+            String filePath = file.path;
+            if(file.path.endsWith('.lnk')){
+              filePath = file.readAsStringSync();
+            }
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => CastScreenPage(
-                  mediaPath: file.path,
+                  mediaPath: filePath,
                 ),
               ),
             );

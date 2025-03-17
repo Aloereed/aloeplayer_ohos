@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'dart:ui' as ui;
 
 import 'package:aloeplayer/privacy_policy.dart';
+import 'package:intl/intl.dart';
 import 'package:xml/xml.dart' as xml;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -34,59 +35,15 @@ import 'dart:typed_data';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'volumeview.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
+import 'package:aloeplayer/chewie-1.8.5/lib/src/hdrview.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:dart_libass/dart_libass.dart';
 import 'history_service.dart';
 import 'package:aloeplayer/ass.dart';
 
-// class MyAudioHandler extends BaseAudioHandler {
-//   final _player = AudioPlayer();
+enum SortType { none, name, modifiedDate }
 
-//   MyAudioHandler() {
-//     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
-//   }
-
-//   PlaybackState _transformEvent(PlaybackEvent event) {
-//     return PlaybackState(
-//       controls: [
-//         MediaControl.pause,
-//         MediaControl.play,
-//         MediaControl.stop,
-//       ],
-//       systemActions: const {
-//         MediaAction.seek,
-//       },
-//       androidCompactActionIndices: const [0, 1, 2],
-//       processingState: const {
-//         ProcessingState.idle: AudioProcessingState.idle,
-//         ProcessingState.loading: AudioProcessingState.loading,
-//         ProcessingState.buffering: AudioProcessingState.buffering,
-//         ProcessingState.ready: AudioProcessingState.ready,
-//         ProcessingState.completed: AudioProcessingState.completed,
-//       }[_player.processingState]!,
-//       playing: _player.playing,
-//       updatePosition: _player.position,
-//       bufferedPosition: _player.bufferedPosition,
-//       speed: _player.speed,
-//       queueIndex: _player.currentIndex,
-//     );
-//   }
-
-//   Future<void> play() => _player.play();
-//   Future<void> pause() => _player.pause();
-//   Future<void> stop() => _player.stop();
-
-//   Future<void> setAudioSource(String url) async {
-//     await _player.setUrl(url);
-//   }
-
-//   Future<void> setLoopingSilence() async {
-//     // 加载 assets 中的静音音频文件
-//     await _player.setAudioSource(AudioSource.asset('Assets/10s_silence.wav'));
-//     // 设置循环模式为循环播放
-//     _player.setLoopMode(LoopMode.one);
-//   }
-// }
+enum SortOrder { ascending, descending }
 
 int rgbToColor(int rgb) {
   // 将 RGB 值转换为 ARGB 值，透明度为 0xFF（完全不透明）
@@ -199,11 +156,12 @@ class _PlayerTabState extends State<PlayerTab>
   FfmpegViewController? _ffmpegController;
   VolumeExample? _volumeExample;
   FfmpegExample? _ffmpegExample;
+  HdrExample? _hdrExample;
   List<SubtitleData> _subtitles = []; // 存储所有字幕
   int _currentSubtitleIndex = -1; // 当前启用的字幕索引
   List<Map<String, dynamic>> _danmakuContents = []; // 存储所有弹幕
   List<Map<String, String>> _playlist = [];
-  bool _useFfmpegForPlay = false;
+  int _useFfmpegForPlay = 0;
   bool _initVpWhenFfmpeg = false;
   DartLibass? _assRenderer;
   File? _assFile;
@@ -211,6 +169,8 @@ class _PlayerTabState extends State<PlayerTab>
   File? _assFontFile;
   bool _showPlaylist = false;
   bool _usePlaylist = true;
+  SortType _sortType = SortType.name; // 默认按名称排序
+  SortOrder _sortOrder = SortOrder.ascending; // 默认升序
   final _historyService = HistoryService();
   Timer? _positionUpdateTimer;
   final EventChannel _eventChannel2 = EventChannel('com.example.app/events');
@@ -897,8 +857,9 @@ class _PlayerTabState extends State<PlayerTab>
     _chewieController = ChewieController(
       ffmpeg: _useFfmpegForPlay,
       sendToFfmpegPlayer: _ffmpegExample,
+      sendToHdrPlayer: _hdrExample,
       videoPlayerController: _videoController!,
-      allowMuting: !_useFfmpegForPlay,
+      allowMuting: _useFfmpegForPlay == 0,
       autoPlay: true,
       looping: _isLooping == 2,
       showControls: _showControls,
@@ -963,7 +924,7 @@ class _PlayerTabState extends State<PlayerTab>
             iconData: Icons.closed_caption,
             title: '选择字幕轨道',
           ),
-          if (!_useFfmpegForPlay)
+          if (_useFfmpegForPlay == 0)
             OptionItem(
               onTap: () => _openAudioTrackDialog(),
               iconData: Icons.volume_up_sharp,
@@ -1054,7 +1015,7 @@ class _PlayerTabState extends State<PlayerTab>
         ];
       },
     );
-    _chewieController?.setVolume(_useFfmpegForPlay ? 0.0 : 1.0);
+    _chewieController?.setVolume(_useFfmpegForPlay != 0 ? 0.0 : 1.0);
   }
 
   String convertPathToOhosUri(String path) {
@@ -1319,6 +1280,32 @@ class _PlayerTabState extends State<PlayerTab>
     return uri;
   }
 
+  void _sortPlaylist() {
+    if (_sortType == SortType.none) {
+      return; // 不排序
+    }
+
+    setState(() {
+      _playlist.sort((a, b) {
+        int result;
+
+        if (_sortType == SortType.name) {
+          result = a['name']!.compareTo(b['name']!);
+        } else if (_sortType == SortType.modifiedDate) {
+          // 获取文件修改时间
+          File fileA = File(a['path']!);
+          File fileB = File(b['path']!);
+          result = fileA.lastModifiedSync().compareTo(fileB.lastModifiedSync());
+        } else {
+          result = 0;
+        }
+
+        // 根据排序顺序返回结果
+        return _sortOrder == SortOrder.ascending ? result : -result;
+      });
+    });
+  }
+
   void _getPlaylist(String path) {
     //提取文件夹路径
     _playlist.clear();
@@ -1333,7 +1320,7 @@ class _PlayerTabState extends State<PlayerTab>
       return;
     }
     String folderPath = path.substring(0, path.lastIndexOf('/'));
-    List<String> excludeExts = ['ux_store', 'srt', 'ass', 'jpg'];
+    List<String> excludeExts = ['ux_store', 'srt', 'ass', 'jpg','pdf','aac'];
     // 如果文件夹位于 /storage/Users/currentUser/Download/com.aloereed.aloeplayer/下，打开该文件夹
     if (folderPath.startsWith(
         '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/')) {
@@ -1352,12 +1339,12 @@ class _PlayerTabState extends State<PlayerTab>
           });
         }
       }
-      // 按照文件名排序
-      setState(() {
-        _playlist.sort((a, b) => a['name']!.compareTo(b['name']!));
-      });
+
+      // 应用排序
+      _sortPlaylist();
+
       // 打印playlist
-      print("Playlist: ${_playlist}");
+      print("Playlist: $_playlist");
     } else {
       _playlist.add({
         'name': path.split('/').last,
@@ -1463,7 +1450,7 @@ class _PlayerTabState extends State<PlayerTab>
         })
         ..setLooping(_isLooping == 2);
       _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
-      if (_useFfmpegForPlay) {
+      if (_useFfmpegForPlay == 1) {
         if (_ffmpegExample == null) {
           _ffmpegExample = FfmpegExample(
               initUri: convertUriToPath(widget.openfile),
@@ -1471,6 +1458,16 @@ class _PlayerTabState extends State<PlayerTab>
         }
         _ffmpegExample?.controller?.sendMessageToOhosView(
             "newPlay", convertUriToPath(widget.openfile));
+      }
+      if (_useFfmpegForPlay == 2) {
+        if (_hdrExample == null) {
+          _hdrExample = HdrExample(
+              initUri: pathToUri(widget.openfile),
+              toggleFullScreen: this.toggleFullScreen);
+        } else {
+          _hdrExample?.controller
+              ?.sendMessageToOhosView("newPlay", pathToUri(widget.openfile));
+        }
       }
 
       getopenfile(uri);
@@ -1535,7 +1532,7 @@ class _PlayerTabState extends State<PlayerTab>
         })
         ..setLooping(_isLooping == 2);
       _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
-      if (_useFfmpegForPlay) {
+      if (_useFfmpegForPlay == 1) {
         if (_ffmpegExample == null) {
           _ffmpegExample = FfmpegExample(
               initUri: convertUriToPath(uri),
@@ -1544,6 +1541,15 @@ class _PlayerTabState extends State<PlayerTab>
         _ffmpegExample?.controller
             ?.sendMessageToOhosView("newPlay", convertUriToPath(uri));
       }
+      if (_useFfmpegForPlay == 2) {
+        if (_hdrExample == null) {
+          _hdrExample = HdrExample(
+              initUri: pathToUri(uri), toggleFullScreen: this.toggleFullScreen);
+        } else {
+          _hdrExample?.controller
+              ?.sendMessageToOhosView("newPlay", pathToUri(uri));
+        }
+      }
       _getPlaylist(originalUri);
       _recordPlayStart(originalUri, originalUri);
       _setupPositionUpdateTimer();
@@ -1551,19 +1557,20 @@ class _PlayerTabState extends State<PlayerTab>
       final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
       final cacheDir = await getTemporaryDirectory();
       final directoryPath = cacheDir.path; // 缓存目录路径
-      // 调用原生方法
-      await _platform.invokeMethod<String>('getassold', {
-        "path": uri,
-        "type": "srt",
-        "output": path.join(directoryPath, fileName)
-      });
-      await _platform.invokeMethod<String>('getass', {
-        "path": uri,
-        "type": "ass",
-        "output": path.join(directoryPath, fileName)
-      });
+
       // getAudioTrack(uri, path.join(directoryPath, fileName), 0);
       if (await _settingsService.getAutoLoadSubtitle() == true) {
+        // 调用原生方法
+        await _platform.invokeMethod<String>('getassold', {
+          "path": uri,
+          "type": "srt",
+          "output": path.join(directoryPath, fileName)
+        });
+        await _platform.invokeMethod<String>('getass', {
+          "path": uri,
+          "type": "ass",
+          "output": path.join(directoryPath, fileName)
+        });
         readFileWithRetry(uri);
       }
       final metadata = readMetadata(File(uri), getImage: true);
@@ -2622,8 +2629,18 @@ class _PlayerTabState extends State<PlayerTab>
                       Expanded(
                         child: Stack(
                           children: [
+                            // HDR 播放器
+                            if (_useFfmpegForPlay == 2 && (_hdrExample != null))
+                              Transform(
+                                alignment: Alignment.center,
+                                transform: Matrix4.identity()
+                                  ..scale(
+                                      _isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
+                                child: this._hdrExample!,
+                              ),
                             // FFMPEG 播放器
-                            if (_useFfmpegForPlay && (_ffmpegExample != null))
+                            if (_useFfmpegForPlay == 1 &&
+                                (_ffmpegExample != null))
                               Transform(
                                 alignment: Alignment.center,
                                 transform: Matrix4.identity()
@@ -2674,7 +2691,7 @@ class _PlayerTabState extends State<PlayerTab>
                                             child: Container(
                                               decoration: BoxDecoration(
                                                 color: Colors.black
-                                                    .withOpacity(0.5),
+                                                    .withOpacity(0.6),
                                                 border: Border(
                                                   left: BorderSide(
                                                     color: Colors.white
@@ -2686,7 +2703,6 @@ class _PlayerTabState extends State<PlayerTab>
                                             ),
                                           ),
                                         ),
-
                                         // 播放列表内容
                                         Column(
                                           crossAxisAlignment:
@@ -2697,6 +2713,16 @@ class _PlayerTabState extends State<PlayerTab>
                                               padding: EdgeInsets.symmetric(
                                                   horizontal: 16, vertical: 12),
                                               decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: [
+                                                    Colors.blue
+                                                        .withOpacity(0.4),
+                                                    Colors.black
+                                                        .withOpacity(0.3),
+                                                  ],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
                                                 border: Border(
                                                   bottom: BorderSide(
                                                     color: Colors.white
@@ -2734,6 +2760,102 @@ class _PlayerTabState extends State<PlayerTab>
                                                 ],
                                               ),
                                             ),
+
+                                            // 排序工具栏
+                                            if (_playlist.length > 1)
+                                              Container(
+                                                padding: EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black45,
+                                                  border: Border(
+                                                    bottom: BorderSide(
+                                                      color: Colors.white
+                                                          .withOpacity(0.1),
+                                                      width: 1,
+                                                    ),
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .spaceBetween,
+                                                  children: [
+                                                    // 排序类型下拉菜单
+                                                    DropdownButtonHideUnderline(
+                                                      child: DropdownButton<
+                                                          SortType>(
+                                                        value: _sortType,
+                                                        dropdownColor:
+                                                            Colors.black87,
+                                                        iconEnabledColor:
+                                                            Colors.white70,
+                                                        style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 13),
+                                                        items: [
+                                                          // DropdownMenuItem(
+                                                          //   value:
+                                                          //       SortType.none,
+                                                          //   child: Text('默认排序'),
+                                                          // ),
+                                                          DropdownMenuItem(
+                                                            value:
+                                                                SortType.name,
+                                                            child: Text('按名称'),
+                                                          ),
+                                                          DropdownMenuItem(
+                                                            value: SortType
+                                                                .modifiedDate,
+                                                            child:
+                                                                Text('按修改日期'),
+                                                          ),
+                                                        ],
+                                                        onChanged: (value) {
+                                                          setState(() {
+                                                            _sortType = value!;
+                                                            _sortPlaylist();
+                                                          });
+                                                        },
+                                                      ),
+                                                    ),
+                                                    // 排序顺序按钮
+                                                    IconButton(
+                                                      icon: Icon(
+                                                        _sortOrder ==
+                                                                SortOrder
+                                                                    .ascending
+                                                            ? Icons.arrow_upward
+                                                            : Icons
+                                                                .arrow_downward,
+                                                        color: Colors.white70,
+                                                        size: 18,
+                                                      ),
+                                                      onPressed: () {
+                                                        setState(() {
+                                                          _sortOrder = _sortOrder ==
+                                                                  SortOrder
+                                                                      .ascending
+                                                              ? SortOrder
+                                                                  .descending
+                                                              : SortOrder
+                                                                  .ascending;
+                                                          _sortPlaylist();
+                                                        });
+                                                      },
+                                                      tooltip: _sortOrder ==
+                                                              SortOrder
+                                                                  .ascending
+                                                          ? '升序'
+                                                          : '降序',
+                                                      padding: EdgeInsets.zero,
+                                                      constraints:
+                                                          BoxConstraints(),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
 
                                             // 播放列表内容
                                             if (_playlist.isEmpty ||
@@ -2774,7 +2896,6 @@ class _PlayerTabState extends State<PlayerTab>
                                                     final isCurrentFile =
                                                         item['path'] ==
                                                             widget.openfile;
-
                                                     return Container(
                                                       margin:
                                                           EdgeInsets.symmetric(
@@ -2784,12 +2905,25 @@ class _PlayerTabState extends State<PlayerTab>
                                                         color: isCurrentFile
                                                             ? Colors.blue
                                                                 .withOpacity(
-                                                                    0.2)
+                                                                    0.3)
                                                             : Colors
                                                                 .transparent,
                                                         borderRadius:
                                                             BorderRadius
                                                                 .circular(8),
+                                                        boxShadow: isCurrentFile
+                                                            ? [
+                                                                BoxShadow(
+                                                                  color: Colors
+                                                                      .blue
+                                                                      .withOpacity(
+                                                                          0.3),
+                                                                  blurRadius: 5,
+                                                                  spreadRadius:
+                                                                      0,
+                                                                )
+                                                              ]
+                                                            : null,
                                                       ),
                                                       child: ListTile(
                                                         contentPadding:
@@ -2798,21 +2932,41 @@ class _PlayerTabState extends State<PlayerTab>
                                                           horizontal: 12,
                                                           vertical: 4,
                                                         ),
-                                                        leading: isCurrentFile
-                                                            ? Icon(
-                                                                Icons
-                                                                    .play_circle_filled,
-                                                                color:
-                                                                    Colors.blue,
-                                                                size: 24,
-                                                              )
-                                                            : Icon(
-                                                                Icons
-                                                                    .movie_outlined,
-                                                                color: Colors
-                                                                    .white60,
-                                                                size: 24,
-                                                              ),
+                                                        leading: Container(
+                                                          width: 32,
+                                                          height: 32,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: isCurrentFile
+                                                                ? Colors.blue
+                                                                    .withOpacity(
+                                                                        0.2)
+                                                                : Colors.white
+                                                                    .withOpacity(
+                                                                        0.05),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        16),
+                                                          ),
+                                                          child: Center(
+                                                            child: isCurrentFile
+                                                                ? Icon(
+                                                                    Icons
+                                                                        .play_circle_filled,
+                                                                    color: Colors
+                                                                        .blue,
+                                                                    size: 24,
+                                                                  )
+                                                                : Icon(
+                                                                    Icons
+                                                                        .movie_outlined,
+                                                                    color: Colors
+                                                                        .white60,
+                                                                    size: 20,
+                                                                  ),
+                                                          ),
+                                                        ),
                                                         title: Text(
                                                           item['name']!,
                                                           style: TextStyle(
@@ -2831,6 +2985,30 @@ class _PlayerTabState extends State<PlayerTab>
                                                           overflow: TextOverflow
                                                               .ellipsis,
                                                         ),
+                                                        // 添加修改日期小标签（如果按修改日期排序）
+                                                        subtitle: _sortType ==
+                                                                SortType
+                                                                    .modifiedDate
+                                                            ? Padding(
+                                                                padding: EdgeInsets
+                                                                    .only(
+                                                                        top: 4),
+                                                                child: Text(
+                                                                  DateFormat(
+                                                                          'yyyy-MM-dd HH:mm')
+                                                                      .format(File(
+                                                                              item['path']!)
+                                                                          .lastModifiedSync()),
+                                                                  style:
+                                                                      TextStyle(
+                                                                    color: Colors
+                                                                        .white60,
+                                                                    fontSize:
+                                                                        10,
+                                                                  ),
+                                                                ),
+                                                              )
+                                                            : null,
                                                         onTap: () {
                                                           if (item['path'] !=
                                                               widget.openfile) {
@@ -2847,6 +3025,93 @@ class _PlayerTabState extends State<PlayerTab>
                                                       ),
                                                     );
                                                   },
+                                                ),
+                                              ),
+
+                                            // 底部信息栏
+                                            if (_playlist.length > 1)
+                                              Container(
+                                                padding: EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black38,
+                                                  border: Border(
+                                                    top: BorderSide(
+                                                      color: Colors.white
+                                                          .withOpacity(0.1),
+                                                      width: 1,
+                                                    ),
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .spaceBetween,
+                                                  children: [
+                                                    Text(
+                                                      '共 ${_playlist.length} 个文件',
+                                                      style: TextStyle(
+                                                        color: Colors.white70,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                    TextButton(
+                                                      onPressed: () {
+                                                        // 切换到下一个文件
+                                                        int currentIndex = _playlist
+                                                            .indexWhere((item) =>
+                                                                item['path'] ==
+                                                                widget
+                                                                    .openfile);
+                                                        if (currentIndex !=
+                                                                -1 &&
+                                                            _playlist.length >
+                                                                1) {
+                                                          int nextIndex =
+                                                              (currentIndex +
+                                                                      1) %
+                                                                  _playlist
+                                                                      .length;
+                                                          getopenfile(_playlist[
+                                                                  nextIndex]
+                                                              ['path']!);
+                                                        }
+                                                      },
+                                                      child: Row(
+                                                        children: [
+                                                          Text(
+                                                            '下一个',
+                                                            style: TextStyle(
+                                                              color: Colors
+                                                                  .blue[300],
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                          SizedBox(width: 4),
+                                                          Icon(
+                                                            Icons.skip_next,
+                                                            color: Colors
+                                                                .blue[300],
+                                                            size: 16,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      style: ButtonStyle(
+                                                        padding:
+                                                            MaterialStateProperty
+                                                                .all(
+                                                          EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 4),
+                                                        ),
+                                                        minimumSize:
+                                                            MaterialStateProperty
+                                                                .all(
+                                                                    Size(0, 0)),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                           ],

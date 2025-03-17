@@ -1,8 +1,8 @@
 /*
  * @Author: 
  * @Date: 2025-02-17 13:28:54
- * @LastEditors: 
- * @LastEditTime: 2025-03-14 18:31:39
+ * @LastEditors: Please set LastEditors
+ * @LastEditTime: 2025-03-16 12:38:20
  * @Description: file content
  */
 /*
@@ -28,6 +28,7 @@ import { UIAbility, AbilityConstant, Want } from "@kit.AbilityKit"
 import DownloadPlugin from "./DownloadPlugin"
 import VolumePlugin from "./VolumePlugin"
 import FfmpegPlugin from "./FfmpegPlugin"
+import HdrPlugin from "./HdrPlugin"
 import CastPlugin from "./CastPlugin"
 let wantInfo: Want
 
@@ -66,6 +67,7 @@ export default class EntryAbility extends FlutterAbility {
         this.addPlugin(this.myDownloadPlugin)
         this.addPlugin(new VolumePlugin())
         this.addPlugin(new FfmpegPlugin())
+        this.addPlugin(new HdrPlugin())
         this.addPlugin(new CastPlugin())
     }
     onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam) {
