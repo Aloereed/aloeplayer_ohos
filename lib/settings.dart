@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-17 16:47:50
+ * @LastEditTime: 2025-03-17 22:45:19
  * @Description: file content
  */
 import 'dart:convert';
@@ -73,8 +73,8 @@ class SettingsService {
   static const String _useInnerThumbnail = 'use_inner_thumbnail';
   static const String _disableThumbnail = 'disable_thumbnail';
   static const String _subtitleFont = 'subtitle_font';
-  static const String _versionName = '2.0.2';
-  static const int _versionNumber = 25;
+  static const String _versionName = '2.0.3';
+  static const int _versionNumber = 26;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -1057,6 +1057,11 @@ class _SettingsTabState extends State<SettingsTab> {
                                   'value': 2,
                                   'label': '系统播放(PlatformView)',
                                   'icon': Icons.view_module
+                                },
+                                {
+                                  'value': 3,
+                                  'label': '系统播放(仅音频软解)',
+                                  'icon': Icons.mic_external_on_sharp
                                 }
                               ];
 

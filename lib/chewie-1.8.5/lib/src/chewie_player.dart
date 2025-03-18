@@ -388,7 +388,7 @@ class ChewieController extends ChangeNotifier {
     double Function(double)? setSystemVolume,
     Function? customToggleFullScreen,
     List<Map<String, dynamic>>? danmakuContents,
-    int ffmpeg =0,
+    int ffmpeg = 0,
     FfmpegExample? sendToFfmpegPlayer,
     HdrExample? sendToHdrPlayer,
     Function? playNextItem,
@@ -873,29 +873,30 @@ class ChewieController extends ChangeNotifier {
       sendToHdrPlayer?.controller?.sendMessageToOhosView('pause', '');
     }
 
-    if (ffmpeg == 1) {
+    if (ffmpeg == 1 || ffmpeg == 3) {
       int? kernelTime = sendToFfmpegPlayer?.controller?.currentPosition;
       int? controllerTime = videoPlayerController.value.position.inMilliseconds;
       print("kernelTime: $kernelTime, controllerTime: $controllerTime");
-      if ((ffmpeg == 1 || ffmpeg == 2) &&
-          kernelTime != null &&
+      if (kernelTime != null &&
           controllerTime != null &&
-          (controllerTime - kernelTime).abs() > 3000) {
+          (controllerTime - kernelTime).abs() > (ffmpeg == 1?3000:500)) {
         // await videoPlayerController.seekTo(Duration(milliseconds: kernelTime));
         // await videoPlayerController.pause();
         await sendToFfmpegPlayer?.controller
-            ?.sendMessageToOhosView("seekTo", controllerTime.toString());
+            ?.sendMessageToOhosView("seekTo", ((controllerTime+100>duration)?controllerTime:(controllerTime+100)).toString());
         // await videoPlayerController.play();
         // seekTo(videoPlayerController.value.position);
       }
       sendToFfmpegPlayer?.controller?.sendMessageToOhosView("setSpeed",
           videoPlayerController.value.playbackSpeed.toString() + "f");
-    } else if (ffmpeg == 2 && (sendToHdrPlayer!=null)&& (sendToHdrPlayer!.controller!=null)&& sendToHdrPlayer!.controller!.prepared) {
+    } else if (ffmpeg == 2 &&
+        (sendToHdrPlayer != null) &&
+        (sendToHdrPlayer!.controller != null) &&
+        sendToHdrPlayer!.controller!.prepared) {
       int? kernelTime = sendToHdrPlayer?.controller?.currentPosition;
       int? controllerTime = videoPlayerController.value.position.inMilliseconds;
       print("kernelTime: $kernelTime, controllerTime: $controllerTime");
-      if ((ffmpeg == 1 || ffmpeg == 2) &&
-          kernelTime != null &&
+      if (kernelTime != null &&
           controllerTime != null &&
           (controllerTime - kernelTime).abs() > 2500) {
         // await videoPlayerController.seekTo(Duration(milliseconds: kernelTime));
@@ -905,8 +906,8 @@ class ChewieController extends ChangeNotifier {
         // await videoPlayerController.play();
         // seekTo(videoPlayerController.value.position);
       }
-      sendToHdrPlayer?.controller?.sendMessageToOhosView("setSpeed",
-          videoPlayerController.value.playbackSpeed.toString());
+      sendToHdrPlayer?.controller?.sendMessageToOhosView(
+          "setSpeed", videoPlayerController.value.playbackSpeed.toString());
     }
   }
 

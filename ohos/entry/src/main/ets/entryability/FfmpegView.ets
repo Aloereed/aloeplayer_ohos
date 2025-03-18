@@ -49,6 +49,7 @@ struct ButtonComponent {
   ffmpegView: FfmpegView = this.params.platformView as FfmpegView
   @StorageLink('numValue') storageLink: string = "first"
   @StorageLink('ffmpeg') ffmpeg: number = 0
+  @StorageLink('videoMode') videoMode: boolean = true
   @State bkColor: Color = Color.Red
   @State offsetX: number = 0
   @State offsetY: number = 0
@@ -168,10 +169,10 @@ struct ButtonComponent {
       .borderRadius(10)
   }
   aboutToAppear() {
-    LogUtils.getInstance().LOGI("aboutToAppear");
+    LogUtils.getInstance().LOGI("[FFMPEG] aboutToAppear");
     this.videoUrl = this.ffmpegView.numValue;
     let event: Callback<InterruptEvent> = (event) => {
-      LogUtils.getInstance().LOGI(`event: ${JSON.stringify(event)}`);
+      LogUtils.getInstance().LOGI(`[FFMPEG] event: ${JSON.stringify(event)}`);
       if (event.hintType === InterruptHintType.INTERRUPT_HINT_PAUSE) {
         this.pause();
       } else if (event.hintType === InterruptHintType.INTERRUPT_HINT_RESUME) {
@@ -182,7 +183,7 @@ struct ButtonComponent {
     }
     // this.mIjkMediaPlayer.on('audioInterrupt', event);
     // let deviceChangeEvent: Callback<InterruptEvent> = (event) => {
-    //   LogUtils.getInstance().LOGI(`deviceChange event: ${JSON.stringify(event)}`);
+    //   LogUtils.getInstance().LOGI(`[FFMPEG] deviceChange event: ${JSON.stringify(event)}`);
     //   if (event.reason === DeviceChangeReason.REASON_NEW_DEVICE_AVAILABLE) {
     //     this.pause();
     //   } else if (event.reason === DeviceChangeReason.REASON_OLD_DEVICE_UNAVAILABLE) {
@@ -193,7 +194,7 @@ struct ButtonComponent {
   }
   xcomponentController: XComponentController = new XComponentController()
   aboutToDisappear() {
-    LogUtils.getInstance().LOGI("aboutToDisappear");
+    LogUtils.getInstance().LOGI("[FFMPEG] aboutToDisappear");
     this.mDestroyPage = true;
     this.mIjkMediaPlayer.setScreenOnWhilePlaying(false);
     this.stopRecord(false);
@@ -279,11 +280,11 @@ struct ButtonComponent {
                 this.isSeekTo = true;
                 this.mDestroyPage = false;
                 this.showLoadIng();
-                LogUtils.getInstance().LOGI("slider-->seekValue start:" + value);
+                LogUtils.getInstance().LOGI("[FFMPEG] slider-->seekValue start:" + value);
                 let seekValue = value * (this.mIjkMediaPlayer.getDuration() / 100);
                 this.seekTo(seekValue + "");
                 this.setProgress()
-                LogUtils.getInstance().LOGI("slider-->seekValue end:" + seekValue);
+                LogUtils.getInstance().LOGI("[FFMPEG] slider-->seekValue end:" + seekValue);
                 this.isSeekTo = false;
               }
             })
@@ -352,12 +353,12 @@ struct ButtonComponent {
 
   private startPlayOrResumePlay() {
     this.mDestroyPage = false;
-    LogUtils.getInstance().LOGI("startPlayOrResumePlay start this.CONTROL_PlayStatus:" + this.CONTROL_PlayStatus)
-    LogUtils.getInstance().LOGI(`startPlayOrResumePlay this.videoUrl:${this.videoUrl}`);
+    LogUtils.getInstance().LOGI("[FFMPEG] startPlayOrResumePlay start this.CONTROL_PlayStatus:" + this.CONTROL_PlayStatus)
+    LogUtils.getInstance().LOGI(`[FFMPEG] startPlayOrResumePlay this.videoUrl:${this.videoUrl}`);
     if (this.CONTROL_PlayStatus == PlayStatus.INIT) {
       this.stopProgressTask();
       this.startProgressTask();
-      this.play(this.videoUrl.toString());
+      this.play(this.videoUrl.toString(), this.videoMode);
     }
     if (this.CONTROL_PlayStatus == PlayStatus.PAUSE) {
       this.mIjkMediaPlayer.start();
@@ -379,7 +380,7 @@ struct ButtonComponent {
     let newSeconds: number | string = totalSeconds % 60;
     let minutes: number | string = (totalSeconds / 60) % 60;
     let hours: number | string = totalSeconds / 3600;
-    LogUtils.getInstance().LOGI("stringForTime hours:" + hours + ",minutes:" + minutes + ",seconds:" + newSeconds);
+    LogUtils.getInstance().LOGI("[FFMPEG] stringForTime hours:" + hours + ",minutes:" + minutes + ",seconds:" + newSeconds);
     hours = this.completionNum(Math.floor(Math.floor(hours * 100) / 100));
     minutes = this.completionNum(Math.floor(Math.floor(minutes * 100) / 100));
     newSeconds = Math.floor(Math.floor(newSeconds * 100) / 100)
@@ -426,7 +427,7 @@ struct ButtonComponent {
   private startProgressTask() {
     let that = this;
     this.updateProgressTimer = setInterval(() => {
-      LogUtils.getInstance().LOGI("startProgressTask");
+      LogUtils.getInstance().LOGI("[FFMPEG] startProgressTask");
       if (!that.mDestroyPage) {
         that.setProgress();
         that.ffmpegView.sendCurrentPosition();
@@ -435,7 +436,7 @@ struct ButtonComponent {
   }
 
   private stopProgressTask() {
-    LogUtils.getInstance().LOGI("stopProgressTask");
+    LogUtils.getInstance().LOGI("[FFMPEG] stopProgressTask");
     clearInterval(this.updateProgressTimer);
   }
 
@@ -454,12 +455,15 @@ struct ButtonComponent {
     this.replayVisible = Visibility.Visible;
   }
 
-  private play(url: string) {
+  private play(url: string, videoMode: boolean = true) {
     let that = this;
     that.showLoadIng();
     //设置XComponent回调的context
-    if (!!this.mContext) {
+    if (videoMode && !!this.mContext) {
       this.mIjkMediaPlayer.setContext(this.mContext, 'xcomponentId');
+    }else{
+      this.mIjkMediaPlayer.setContext(null, 'xcomponentId');
+      this.mIjkMediaPlayer.setAudioId( 'xcomponentId');
     }
     if (this.CONTROL_PlayStatus == PlayStatus.INIT) {
       this.mIjkMediaPlayer.reset();
@@ -512,9 +516,9 @@ struct ButtonComponent {
     this.mIjkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", "1");
     this.mIjkMediaPlayer.setSpeed(this.playSpeed);
     let Speed = this.mIjkMediaPlayer.getSpeed()
-    LogUtils.getInstance().LOGI('getSpeed--' + Speed)
+    LogUtils.getInstance().LOGI('[FFMPEG] getSpeed--' + Speed)
     //是否开启循环播放
-    this.mIjkMediaPlayer.setLoopCount(true);
+    this.mIjkMediaPlayer.setLoopCount(false);
     let mOnVideoSizeChangedListener: OnVideoSizeChangedListener = {
       onVideoSizeChanged: (width: number, height: number, sar_num: number, sar_den: number) => {
         if (height === 0) {
@@ -539,7 +543,7 @@ struct ButtonComponent {
     this.mIjkMediaPlayer.setOnVideoSizeChangedListener(mOnVideoSizeChangedListener);
     let mOnPreparedListener: OnPreparedListener = {
       onPrepared: () => {
-        LogUtils.getInstance().LOGI("setOnPreparedListener-->go");
+        LogUtils.getInstance().LOGI("[FFMPEG] setOnPreparedListener-->go");
       }
     }
     this.mIjkMediaPlayer.setOnPreparedListener(mOnPreparedListener);
@@ -552,7 +556,7 @@ struct ButtonComponent {
 
     let mOnCompletionListener: OnCompletionListener = {
       onCompletion: () => {
-        LogUtils.getInstance().LOGI("OnCompletionListener-->go")
+        LogUtils.getInstance().LOGI("[FFMPEG] OnCompletionListener-->go")
         that.showRePlay();
         that.currentTime = that.stringForTime(this.mIjkMediaPlayer.getDuration());
         that.progressValue = this.PROGRESS_MAX_VALUE;
@@ -564,33 +568,33 @@ struct ButtonComponent {
 
     let mOnBufferingUpdateListener: OnBufferingUpdateListener = {
       onBufferingUpdate: (percent: number) => {
-        LogUtils.getInstance().LOGI("OnBufferingUpdateListener-->go:" + percent);
+        LogUtils.getInstance().LOGI("[FFMPEG] OnBufferingUpdateListener-->go:" + percent);
         let MediaInfo = this.mIjkMediaPlayer.getMediaInfo()
-        LogUtils.getInstance().LOGI('getMediaInfo---' + MediaInfo);
+        LogUtils.getInstance().LOGI('[FFMPEG] getMediaInfo---' + MediaInfo);
         let VideoWidth = this.mIjkMediaPlayer.getVideoWidth()
-        LogUtils.getInstance().LOGI('getVideoWidth---' + VideoWidth);
+        LogUtils.getInstance().LOGI('[FFMPEG] getVideoWidth---' + VideoWidth);
 
         let VideoHeight = this.mIjkMediaPlayer.getVideoHeight()
-        LogUtils.getInstance().LOGI('getVideoHeight---' + VideoHeight);
+        LogUtils.getInstance().LOGI('[FFMPEG] getVideoHeight---' + VideoHeight);
 
         let VideoSarNum = this.mIjkMediaPlayer.getVideoSarNum()
-        LogUtils.getInstance().LOGI('getVideoSarNum---' + VideoSarNum);
+        LogUtils.getInstance().LOGI('[FFMPEG] getVideoSarNum---' + VideoSarNum);
 
         let VideoSarDen = this.mIjkMediaPlayer.getVideoSarDen()
-        LogUtils.getInstance().LOGI('getVideoSarDen---' + VideoSarDen);
+        LogUtils.getInstance().LOGI('[FFMPEG] getVideoSarDen---' + VideoSarDen);
 
         let AudioSessionId = this.mIjkMediaPlayer.getAudioSessionId()
-        LogUtils.getInstance().LOGI('getAudioSessionId---' + AudioSessionId);
+        LogUtils.getInstance().LOGI('[FFMPEG] getAudioSessionId---' + AudioSessionId);
 
         let Looping = this.mIjkMediaPlayer.isLooping()
-        LogUtils.getInstance().LOGI('isLooping---' + Looping);
+        LogUtils.getInstance().LOGI('[FFMPEG] isLooping---' + Looping);
       }
     }
     this.mIjkMediaPlayer.setOnBufferingUpdateListener(mOnBufferingUpdateListener);
 
     let mOnSeekCompleteListener: OnSeekCompleteListener = {
       onSeekComplete: () => {
-        LogUtils.getInstance().LOGI("OnSeekCompleteListener-->go");
+        LogUtils.getInstance().LOGI("[FFMPEG] OnSeekCompleteListener-->go");
         that.startPlayOrResumePlay();
       }
     }
@@ -598,7 +602,7 @@ struct ButtonComponent {
 
     let mOnInfoListener: OnInfoListener = {
       onInfo: (what: number, extra: number) => {
-        LogUtils.getInstance().LOGI("OnInfoListener-->go:" + what + "===" + extra);
+        LogUtils.getInstance().LOGI("[FFMPEG] OnInfoListener-->go:" + what + "===" + extra);
         that.hideLoadIng();
       }
     }
@@ -608,7 +612,7 @@ struct ButtonComponent {
     let mOnErrorListener: OnErrorListener = {
       onError: (what: number, extra: number) => {
         this.stopProgressTask();
-        LogUtils.getInstance().LOGI("OnErrorListener-->go:" + what + "===" + extra)
+        LogUtils.getInstance().LOGI("[FFMPEG] OnErrorListener-->go:" + what + "===" + extra)
         that.hideLoadIng();
         prompt.showToast({
           message: getContext().resourceManager.getStringByNameSync("Honey_the_video_is_playing_errant_The_system_is_wandering")
@@ -628,10 +632,10 @@ struct ButtonComponent {
 
   private getVideoSize() {
     let VideoWidth = this.mIjkMediaPlayer.getVideoWidth();
-    LogUtils.getInstance().LOGI("getVideoWidth---" + VideoWidth);
+    LogUtils.getInstance().LOGI("[FFMPEG] getVideoWidth---" + VideoWidth);
 
     let VideoHeight = this.mIjkMediaPlayer.getVideoHeight();
-    LogUtils.getInstance().LOGI("getVideoHeight---" + VideoHeight);
+    LogUtils.getInstance().LOGI("[FFMPEG] getVideoHeight---" + VideoHeight);
   }
 
 
@@ -725,7 +729,7 @@ struct ButtonComponent {
     //     }
     //     let phAccessHelper = photoAccessHelper.getPhotoAccessHelper(getContext(that));
     //     phAccessHelper.createAsset(photoType, extension, options, (err, uri) => {
-    //       LogUtils.getInstance().LOGI(`createAsset success uri:${uri}`)
+    //       LogUtils.getInstance().LOGI(`[FFMPEG] createAsset success uri:${uri}`)
     //       if (uri !== undefined) {
     //         let recordFile = fs.openSync(that.recordSaveFilePath);
     //         let albumFile = fs.openSync(uri,fs.OpenMode.READ_WRITE);
@@ -739,7 +743,7 @@ struct ButtonComponent {
     //         prompt.showToast({
     //           message: $r('app.string.stop_record_failed')
     //         });
-    //         LogUtils.getInstance().LOGI(`createAsset failed, error: ${err.code}, ${err.message}`)
+    //         LogUtils.getInstance().LOGI(`[FFMPEG] createAsset failed, error: ${err.code}, ${err.message}`)
     //       }
     //     });
     //   })
@@ -767,7 +771,7 @@ struct ButtonComponent {
     //     }
     //     let phAccessHelper = photoAccessHelper.getPhotoAccessHelper(getContext(that));
     //     phAccessHelper.createAsset(photoType, extension, options, (err, uri) => {
-    //       LogUtils.getInstance().LOGI(`createAsset success uri:${uri}`)
+    //       LogUtils.getInstance().LOGI(`[FFMPEG] createAsset success uri:${uri}`)
     //       if (uri !== undefined) {
     //         let screenshotFile = fs.openSync(saveFilePath);
     //         let albumFile = fs.openSync(uri,fs.OpenMode.READ_WRITE);
@@ -781,7 +785,7 @@ struct ButtonComponent {
     //         prompt.showToast({
     //           message: $r('app.string.screenshot_failed')
     //         });
-    //         LogUtils.getInstance().LOGI(`createAsset failed, error: ${err.code}, ${err.message}`)
+    //         LogUtils.getInstance().LOGI(`[FFMPEG] createAsset failed, error: ${err.code}, ${err.message}`)
     //       }
     //     });
     //   })
@@ -802,6 +806,7 @@ AppStorage.setOrCreate('ffmpeg', 0)
 export class FfmpegView extends PlatformView implements MethodCallHandler {
   numValue: string = "test";
   ffmpeg: number = 0;
+  videoMode: boolean = true;
   methodChannel: MethodChannel;
   index: number = 1;
   mContext: object | undefined = undefined
@@ -829,6 +834,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
   initAspectRatio: number = 1;
   videoAspectRatio: number = this.initAspectRatio;
   videoUrl: string = '';
+
   private last: number = 0;
   videoParentAspectRatio: number = this.initAspectRatio;
   // @StorageLink('CONTROL_PlayStatus') CONTROL_PlayStatus: PlayStatus = PlayStatus.INIT;
@@ -849,12 +855,16 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
     this.methodChannel = new MethodChannel(message, `com.aloereed.aloeplayer/ffmpegView${viewId}`, StandardMethodCodec.INSTANCE);
     this.methodChannel.setMethodCallHandler(this);
     this.numValue = args['initParams'] as string;
+    this.numValue = args['initParams'] as string;
+    this.videoMode = args['videoMode'] as boolean;
+    console.log(`[FFMPEG] numValue: ${this.numValue}`)
+    console.log(`[FFMPEG] videoMode: ${this.videoMode}`)
   }
 
   private startProgressTask() {
     let that = this;
     this.updateProgressTimer = setInterval(() => {
-      LogUtils.getInstance().LOGI("startProgressTask");
+      LogUtils.getInstance().LOGI("[FFMPEG] startProgressTask");
       if (!that.mDestroyPage) {
         // that.setProgress();
         that.sendCurrentPosition();
@@ -863,7 +873,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
   }
 
   private stopProgressTask() {
-    LogUtils.getInstance().LOGI("stopProgressTask");
+    LogUtils.getInstance().LOGI("[FFMPEG] stopProgressTask");
     clearInterval(this.updateProgressTimer);
   }
   private completionNum(num: number): string | number {
@@ -879,7 +889,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
     let newSeconds: number | string = totalSeconds % 60;
     let minutes: number | string = (totalSeconds / 60) % 60;
     let hours: number | string = totalSeconds / 3600;
-    LogUtils.getInstance().LOGI("stringForTime hours:" + hours + ",minutes:" + minutes + ",seconds:" + newSeconds);
+    LogUtils.getInstance().LOGI("[FFMPEG] stringForTime hours:" + hours + ",minutes:" + minutes + ",seconds:" + newSeconds);
     hours = this.completionNum(Math.floor(Math.floor(hours * 100) / 100));
     minutes = this.completionNum(Math.floor(Math.floor(minutes * 100) / 100));
     newSeconds = Math.floor(Math.floor(newSeconds * 100) / 100)
@@ -899,13 +909,17 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
   }
 
 
-  private play(url: string) {
+  private play(url: string, videoMode: boolean = true) {
     let that = this;
     // that.showLoadIng();
     //设置XComponent回调的context
-    if (!!this.mContext) {
+    if (videoMode && !!this.mContext) {
       this.mIjkMediaPlayer.setContext(this.mContext, 'xcomponentId');
+    }else{
+      this.mIjkMediaPlayer.setContext(null, 'xcomponentId');
+      this.mIjkMediaPlayer.setAudioId( 'xcomponentId');
     }
+
     this.mIjkMediaPlayer.reset();
 
     //设置debug模式
@@ -955,7 +969,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
     this.mIjkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", "1");
     this.mIjkMediaPlayer.setSpeed(this.playSpeed);
     let Speed = this.mIjkMediaPlayer.getSpeed()
-    LogUtils.getInstance().LOGI('getSpeed--' + Speed)
+    LogUtils.getInstance().LOGI('[FFMPEG] getSpeed--' + Speed)
     //是否开启循环播放
     this.mIjkMediaPlayer.setLoopCount(false);
     let mOnVideoSizeChangedListener: OnVideoSizeChangedListener = {
@@ -984,7 +998,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
     this.mIjkMediaPlayer.setOnVideoSizeChangedListener(mOnVideoSizeChangedListener);
     let mOnPreparedListener: OnPreparedListener = {
       onPrepared: () => {
-        LogUtils.getInstance().LOGI("setOnPreparedListener-->go");
+        LogUtils.getInstance().LOGI("[FFMPEG] setOnPreparedListener-->go");
       }
     }
     this.mIjkMediaPlayer.setOnPreparedListener(mOnPreparedListener);
@@ -997,7 +1011,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
 
     let mOnCompletionListener: OnCompletionListener = {
       onCompletion: () => {
-        LogUtils.getInstance().LOGI("OnCompletionListener-->go")
+        LogUtils.getInstance().LOGI("[FFMPEG] OnCompletionListener-->go")
         // that.showRePlay();
         // that.currentTime = that.stringForTime(this.mIjkMediaPlayer.getDuration());
         // that.progressValue = this.PROGRESS_MAX_VALUE;
@@ -1009,33 +1023,33 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
 
     let mOnBufferingUpdateListener: OnBufferingUpdateListener = {
       onBufferingUpdate: (percent: number) => {
-        LogUtils.getInstance().LOGI("OnBufferingUpdateListener-->go:" + percent);
+        LogUtils.getInstance().LOGI("[FFMPEG] OnBufferingUpdateListener-->go:" + percent);
         let MediaInfo = this.mIjkMediaPlayer.getMediaInfo()
-        LogUtils.getInstance().LOGI('getMediaInfo---' + MediaInfo);
+        LogUtils.getInstance().LOGI('[FFMPEG] getMediaInfo---' + MediaInfo);
         let VideoWidth = this.mIjkMediaPlayer.getVideoWidth()
-        LogUtils.getInstance().LOGI('getVideoWidth---' + VideoWidth);
+        LogUtils.getInstance().LOGI('[FFMPEG] getVideoWidth---' + VideoWidth);
 
         let VideoHeight = this.mIjkMediaPlayer.getVideoHeight()
-        LogUtils.getInstance().LOGI('getVideoHeight---' + VideoHeight);
+        LogUtils.getInstance().LOGI('[FFMPEG] getVideoHeight---' + VideoHeight);
 
         let VideoSarNum = this.mIjkMediaPlayer.getVideoSarNum()
-        LogUtils.getInstance().LOGI('getVideoSarNum---' + VideoSarNum);
+        LogUtils.getInstance().LOGI('[FFMPEG] getVideoSarNum---' + VideoSarNum);
 
         let VideoSarDen = this.mIjkMediaPlayer.getVideoSarDen()
-        LogUtils.getInstance().LOGI('getVideoSarDen---' + VideoSarDen);
+        LogUtils.getInstance().LOGI('[FFMPEG] getVideoSarDen---' + VideoSarDen);
 
         let AudioSessionId = this.mIjkMediaPlayer.getAudioSessionId()
-        LogUtils.getInstance().LOGI('getAudioSessionId---' + AudioSessionId);
+        LogUtils.getInstance().LOGI('[FFMPEG] getAudioSessionId---' + AudioSessionId);
 
         let Looping = this.mIjkMediaPlayer.isLooping()
-        LogUtils.getInstance().LOGI('isLooping---' + Looping);
+        LogUtils.getInstance().LOGI('[FFMPEG] isLooping---' + Looping);
       }
     }
     this.mIjkMediaPlayer.setOnBufferingUpdateListener(mOnBufferingUpdateListener);
 
     let mOnSeekCompleteListener: OnSeekCompleteListener = {
       onSeekComplete: () => {
-        LogUtils.getInstance().LOGI("OnSeekCompleteListener-->go");
+        LogUtils.getInstance().LOGI("[FFMPEG] OnSeekCompleteListener-->go");
         // that.startPlayOrResumePlay();
         that.mIjkMediaPlayer.start();
       }
@@ -1044,7 +1058,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
 
     let mOnInfoListener: OnInfoListener = {
       onInfo: (what: number, extra: number) => {
-        LogUtils.getInstance().LOGI("OnInfoListener-->go:" + what + "===" + extra);
+        LogUtils.getInstance().LOGI("[FFMPEG] OnInfoListener-->go:" + what + "===" + extra);
         // that.hideLoadIng();
       }
     }
@@ -1054,7 +1068,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
     let mOnErrorListener: OnErrorListener = {
       onError: (what: number, extra: number) => {
         // this.stopProgressTask();
-        LogUtils.getInstance().LOGI("OnErrorListener-->go:" + what + "===" + extra)
+        LogUtils.getInstance().LOGI("[FFMPEG] OnErrorListener-->go:" + what + "===" + extra)
         // that.hideLoadIng();
         prompt.showToast({
           message: getContext().resourceManager.getStringByNameSync("Honey_the_video_is_playing_errant_The_system_is_wandering")
@@ -1076,10 +1090,10 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
 
   private getVideoSize() {
     let VideoWidth = this.mIjkMediaPlayer.getVideoWidth();
-    LogUtils.getInstance().LOGI("getVideoWidth---" + VideoWidth);
+    LogUtils.getInstance().LOGI("[FFMPEG] getVideoWidth---" + VideoWidth);
 
     let VideoHeight = this.mIjkMediaPlayer.getVideoHeight();
-    LogUtils.getInstance().LOGI("getVideoHeight---" + VideoHeight);
+    LogUtils.getInstance().LOGI("[FFMPEG] getVideoHeight---" + VideoHeight);
   }
 
 
@@ -1111,10 +1125,11 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
     let link1: SubscribedAbstractProperty<number> = AppStorage.link('ffmpeg');
     let link2: SubscribedAbstractProperty<string> = AppStorage.link('videoUrl');
     let link3: SubscribedAbstractProperty<PlayStatus> = AppStorage.link('CONTROL_PlayStatus');
+    let link5: SubscribedAbstractProperty<boolean> = AppStorage.link('videoMode');
     // let link2: SubscribedAbstractProperty<string> = AppStorage.link('numValue');
     switch (method) {
       case 'getMessageFromFlutterView2':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         let value: ESObject = call.args;
         this.ffmpeg = parseFloat(value);
         link1.set(parseFloat(value));
@@ -1122,47 +1137,54 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
         result.success(true);
         break;
       case 'getMessageFromFlutterView':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         let value2: ESObject = call.args;
         this.numValue = value2 as string;
-        link2.set(value2 as string);
+        // 检查numValue是否以“!”开头
+        if(this.numValue.startsWith('!')){
+          this.videoMode = false;
+          this.numValue = this.numValue.substring(1)
+        }
+        link2.set(this.numValue);
         link3.set(PlayStatus.INIT);
+        link5.set(this.videoMode)
         console.log("nodeController receive message from dart: " + this.numValue);
         //单例模式
         result.success(true);
         break;
       case 'newPlay':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         let value3: ESObject = call.args;
         this.videoUrl = value3 as string;
-        this.play(this.videoUrl);
+        link5.set(this.videoMode)
+        this.play(this.videoUrl,this.videoMode);
         console.log("nodeController receive message new play: " + this.videoUrl);
         //单例模式
         result.success(true);
         break;
       case 'resume':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         this.mIjkMediaPlayer.start();
         console.log("nodeController receive message from dart: " + this.videoUrl);
         //单例模式
         result.success(true);
         break;
       case 'pause':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         this.mIjkMediaPlayer.pause();
         console.log("nodeController receive message from dart: " + this.videoUrl);
         //单例模式
         result.success(true);
         break; 
       case 'stop':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         this.mIjkMediaPlayer.stop();
         console.log("nodeController receive message from dart: " + this.videoUrl);
         //单例模式
         result.success(true);
         break;
       case 'seekTo':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         let value4: ESObject = call.args;
         this.mIjkMediaPlayer.seekTo(value4 as string);
         console.log("nodeController receive message from dart: " + this.videoUrl);
@@ -1170,7 +1192,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
         result.success(true);
         break;
       case 'setSpeed':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         let value5: ESObject = call.args;
         this.playSpeed = value5 as string;
         this.mIjkMediaPlayer.setSpeed(this.playSpeed);
@@ -1179,7 +1201,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
         result.success(true);
         break;
       case 'getDuration':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         let value6: ESObject = call.args;
         let duration = this.mIjkMediaPlayer.getDuration();
         console.log("nodeController receive message from dart: " + this.videoUrl);
@@ -1187,7 +1209,7 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
         result.success(duration);
         break;
       case 'getCurrentPosition':
-        console.log("nodeController receive start");
+        console.log(`nodeController receive start: ${method}`);
         let value7: ESObject = call.args;
         let currentPosition = this.mIjkMediaPlayer.getCurrentPosition();
         console.log("nodeController currentPosition: " + currentPosition);

@@ -41,9 +41,7 @@ import 'package:dart_libass/dart_libass.dart';
 import 'history_service.dart';
 import 'package:aloeplayer/ass.dart';
 
-enum SortType { none, name, modifiedDate }
 
-enum SortOrder { ascending, descending }
 
 int rgbToColor(int rgb) {
   // 将 RGB 值转换为 ARGB 值，透明度为 0xFF（完全不透明）
@@ -1472,6 +1470,15 @@ class _PlayerTabState extends State<PlayerTab>
               ?.sendMessageToOhosView("newPlay", pathToUri(widget.openfile));
         }
       }
+      if (_useFfmpegForPlay == 3) {
+        if (_ffmpegExample == null) {
+          _ffmpegExample = FfmpegExample(
+              initUri: convertUriToPath(widget.openfile),
+              toggleFullScreen: this.toggleFullScreen,videoMode: false,);
+        }
+        _ffmpegExample?.controller?.sendMessageToOhosView(
+            "newPlay", convertUriToPath(widget.openfile));
+      }
 
       getopenfile(uri);
     } else {
@@ -1552,6 +1559,15 @@ class _PlayerTabState extends State<PlayerTab>
           _hdrExample?.controller
               ?.sendMessageToOhosView("newPlay", pathToUri(uri));
         }
+      }
+      if (_useFfmpegForPlay == 3) {
+        if (_ffmpegExample == null) {
+          _ffmpegExample = FfmpegExample(
+              initUri: convertUriToPath(widget.openfile),
+              toggleFullScreen: this.toggleFullScreen, videoMode: false,);
+        }
+        _ffmpegExample?.controller?.sendMessageToOhosView(
+            "newPlay", convertUriToPath(widget.openfile));
       }
       _getPlaylist(originalUri);
       _recordPlayStart(originalUri, originalUri);
@@ -2642,7 +2658,7 @@ class _PlayerTabState extends State<PlayerTab>
                                 child: this._hdrExample!,
                               ),
                             // FFMPEG 播放器
-                            if (_useFfmpegForPlay == 1 &&
+                            if ((_useFfmpegForPlay == 1 || _useFfmpegForPlay == 3)  &&
                                 (_ffmpegExample != null))
                               Transform(
                                 alignment: Alignment.center,

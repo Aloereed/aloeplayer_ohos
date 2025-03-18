@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-19 13:47:39
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-02-09 21:18:08
+ * @LastEditTime: 2025-03-17 22:30:56
  * @Description: file content
  */
 /*
@@ -32,8 +32,9 @@ typedef OnViewCreated = Function(FfmpegViewController,String);
 class FfmpegOhosView extends StatefulWidget {
   final OnViewCreated onViewCreated;
   final String initUri;
+  final bool videoMode;
 
-  const FfmpegOhosView(this.onViewCreated,this.initUri, {Key? key}) : super(key: key);
+  const FfmpegOhosView(this.onViewCreated,this.initUri, this.videoMode, {Key? key}) : super(key: key);
 
   @override
   State<FfmpegOhosView> createState() => _FfmpegOhosViewState();
@@ -52,7 +53,7 @@ class _FfmpegOhosViewState extends State<FfmpegOhosView> {
     return OhosView(
       viewType: 'com.aloereed.aloeplayer/ffmpegView',
       onPlatformViewCreated: _onPlatformViewCreated,
-      creationParams: <String, dynamic>{'initParams': widget.initUri },
+      creationParams: <String, dynamic>{'initParams': widget.initUri,'videoMode':widget.videoMode },
       creationParamsCodec: const StandardMessageCodec(),
     );
   }
@@ -120,8 +121,9 @@ class FfmpegViewController {
 }
 
 class FfmpegExample extends StatefulWidget {
-  FfmpegExample({Key? key,required this.initUri, required this.toggleFullScreen}) : super(key: key);
+  FfmpegExample({Key? key,required this.initUri, required this.toggleFullScreen, this.videoMode = true}) : super(key: key);
   FfmpegViewController? _controller;
+  bool videoMode = true;
   String initUri = '';
   int currentPosition=0;
   Function toggleFullScreen = (){};
@@ -143,7 +145,10 @@ class _FfmpegExampleState extends State<FfmpegExample> {
         widget.currentPosition = int.parse(data);
       });
     });
-    widget._controller?.sendMessageToOhosView("getMessageFromFlutterView",initUri);
+    if(widget.videoMode)
+      widget._controller?.sendMessageToOhosView("getMessageFromFlutterView",initUri);
+    else
+      widget._controller?.sendMessageToOhosView("getMessageFromFlutterView","!"+initUri);
   }
 
   Widget _buildOhosView() {
@@ -151,7 +156,7 @@ class _FfmpegExampleState extends State<FfmpegExample> {
     return Expanded(
       child: Container(
         color: Colors.blueAccent.withAlpha(60),
-        child: FfmpegOhosView(_onFfmpegOhosViewCreated,widget.initUri),
+        child: FfmpegOhosView(_onFfmpegOhosViewCreated,widget.initUri,widget.videoMode),
       ),
       flex: 1,
     );

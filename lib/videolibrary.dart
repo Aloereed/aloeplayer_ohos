@@ -23,7 +23,11 @@ import 'favorite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'history_page.dart';
 import 'screens/cast_screen_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+// 常量键值
+const String sortTypeKey = 'sort_type';
+const String sortOrderKey = 'sort_order';
 // import 'mpvplayer.dart';
 // import 'package:path/path.dart';
 class VideoLibraryTab extends StatefulWidget {
@@ -61,8 +65,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   bool _isGridView = true; // 默认显示Grid视图
   bool _isLoading = false;
   List _allItems = []; // 存储所有项目，用于筛选
-  SortType _currentSortType = SortType.none;
-  SortOrder _currentSortOrder = SortOrder.ascending;
+  late SortType _currentSortType = SortType.none;
+  late SortOrder _currentSortOrder = SortOrder.ascending;
   // 添加缓存
   Map<String, Uint8List?> _thumbnailCache = {};
   Map<String, Duration?> _durationCache = {};
@@ -72,9 +76,38 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   bool _showOnlyFavorites = false;
   bool isFFmpeged = false;
   bool disableThumbnail = false;
+
+  // 初始化方法，在类初始化时调用
+  Future<void> initPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 获取保存的排序类型，如果不存在则使用默认值 SortType.none
+    final sortTypeIndex = prefs.getInt(sortTypeKey) ?? SortType.none.index;
+    _currentSortType = SortType.values[sortTypeIndex];
+    
+    // 获取保存的排序顺序，如果不存在则使用默认值 SortOrder.ascending
+    final sortOrderIndex = prefs.getInt(sortOrderKey) ?? SortOrder.ascending.index;
+    _currentSortOrder = SortOrder.values[sortOrderIndex];
+  }
+  
+  // 保存排序类型的方法
+  Future<void> saveSortType(SortType sortType) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(sortTypeKey, sortType.index);
+    _currentSortType = sortType;
+  }
+  
+  // 保存排序顺序的方法
+  Future<void> saveSortOrder(SortOrder sortOrder) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(sortOrderKey, sortOrder.index);
+    _currentSortOrder = sortOrder;
+  }
+
   @override
   void initState() async {
     super.initState();
+    await initPreferences();
     bool useinnerthumb = await _settingsService.getUseInnerThumbnail();
     if (useinnerthumb) {
       // path join
@@ -1059,6 +1092,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         setState(() {
           _currentSortType = type;
           _currentSortOrder = order;
+          saveSortOrder(_currentSortOrder);
+          saveSortType(_currentSortType);
           _sortItems();
         });
       },
