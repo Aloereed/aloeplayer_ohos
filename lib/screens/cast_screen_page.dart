@@ -35,6 +35,7 @@ class _CastScreenPageState extends State<CastScreenPage> {
   bool _isScanning = false;
   CastDevice? _selectedDevice;
   CastExample? _castExample;
+  String? _serverAddress;
 
   @override
   void initState() async {
@@ -43,10 +44,9 @@ class _CastScreenPageState extends State<CastScreenPage> {
         VideoPlayerController.network('');
     await videoPlayerController.closeLatestAVSession();
     videoPlayerController.dispose();
+    _serverAddress = await _castService.startLocalServer(widget.mediaPath);
     _castExample = CastExample(
-        initUri: pathToUri(widget.mediaPath) +
-            '|||' +
-            (await _castService.startLocalServer(widget.mediaPath)),
+        initUri: pathToUri(widget.mediaPath) + '|||' + _serverAddress!,
         toggleFullScreen: () {});
     setState(() {});
     // Navigator.push(
@@ -320,6 +320,14 @@ class _CastScreenPageState extends State<CastScreenPage> {
                               ],
                             ),
                           ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '本页面前台时局域网设备可以使用 ${_serverAddress} 下载此媒体',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 14,
                         ),
                       ),
 

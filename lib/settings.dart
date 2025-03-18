@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-17 22:45:19
+ * @LastEditTime: 2025-03-18 15:28:02
  * @Description: file content
  */
 import 'dart:convert';
@@ -1399,7 +1399,7 @@ class _SettingsTabState extends State<SettingsTab> {
 
           SizedBox(height: 16),
 
-          // 关于此应用程序部分
+          // 关于此应用程序部分（简化版）
           Card(
             elevation: 2,
             child: Padding(
@@ -1407,121 +1407,45 @@ class _SettingsTabState extends State<SettingsTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('关于此应用程序',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('关于此应用程序',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: Icon(Icons.info_outline,
+                            color: Colors.lightBlue),
+                        onPressed: () => _showAboutDialog(context),
+                      ),
+                    ],
+                  ),
                   SizedBox(height: 8),
                   Text('AloePlayer', style: TextStyle(fontSize: 16)),
                   SizedBox(height: 4),
                   Text('版本号: ${SettingsService._versionName}',
                       style: TextStyle(fontSize: 14, color: Colors.grey)),
-                  SizedBox(height: 4),
-                  Text('尽享视听盛宴',
-                      style: TextStyle(fontSize: 14, color: Colors.grey)),
                   SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () async {
-                      await launchUrl(
-                        Uri.parse('https://ohos.aloereed.com'),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    },
-                    child: Text(
-                      '官网鸿蒙站',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        decoration: TextDecoration.underline,
+                  Wrap(
+                    spacing: 12,
+                    children: [
+                      _buildLinkButton(
+                          context, '官网', 'https://ohos.aloereed.com'),
+                      _buildLinkButton(context, '更新日志',
+                          'https://ohos.aloereed.com/index.php/2025/01/08/aloeplayer/'),
+                      _buildLinkButton(context, '隐私政策',
+                          'https://aloereed.com/aloeplayer/privacy-statement.html'),
+                      _buildLinkButton(context, '沪ICP备2025110508号-2A',
+                          'https://beian.miit.gov.cn'),
+                      _buildLinkButton(
+                        context,
+                        '支持作者',
+                        'https://afdian.com/a/aloereed', // 替换为您的爱发电链接
+                        icon: Icons.favorite,
+                        color: Colors.redAccent,
                       ),
-                    ),
+                    ],
                   ),
-                  SizedBox(height: 4),
-                  GestureDetector(
-                    onTap: () async {
-                      await launchUrl(
-                        Uri.parse(
-                            'https://ohos.aloereed.com/index.php/2025/01/08/aloeplayer/'),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    },
-                    child: Text(
-                      '更新日志',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  GestureDetector(
-                    onTap: () async {
-                      await launchUrl(
-                        Uri.parse(
-                            'https://aloereed.com/aloeplayer/privacy-statement.html'),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    },
-                    child: Text(
-                      '隐私政策',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  GestureDetector(
-                    onTap: () async {
-                      await launchUrl(
-                        Uri.parse('https://beian.miit.gov.cn'),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    },
-                    child: Text(
-                      '沪ICP备2025110508号-2A',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  GestureDetector(
-                    onTap: () {
-                      showLicensePage(
-                        context: context,
-                        applicationName: 'AloePlayer',
-                        applicationVersion: SettingsService._versionName,
-                        applicationLegalese: '© 2025 Aloereed',
-                      );
-                    },
-                    child: Text(
-                      '开源项目和许可',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Text('手势说明和提示:',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Text('1. 长按: 三倍速播放。'),
-                  SizedBox(height: 4),
-                  Text('2. 双击播放界面左侧、右侧、中间: 快退、快进10秒、切换播放暂停。'),
-                  SizedBox(height: 4),
-                  Text('3. 上下滑动: 靠左侧增减亮度，靠右侧增减音量。'),
-                  SizedBox(height: 4),
-                  Text('4. 添加媒体进入音频库或视频库需要时间。'),
-                  SizedBox(height: 4),
-                  Text('5. 点击媒体控制的音量按钮可以切换静音。'),
-                  SizedBox(height: 4),
-                  Text('6. 添加字幕文件后，请在右上角打开“CC”。'),
-                  SizedBox(height: 4),
-                  Text('7. 新版本库文件默认位于“下载”文件夹下。'),
-                  SizedBox(height: 4),
-                  Text('8. 播放列表：播放器最右侧往左滑动唤出。'),
                 ],
               ),
             ),
@@ -1530,4 +1454,224 @@ class _SettingsTabState extends State<SettingsTab> {
       ),
     );
   }
+}
+
+// 构建链接按钮
+Widget _buildLinkButton(BuildContext context, String label, String url,
+    {IconData icon = Icons.link, Color? color}) {
+  return InkWell(
+    onTap: () async {
+      await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+    },
+    borderRadius: BorderRadius.circular(20),
+    child: Padding(
+      padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color ?? Colors.lightBlue),
+          SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color ?? Colors.lightBlue,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// 显示详细信息的高斯模糊对话框
+void _showAboutDialog(BuildContext context) {
+  final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Dialog(
+          backgroundColor: isDarkMode
+              ? Colors.black.withOpacity(0.7)
+              : Colors.white.withOpacity(0.8),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 0,
+          child: SingleChildScrollView(
+            physics: BouncingScrollPhysics(),
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(
+                    child: Container(
+                      height: 80,
+                      width: 80,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      // 使用应用Logo
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          'Assets/icon.png',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      'AloePlayer',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Text(
+                      '尽享视听盛宴',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: isDarkMode ? Colors.white70 : Colors.black54,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 24),
+                  _buildSectionTitle(context, '手势说明和提示', isDarkMode),
+                  SizedBox(height: 12),
+                  _buildTipItem(context, '1. 长按: 三倍速播放', isDarkMode),
+                  _buildTipItem(context, '2. 双击播放界面左侧、右侧、中间: 快退、快进10秒、切换播放暂停',
+                      isDarkMode),
+                  _buildTipItem(
+                      context, '3. 上下滑动: 靠左侧增减亮度，靠右侧增减音量', isDarkMode),
+                  _buildTipItem(context, '4. 添加媒体进入音频库或视频库需要时间', isDarkMode),
+                  _buildTipItem(context, '5. 点击媒体控制的音量按钮可以切换静音', isDarkMode),
+                  _buildTipItem(context, '6. 添加字幕文件后，请在右上角打开"CC"', isDarkMode),
+                  _buildTipItem(context, '7. 新版本库文件默认位于"下载"文件夹下', isDarkMode),
+                  _buildTipItem(context, '8. 播放列表：播放器最右侧往左滑动唤出', isDarkMode),
+                  SizedBox(height: 24),
+                  _buildSectionTitle(context, '备案和许可', isDarkMode),
+                  SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      await launchUrl(
+                        Uri.parse('https://beian.miit.gov.cn'),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    },
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        '沪ICP备2025110508号-2A',
+                        style: TextStyle(
+                          color: Colors.lightBlue,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(context);
+                      showLicensePage(
+                        context: context,
+                        applicationName: 'AloePlayer',
+                        applicationVersion: SettingsService._versionName,
+                        applicationLegalese: '© 2025 Aloereed',
+                      );
+                    },
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        '开源项目和许可',
+                        style: TextStyle(
+                          color: Colors.lightBlue,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 24),
+                  Center(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text('关闭'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.lightBlue,
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side:
+                              BorderSide(color: Colors.lightBlue),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+// 构建小节标题
+Widget _buildSectionTitle(BuildContext context, String title, bool isDarkMode) {
+  return Text(
+    title,
+    style: TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.bold,
+      color: isDarkMode ? Colors.white : Colors.black87,
+    ),
+  );
+}
+
+// 构建提示项
+Widget _buildTipItem(BuildContext context, String text, bool isDarkMode) {
+  return Padding(
+    padding: EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          Icons.arrow_right,
+          size: 20,
+          color: isDarkMode ? Colors.white70 : Colors.black54,
+        ),
+        SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 14,
+              color: isDarkMode ? Colors.white70 : Colors.black54,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }

@@ -4,6 +4,7 @@ import 'package:aloeplayer/chewie-1.8.5/lib/src/chewie_player.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/helpers/adaptive_controls.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/notifiers/index.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:video_player/video_player.dart';
@@ -28,14 +29,106 @@ class BrightnessSliderTimer {
   }
 }
 
+// 倍速选择器小部件
+class SpeedSelectorWidget extends StatelessWidget {
+  final List<double> speeds;
+  final double currentSpeed;
+
+  const SpeedSelectorWidget({
+    Key? key,
+    required this.speeds,
+    required this.currentSpeed,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 主倍速选择器
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.65),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: speeds.map((speed) {
+              bool isSelected = speed == currentSpeed;
+              return Container(
+                margin: EdgeInsets.symmetric(horizontal: 6),
+                padding: EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.white.withOpacity(0.25)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: isSelected
+                      ? Border.all(
+                          color: Colors.white.withOpacity(0.5), width: 0.5)
+                      : null,
+                ),
+                child: Text(
+                  '${speed}x',
+                  style: TextStyle(
+                    color: isSelected
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.8),
+                    fontSize: 12,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // 提示文字
+        SizedBox(height: 4),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            "长按时左右滑动更改倍速",
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.75),
+              fontSize: 10,
+              fontWeight: FontWeight.w300,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class PlayerWithControls extends StatefulWidget {
   @override
   _PlayerWithControlsState createState() => _PlayerWithControlsState();
 }
 
 class _PlayerWithControlsState extends State<PlayerWithControls> {
+  // 在你的类中添加这些变量
+  OverlayEntry? _speedSelectorOverlay;
+  double _currentSelectedSpeed = 3.0;
+  final List<double> _availableSpeeds = [1.5, 3.0];
   final Stream<double?> brightnessStream = _createBrightnessStream();
   bool showBrightnessSlider = false;
+  int lastSelectedIndex = 1;
+  // 累计滑动距离
+  double cumulativeDx = 0;
   static Stream<double?> _createBrightnessStream() async* {
     while (true) {
       yield await Screen.brightness;
@@ -83,6 +176,75 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
           : const SizedBox();
     }
 
+// 隐藏倍速选择器
+    void hideSpeedSelector() {
+      if (_speedSelectorOverlay != null) {
+        _speedSelectorOverlay!.remove();
+        _speedSelectorOverlay = null;
+      }
+    }
+
+// 显示倍速选择器
+    void showSpeedSelector(BuildContext context, double initialSpeed) {
+      _currentSelectedSpeed = initialSpeed;
+
+      // 如果已经有一个overlay，先移除它
+      hideSpeedSelector();
+
+      _speedSelectorOverlay = OverlayEntry(builder: (context) {
+        return Positioned(
+          top: MediaQuery.of(context).size.height * 0.05, // 位置在顶部15%处
+          width: MediaQuery.of(context).size.width,
+          child: Center(
+            child: SpeedSelectorWidget(
+              speeds: _availableSpeeds,
+              currentSpeed: _currentSelectedSpeed,
+            ),
+          ),
+        );
+      });
+
+      Overlay.of(context).insert(_speedSelectorOverlay!);
+    }
+
+// 处理长按拖动选择倍速
+    void handleSpeedSelectionDrag(LongPressMoveUpdateDetails details) {
+      if (_speedSelectorOverlay == null) return;
+
+      // 获取滑动距离
+      double dx = details.localOffsetFromOrigin.dx;
+
+      // 增加滑动阈值，使每次需要更大的滑动距离才能切换到下一个倍速
+      double threshold = 500.0; // 调整此值可改变灵敏度
+
+      // 累加滑动距离
+      cumulativeDx += dx;
+
+      // 计算应该移动的索引数
+      int steps = (cumulativeDx / threshold).floor(); // 根据累计距离计算步数
+
+      if (steps != 0) {
+        cumulativeDx = 0; // 重置累计距离
+
+        // 计算新的索引
+        int currentIndex = _availableSpeeds.indexOf(_currentSelectedSpeed);
+        int newIndex =
+            (currentIndex + steps).clamp(0, _availableSpeeds.length - 1);
+
+        // 如果索引发生变化
+        if (newIndex != currentIndex) {
+          _currentSelectedSpeed = _availableSpeeds[newIndex];
+          // 更新播放速度
+          chewieController.videoPlayerController
+              .setPlaybackSpeed(_currentSelectedSpeed);
+          // 添加触觉反馈
+          HapticFeedback.selectionClick();
+          // 更新UI
+          _speedSelectorOverlay!.markNeedsBuild();
+        }
+      }
+    }
+
     Widget buildPlayerWithControls(
       ChewieController chewieController,
       BuildContext context,
@@ -100,7 +262,8 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
               child: AspectRatio(
                 aspectRatio: chewieController.aspectRatio ??
                     chewieController.videoPlayerController.value.aspectRatio,
-                child: (chewieController.ffmpeg==0||chewieController.ffmpeg==3)
+                child: (chewieController.ffmpeg == 0 ||
+                        chewieController.ffmpeg == 3)
                     ? VideoPlayer(chewieController.videoPlayerController)
                     : Container(color: Colors.transparent),
               ),
@@ -152,32 +315,28 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                 onLongPress: () {
                   // 记录当前的播放速率
                   chewieController.previousPlaybackSpeed =
-                      chewieController.playbackSpeed; // 假设有一个方法可以获取当前的播放速率
-                  // 使用 fluttertoast 显示消息
-                  // 背景半透明
-                  Fluttertoast.showToast(
-                    msg: '⏩长按3倍速播放',
-                    toastLength: Toast.LENGTH_SHORT,
-                    gravity: ToastGravity.TOP, // 将Toast显示在顶部
-                    timeInSecForIosWeb: 1,
-                    backgroundColor: Colors.black.withOpacity(0.7), // 半透明黑色背景
-                    textColor: Colors.white,
-                    fontSize: 16.0,
-                  );
-
-                  chewieController.videoPlayerController
-                      .setPlaybackSpeed(3.0); // 长按三倍速播放
+                      chewieController.playbackSpeed;
+                  // 默认长按开始为3倍速
+                  chewieController.videoPlayerController.setPlaybackSpeed(3.0);
+                  // 显示倍速选择控件
+                  showSpeedSelector(context, 3.0);
                 },
                 onLongPressEnd: (_) {
-                  chewieController.videoPlayerController.setPlaybackSpeed(
-                      chewieController.previousPlaybackSpeed); // 松开恢复到长按之前的播放速率
+                  // 松开恢复到长按之前的播放速率
+                  chewieController.videoPlayerController
+                      .setPlaybackSpeed(chewieController.previousPlaybackSpeed);
+                  // 隐藏倍速选择控件
+                  hideSpeedSelector();
+                },
+                onLongPressMoveUpdate: (details) {
+                  // 处理长按时的左右滑动来选择倍速
+                  handleSpeedSelectionDrag(details);
                 },
                 onHorizontalDragUpdate: (details) {
                   // 获取屏幕宽度
                   final double screenWidth = MediaQuery.of(context).size.width;
                   // 计算右侧 20% 区域的起始位置
                   final double rightZoneStart = screenWidth * 0.8;
-
                   // 检测滑动是否从右侧 20% 区域开始
                   if (details.globalPosition.dx >= rightZoneStart) {
                     // 检测滑动方向是否是从右往左
@@ -188,7 +347,6 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                     } else {
                       // 计算滑动的距离
                       chewieController.swipeDistance += details.delta.dx;
-
                       // 根据滑动距离计算快进或快退的时间
                       final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
                       final Duration seekDuration = Duration(
@@ -196,7 +354,6 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                               (chewieController.swipeDistance / sensitivity)
                                       .round() *
                                   1000);
-
                       if (seekDuration.inMilliseconds != 0) {
                         chewieController.seekTo(chewieController
                                 .videoPlayerController.value.position +
@@ -207,7 +364,6 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                   } else {
                     // 计算滑动的距离
                     chewieController.swipeDistance += details.delta.dx;
-
                     // 根据滑动距离计算快进或快退的时间
                     final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
                     final Duration seekDuration = Duration(
@@ -215,7 +371,6 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                             (chewieController.swipeDistance / sensitivity)
                                     .round() *
                                 1000);
-
                     if (seekDuration.inMilliseconds != 0) {
                       chewieController.seekTo(chewieController
                               .videoPlayerController.value.position +
