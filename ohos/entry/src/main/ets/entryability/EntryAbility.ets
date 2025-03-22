@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-02-17 13:28:54
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-16 12:38:20
+ * @LastEditTime: 2025-03-22 11:07:08
  * @Description: file content
  */
 /*
@@ -30,6 +30,7 @@ import VolumePlugin from "./VolumePlugin"
 import FfmpegPlugin from "./FfmpegPlugin"
 import HdrPlugin from "./HdrPlugin"
 import CastPlugin from "./CastPlugin"
+import { window } from '@kit.ArkUI';
 let wantInfo: Want
 
 function createFile(openuri: string): void {
@@ -91,4 +92,11 @@ export default class EntryAbility extends FlutterAbility {
             this.myDownloadPlugin?.sendWant(uri)
         }
     }
+
+    onWindowStageCreate(windowStage: window.WindowStage) {
+        super.onWindowStageCreate(windowStage);
+      
+        // 给Index页面传递windowStage
+        AppStorage.setOrCreate('windowStage', windowStage);
+      }
 }

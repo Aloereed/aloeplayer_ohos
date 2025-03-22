@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-17 16:43:04
+ * @LastEditTime: 2025-03-22 17:15:01
  * @Description: file content
  */
 /*
@@ -75,7 +75,6 @@ void main() async {
     androidNotificationChannelName: 'Audio playback',
     androidNotificationOngoing: true,
   );
-  
 
   runApp(
     ChangeNotifierProvider(
@@ -1057,20 +1056,76 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  void startPlayerPage(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PlayerTab(
-          key: ValueKey(_openfile),
-          toggleFullScreen: _toggleFullScreen,
-          isFullScreen: _isFullScreen,
-          getopenfile: _getopenfile,
-          openfile: _openfile,
-          setHomeWH: setHomeWH,
+  Future<String> getPlaylist(String path) async {
+    List<String> results = [  ];
+    //提取文件夹路径
+    if (!await _settingsService.getUsePlaylist()) {
+      return '';
+    }
+    if (path.contains(':')) {
+      return '';
+    }
+    String folderPath = path.substring(0, path.lastIndexOf('/'));
+    List<String> excludeExts = ['ux_store', 'srt', 'ass', 'jpg','pdf','aac'];
+    // 如果文件夹位于 /storage/Users/currentUser/Download/com.aloereed.aloeplayer/下，打开该文件夹
+    if (folderPath.startsWith(
+        '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/')) {
+      final directory = Directory(folderPath);
+      // 提取文件夹下所有文件（不包括子文件夹）
+      List<FileSystemEntity> files = directory.listSync();
+      // 把<文件名, 文件路径>添加到_playlist中
+      for (FileSystemEntity file in files) {
+        if (file is File) {
+          if (excludeExts.contains(file.path.split('.').last)||file.path==path) {
+            continue;
+          }
+          results.add(pathToUri(file.path));
+        }
+      }
+      return results.join('[:newPlay:]');
+    } else {
+      return '';
+    }
+  }
+
+  void startPlayerPage(BuildContext context) async {
+    if (await _settingsService.getUseFfmpegForPlay() != 4) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PlayerTab(
+            key: ValueKey(_openfile),
+            toggleFullScreen: _toggleFullScreen,
+            isFullScreen: _isFullScreen,
+            getopenfile: _getopenfile,
+            openfile: _openfile,
+            setHomeWH: setHomeWH,
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      if(_openfile.contains('http')){
+        // 弹出通知，流心视频方式不支持播放网络视频
+        Fluttertoast.showToast(
+          msg: "流心视频方式不支持播放网络视频",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          timeInSecForIosWeb: 1,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+          fontSize: 16.0
+        );
+        return;
+      }
+      final _platform = const MethodChannel('samples.flutter.dev/hdrplugin');
+      String waitToStart = _openfile;
+      // 调用原生方法
+      if (_openfile.endsWith('.lnk')) {
+        waitToStart = File(_openfile).readAsStringSync();
+      }
+      _platform.invokeMethod<String>(
+          'createNewWindow', {'path': pathToUri(waitToStart),'uris':await getPlaylist(waitToStart)});
+    }
   }
 
   @override
@@ -1160,7 +1215,7 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                     // BottomNavigationBarItem(
                     //   icon: Icon(Icons.library_books),
-                    //   label: '网络媒体库' 
+                    //   label: '网络媒体库'
                     // ),
                     BottomNavigationBarItem(
                       icon: Icon(Icons.settings),

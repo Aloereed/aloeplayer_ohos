@@ -143,9 +143,10 @@ flutter:
   assets:
   - Assets/10s_silence.wav
   - Assets/icon.png
+  - Assets/sweet_video.png
   - Assets/privacy_policy.html
   - Assets/thanksfor.txt
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 2.0.3+26
+version: 2.0.4+27

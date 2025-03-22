@@ -2516,6 +2516,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
             onTap: () {
               widget.getopenfile(file.path);
               widget.startPlayerPage(context);
+              
             },
             onLongPress: () => _showVideoOptionsBottomSheet(file),
           ),

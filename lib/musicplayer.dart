@@ -344,7 +344,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
       return;
     }
     String folderPath = path.substring(0, path.lastIndexOf('/'));
-    List<String> excludeExts = ['lrc', 'srt', 'ux_store', 'jpg','pdf','png','bmp'];
+    List<String> excludeExts = [
+      'lrc',
+      'srt',
+      'ux_store',
+      'jpg',
+      'pdf',
+      'png',
+      'bmp'
+    ];
     List<String> includeExts = ['mp3', 'm4a', 'flac', 'ogg'];
     // 如果文件夹位于 /storage/Users/currentUser/Download/com.aloereed.aloeplayer/下，打开该文件夹
     if (folderPath.startsWith(
@@ -413,7 +421,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     if (_playlist.isEmpty || _playlist.length == 1) {
       return;
     }
-    if(_loopMode == LoopMode.random){
+    if (_loopMode == LoopMode.random) {
       // 随机播放
       Random random = Random();
       int randomIndex = random.nextInt(_playlist.length);
@@ -454,6 +462,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
   }
 
   Future<void> _initPlayer() async {
+    // 加载歌词
+    try {
+      await _loadLyrics();
+    } catch (e) {}
     // 初始化视频播放器
     isBgPlay = await _settingsService.getBackgroundPlay();
     try {
@@ -527,9 +539,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
       });
       _audioService.externalAddListener();
 
-      // 加载歌词
-      _loadLyrics();
-
       _play();
       _audioService.firstPlay = false;
       _audioService.updatePlayerState();
@@ -540,6 +549,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
   }
 
   Future<void> _loadLyrics() async {
+    _lrcContent = '';
     // 假设歌词文件和音频文件同名，只是扩展名不同
     final lrcPath = widget.filePath.replaceAll(RegExp(r'\.[^.]+$'), '.lrc');
     try {
@@ -1280,7 +1290,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
           // 歌词显示部分
           Expanded(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20,vertical: isPhone?0: 100),
+              padding: EdgeInsets.symmetric(
+                  horizontal: 20, vertical: isPhone ? 0 : 100),
               child: _buildLyricWidget(isPhone: isPhone),
             ),
           ),
@@ -1315,7 +1326,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
           position: _position.inMilliseconds,
           lyricUi: _lyricUI,
           playing: _isPlaying,
-          size: Size(double.infinity, isPhone ? MediaQuery.of(context).size.height / 2: MediaQuery.of(context).size.height/1.2),
+          size: Size(
+              double.infinity,
+              isPhone
+                  ? MediaQuery.of(context).size.height / 2
+                  : MediaQuery.of(context).size.height / 1.2),
           emptyBuilder: () => Center(
             child: Text(
               "暂无歌词",
@@ -1516,7 +1531,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
           _buildOptionButton(
             icon: _loopMode == LoopMode.one
                 ? Icons.repeat_one
-                : (_loopMode == LoopMode.all ? Icons.repeat : (_loopMode == LoopMode.random? Icons.shuffle : Icons.stop)),
+                : (_loopMode == LoopMode.all
+                    ? Icons.repeat
+                    : (_loopMode == LoopMode.random
+                        ? Icons.shuffle
+                        : Icons.stop)),
             color: _loopMode == LoopMode.off ? Colors.white : Colors.blue,
             onPressed: () {
               setState(() {
@@ -1658,7 +1677,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
                   onTap: () {
                     // share_plus
                     Share.shareFiles([widget.filePath]);
-                  }, 
+                  },
                 ),
 
                 const SizedBox(height: 24),

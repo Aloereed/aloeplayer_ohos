@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-18 15:28:02
+ * @LastEditTime: 2025-03-22 17:31:56
  * @Description: file content
  */
 import 'dart:convert';
@@ -73,8 +73,8 @@ class SettingsService {
   static const String _useInnerThumbnail = 'use_inner_thumbnail';
   static const String _disableThumbnail = 'disable_thumbnail';
   static const String _subtitleFont = 'subtitle_font';
-  static const String _versionName = '2.0.3';
-  static const int _versionNumber = 26;
+  static const String _versionName = '2.0.4';
+  static const int _versionNumber = 27;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -766,6 +766,20 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
+Widget buildIcon(dynamic icon) {
+  if (icon is String && icon.endsWith('.png')) {
+    // PNG图片处理
+    return Image.asset(
+      icon,
+      width: 24,  // 设置合适的宽度
+      height: 24, // 设置合适的高度
+    );
+  } else{
+    return Icon(icon, color: Colors.lightBlue);
+  }
+  return SizedBox(); // 默认返回空Widget
+}
+
 // 字体选择Tile
   ListTile buildFontSelectionTile() {
     return ListTile(
@@ -1062,6 +1076,11 @@ class _SettingsTabState extends State<SettingsTab> {
                                   'value': 3,
                                   'label': '系统播放(仅音频软解)',
                                   'icon': Icons.mic_external_on_sharp
+                                },
+                                {
+                                  'value': 4,
+                                  'label': '流心视频(HDR)',
+                                  'icon': Icons.extension_rounded
                                 }
                               ];
 
@@ -1082,13 +1101,9 @@ class _SettingsTabState extends State<SettingsTab> {
                                           16, 0, 16, 16),
                                       child: Row(
                                         children: [
-                                          Icon(
-                                            options.firstWhere((opt) =>
+                                          buildIcon(options.firstWhere((opt) =>
                                                     opt['value'] ==
-                                                    currentValue)['icon']
-                                                as IconData,
-                                            color: Colors.lightBlue,
-                                          ),
+                                                    currentValue)['icon']),
                                           const SizedBox(width: 8),
                                           Text(
                                             '当前选择: ${options.firstWhere((opt) => opt['value'] == currentValue)['label']}',

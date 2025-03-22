@@ -75,6 +75,7 @@ export class VideoPlayer {
     private fd: number | null = null
     private headers: Record<string, string> | null
     private mediaType: string = "video"
+    private lrc: string | undefined = undefined
 
     constructor(
         playerModel: PlayerModel,
@@ -89,7 +90,23 @@ export class VideoPlayer {
         this.textureEntry = textureEntry
         this.surfaceId = textureEntry.getSurfaceId().toString()
         this.rawFile = rawFile
+        // Log.i(TAG, "[video player] url : " + url)
+        // // 将url按[:lrc:]分割
+        // if (url?.includes("[:lrc:]")) {
+        //     let urlArr = url.split("[:lrc:]")
+        //     this.url = urlArr[0]
+        //     this.lrc = urlArr[1] 
+        // }
         this.url = url
+        // 如果url以“mp3”、“flac”、“wav”等结尾，设置媒体类型为“audio”
+        if (
+           url?.endsWith("mp3") ||
+           url?.endsWith("flac") ||
+           url?.endsWith("m4a") ||
+           url?.endsWith("wav") 
+        ){
+            this.mediaType = "audio"
+        }
         this.eventChannel = eventChannel
         this.headers = headers
         this.sessionName = this.createGuid()
@@ -308,6 +325,7 @@ export class VideoPlayer {
             mediaImage: this.pixelMap,
             artist: this.artist ?? "正在播放",
             duration: this.duration, // 资源的时长，以ms为单位
+            lyric:this.lrc,
         }
         this.session
             .setAVMetadata(metadata)

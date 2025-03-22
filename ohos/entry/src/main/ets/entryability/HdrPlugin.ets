@@ -30,6 +30,7 @@ import { MethodResult } from '@ohos/flutter_ohos/src/main/ets/plugin/common/Meth
 import { EventSink } from '@ohos/flutter_ohos/src/main/ets/plugin/common/EventChannel';
 import { picker } from '@kit.CoreFileKit';
 import { BusinessError, emitter } from '@kit.BasicServicesKit';
+import { window } from '@kit.ArkUI';
 import { taskpool } from '@kit.ArkTS';
 import { common, Want } from '@kit.AbilityKit';
 import { HdrFactory } from './HdrFactory';
@@ -57,6 +58,12 @@ export default class HdrPlugin implements FlutterPlugin {
     this.channel.setMethodCallHandler({
       onMethodCall(call: MethodCall, result: MethodResult) {
         switch (call.method) {
+          case "createSubWindow":
+            that.api.CreateSubWindow(result);
+            break;
+            case "createNewWindow":
+              that.api.CreateNewWindow(result,  call.argument("path") as string,  call.argument("uris") as string);
+              break;
           case "callEvent":
             that.eventSink?.success("Success at " + new Date());
             break;
@@ -110,6 +117,7 @@ export default class HdrPlugin implements FlutterPlugin {
   getUniqueClassName(): string {
     return "HdrPlugin";
   }
+  
 }
 function uriToPath(uri: string): string {
   if (!uri.startsWith('file://')) {
@@ -132,11 +140,81 @@ function uriToPath(uri: string): string {
 
   return path;
 }
-
+let windowStage_: window.WindowStage | undefined = undefined;
+let sub_windowClass: window.Window | undefined = undefined;
 class HdrApi {
   private task1: taskpool.Task | undefined;
   private taskAudio: taskpool.Task | undefined;
 
+  CreateSubWindow(result: MethodResult){
+    // 获取windowStage
+    windowStage_ = AppStorage.get('windowStage');
+    // 1.创建应用子窗口。
+    if (windowStage_ == null) {
+      console.error('Failed to create the subwindow. Cause: windowStage_ is null');
+    }
+    else {
+      windowStage_.createSubWindow("mySubWindow", (err: BusinessError, data) => {
+        let errCode: number = err.code;
+        if (errCode) {
+          console.error('Failed to create the subwindow. Cause: ' + JSON.stringify(err));
+          return;
+        }
+        sub_windowClass = data;
+        console.info('Succeeded in creating the subwindow. Data: ' + JSON.stringify(data));
+        // 2.子窗口创建成功后，设置子窗口的位置、大小及相关属性等。
+        sub_windowClass.moveWindowTo(0, 0, (err: BusinessError) => {
+          let errCode: number = err.code;
+          if (errCode) {
+            console.error('Failed to move the window. Cause:' + JSON.stringify(err));
+            return;
+          }
+          console.info('Succeeded in moving the window.');
+        });
+        sub_windowClass.resize(500, 500, (err: BusinessError) => {
+          let errCode: number = err.code;
+          if (errCode) {
+            console.error('Failed to change the window size. Cause:' + JSON.stringify(err));
+            return;
+          }
+          console.info('Succeeded in changing the window size.');
+        });
+        // 3.为子窗口加载对应的目标页面。
+        sub_windowClass.setUIContent("pages/Player", (err: BusinessError) => {
+          let errCode: number = err.code;
+          if (errCode) {
+            console.error('Failed to load the content. Cause:' + JSON.stringify(err));
+            return;
+          }
+          console.info('Succeeded in loading the content.');
+          // 3.显示子窗口。
+          (sub_windowClass as window.Window).showWindow((err: BusinessError) => {
+            let errCode: number = err.code;
+            if (errCode) {
+              console.error('Failed to show the window. Cause: ' + JSON.stringify(err));
+              return;
+            }
+            console.info('Succeeded in showing the window.');
+          });
+        });
+      })
+    }
+  }
+
+  CreateNewWindow(result: MethodResult, path: string,uris: string){
+    let context = getContext(this) as common.UIAbilityContext;
+    let want: Want
+    want = {
+      bundleName: 'com.aloereed.aloeplayer',
+      abilityName: 'HDRAbility',
+      parameters: {
+        'url': path,
+        'urls': uris
+      }
+    }
+    context.startAbility(want)
+    result.success(true);
+  }
   
 
 }

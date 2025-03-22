@@ -34,6 +34,7 @@ import { common , Want } from '@kit.AbilityKit';
 import { AVVolumePanel } from '@kit.AudioKit';
 import { VolumeFactory } from './VolumeFactory';
 import { audio } from '@kit.AudioKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 const TAG = "VolumePluginTag";
 
 export default class VolumePlugin implements FlutterPlugin {
@@ -56,6 +57,9 @@ export default class VolumePlugin implements FlutterPlugin {
             break;
           case "getMaxVolume":
             that.api.getMaxVolume(result);
+            break;
+          case "getCurrentVolume":
+            that.api.getCurrentVolume(result);
             break;
           case "openFileManager":
             that.api.openFileManager(result);
@@ -116,6 +120,8 @@ export default class VolumePlugin implements FlutterPlugin {
 }
 
 class VolumeApi {
+  max_volume: number = 15;
+  min_volume: number = 0;
   getVolumePermission(result: MethodResult) {
     // // 创建文件管理器选项实例
     // const documentSaveOptions = new picker.DocumentSaveOptions();
@@ -198,6 +204,65 @@ class VolumeApi {
     });
     
     Log.i(TAG, "getVolumePermission finish");
+  }
+  async getVolume(audioVolumeManager: audio.AudioVolumeManager, groupId: number): Promise<Map<string, number>> {
+    let volume_list: Map<string, number> = new Map();
+    return new Promise((resolve, reject) => {
+      audioVolumeManager.getVolumeGroupManager(groupId,
+        (err: BusinessError, audioVolumeGroupManager: audio.AudioVolumeGroupManager) => {
+          if (err) {
+            hilog.error(0x0000, 'AVPlayer', `Failed to obtain the volume group info list. ${err}`);
+            return reject(err);
+          }
+          const volumePromises: Promise<void>[] = [];
+          volumePromises.push(new Promise((resolveVolume, rejectVolume) => {
+            audioVolumeGroupManager.getVolume(audio.AudioVolumeType.MEDIA, (err: BusinessError, volume: number) => {
+              if (err) {
+                hilog.error(0x0000, 'AVPlayer', `Failed to obtain the volume. ${err}`);
+                return rejectVolume(err);
+              }
+              volume_list.set('volume', volume);
+              resolveVolume();
+            });
+          }));
+          volumePromises.push(new Promise((resolveMax, rejectMax) => {
+            audioVolumeGroupManager.getMaxVolume(audio.AudioVolumeType.MEDIA,
+              (err: BusinessError, maxVolume: number) => {
+                if (err) {
+                  hilog.error(0x0000, 'AVPlayer', `Failed to obtain the maximum volume. ${err}`);
+                  return rejectMax(err);
+                }
+                volume_list.set('max_volume', maxVolume);
+                this.max_volume = maxVolume
+                resolveMax();
+              });
+          }));
+          volumePromises.push(new Promise((resolveMin, rejectMin) => {
+            audioVolumeGroupManager.getMinVolume(audio.AudioVolumeType.MEDIA,
+              (err: BusinessError, minVolume: number) => {
+                if (err) {
+                  hilog.error(0x0000, 'AVPlayer', `Failed to obtain the minimum volume. ${err}`);
+                  return rejectMin(err);
+                }
+                volume_list.set('min_volume', minVolume);
+                this.min_volume = minVolume
+                resolveMin();
+              });
+          }));
+          Promise.all(volumePromises)
+            .then(() => resolve(volume_list))// 所有音量均成功获取，返回 volume_list
+            .catch(reject); // 如果有任何一个 Promise 失败，拒绝整个 Promise
+        });
+    });
+  }
+  async getCurrentVolume(result: MethodResult){
+    let groupId: number = audio.DEFAULT_VOLUME_GROUP_ID;
+    let audioManager = audio.getAudioManager();
+    let audioVolumeManger: audio.AudioVolumeManager = audioManager.getVolumeManager();
+    let volume_list = await this.getVolume(audioVolumeManger, groupId)
+    let volume = volume_list.get('volume')!;
+    Log.i(TAG, "level=" + volume);
+    result.success(volume);
   }
   openFileManager(result: MethodResult) {
     let context = getContext(this) as common.UIAbilityContext;
