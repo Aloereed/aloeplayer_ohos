@@ -28,6 +28,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // 常量键值
 const String sortTypeKey = 'sort_type';
 const String sortOrderKey = 'sort_order';
+
 // import 'mpvplayer.dart';
 // import 'package:path/path.dart';
 class VideoLibraryTab extends StatefulWidget {
@@ -80,23 +81,24 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   // 初始化方法，在类初始化时调用
   Future<void> initPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // 获取保存的排序类型，如果不存在则使用默认值 SortType.none
     final sortTypeIndex = prefs.getInt(sortTypeKey) ?? SortType.none.index;
     _currentSortType = SortType.values[sortTypeIndex];
-    
+
     // 获取保存的排序顺序，如果不存在则使用默认值 SortOrder.ascending
-    final sortOrderIndex = prefs.getInt(sortOrderKey) ?? SortOrder.ascending.index;
+    final sortOrderIndex =
+        prefs.getInt(sortOrderKey) ?? SortOrder.ascending.index;
     _currentSortOrder = SortOrder.values[sortOrderIndex];
   }
-  
+
   // 保存排序类型的方法
   Future<void> saveSortType(SortType sortType) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(sortTypeKey, sortType.index);
     _currentSortType = sortType;
   }
-  
+
   // 保存排序顺序的方法
   Future<void> saveSortOrder(SortOrder sortOrder) async {
     final prefs = await SharedPreferences.getInstance();
@@ -876,7 +878,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 获取视频缩略图
   Future<Uint8List?> _getVideoThumbnail(File file) async {
-    if(disableThumbnail){
+    if (disableThumbnail) {
       return null;
     }
     // 从file.path提取文件名
@@ -936,7 +938,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 获取视频时长
   Future<Duration> _getVideoDuration(File file) async {
-    if(disableThumbnail){
+    if (disableThumbnail) {
       return Duration.zero;
     }
     // // 创建 MediaInfo 实例
@@ -2516,7 +2518,6 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
             onTap: () {
               widget.getopenfile(file.path);
               widget.startPlayerPage(context);
-              
             },
             onLongPress: () => _showVideoOptionsBottomSheet(file),
           ),
@@ -2753,90 +2754,96 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      isScrollControlled: true, // 允许弹出sheet占据更多空间
-      backgroundColor: Colors.transparent, // 使用透明背景以应用模糊效果
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent, // Keep this transparent
       builder: (BuildContext context) {
         final fileName = path.basename(file.path);
         final orientation = MediaQuery.of(context).orientation;
         final isLandscape = orientation == Orientation.landscape;
         final screenWidth = MediaQuery.of(context).size.width;
-        final isLargeScreen = screenWidth > 600; // 判断是否为平板或大屏设备
+        final isLargeScreen = screenWidth > 600;
 
-        // 动态计算网格列数
         final gridColumns = isLandscape ? 6 : (isLargeScreen ? 4 : 3);
-        // 动态计算按钮宽高比
         final aspectRatio = isLandscape ? 1.1 : (isLargeScreen ? 1.5 : 1.0);
 
         return SafeArea(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Padding(
-              padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).viewInsets.bottom),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.black.withOpacity(0.85)
-                      : Colors.white.withOpacity(0.85),
+          child: Padding(
+            padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                // Apply blur directly to the container with frosted glass effect
+                color: Colors.transparent,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    // Add the colored container inside the backdropFilter
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.black.withOpacity(0.85)
+                          : Colors.white.withOpacity(0.85),
+                    ),
+                    child: isLandscape
+                        // Landscape layout
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildDragHandle(),
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 1,
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          _buildThumbnail(file),
+                                          SizedBox(width: 16),
+                                          Expanded(
+                                              child: _buildFileInfo(
+                                                  fileName, file)),
+                                        ],
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: _buildOptionsGrid(
+                                          file, gridColumns, aspectRatio),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        // Portrait layout
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildDragHandle(),
+                              Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    _buildThumbnail(file),
+                                    SizedBox(width: 16),
+                                    Expanded(
+                                        child: _buildFileInfo(fileName, file)),
+                                  ],
+                                ),
+                              ),
+                              Divider(height: 1, thickness: 0.5),
+                              _buildOptionsGrid(file, gridColumns, aspectRatio),
+                            ],
+                          ),
+                  ),
                 ),
-                child: isLandscape
-                    // 横屏布局
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildDragHandle(),
-                          // 横屏模式下将信息和操作并排放置
-                          Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // 左侧：文件信息
-                                Expanded(
-                                  flex: 1,
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      _buildThumbnail(file),
-                                      SizedBox(width: 16),
-                                      Expanded(
-                                          child:
-                                              _buildFileInfo(fileName, file)),
-                                    ],
-                                  ),
-                                ),
-                                // 右侧：操作按钮
-                                Expanded(
-                                  flex: 2,
-                                  child: _buildOptionsGrid(
-                                      file, gridColumns, aspectRatio),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    // 竖屏布局优化
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildDragHandle(),
-                          Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                _buildThumbnail(file),
-                                SizedBox(width: 16),
-                                Expanded(child: _buildFileInfo(fileName, file)),
-                              ],
-                            ),
-                          ),
-                          Divider(height: 1, thickness: 0.5),
-                          _buildOptionsGrid(file, gridColumns, aspectRatio),
-                        ],
-                      ),
               ),
             ),
           ),
@@ -2955,21 +2962,6 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
             widget.startPlayerPage(context);
           },
         ),
-        // _buildOptionTile(
-        //   icon: Icons.play_arrow,
-        //   color: Colors.green,
-        //   title: '使用MPV播放',
-        //   onTap: () {
-        //     Navigator.pop(context);
-        //     Navigator.push(
-        //       context,
-        //       MaterialPageRoute(
-        //         builder: (context) =>
-        //             MPVPlayer(filePath: file.path),
-        //       ),
-        //     );
-        //   },
-        // ),
         _buildOptionTile(
           icon: Icons.file_download,
           color: Colors.blue,
@@ -3006,7 +2998,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
             Navigator.pop(context);
             // 如果file.path是lnk文件，按String读取成为新的path
             String filePath = file.path;
-            if(file.path.endsWith('.lnk')){
+            if (file.path.endsWith('.lnk')) {
               filePath = file.readAsStringSync();
             }
             Navigator.push(

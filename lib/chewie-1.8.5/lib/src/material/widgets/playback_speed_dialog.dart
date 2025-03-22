@@ -17,7 +17,7 @@ class PlaybackSpeedDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final Color selectedColor = Theme.of(context).primaryColor;
+    final Color selectedColor = Colors.lightBlue;
     
     return SafeArea(
       child: Padding(

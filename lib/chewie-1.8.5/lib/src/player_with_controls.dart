@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:aloeplayer/chewie-1.8.5/lib/src/chewie_player.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/helpers/adaptive_controls.dart';
@@ -11,21 +12,102 @@ import 'package:video_player/video_player.dart';
 import 'package:screen/screen.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 
+// Custom class for the brightness slider timer
 class BrightnessSliderTimer {
   Timer? _timer;
-  final VoidCallback onTimerEnd;
+  final VoidCallback onTimeout;
 
-  BrightnessSliderTimer({required this.onTimerEnd});
+  BrightnessSliderTimer({required this.onTimeout});
 
-  void startTimer() {
-    _timer?.cancel(); // 取消之前的 Timer
-    _timer = Timer(Duration(seconds: 5), () {
-      onTimerEnd(); // 5 秒后执行回调
+  void start() {
+    cancel();
+    _timer = Timer(Duration(seconds: 3), onTimeout);
+  }
+
+  void cancel() {
+    _timer?.cancel();
+    _timer = null;
+  }
+}
+
+class BrightnessSlider extends StatefulWidget {
+  final ValueChanged<double>? onBrightnessChanged;
+  
+  const BrightnessSlider({Key? key, this.onBrightnessChanged}) : super(key: key);
+
+  @override
+  _BrightnessSliderState createState() => _BrightnessSliderState();
+}
+
+class _BrightnessSliderState extends State<BrightnessSlider> {
+  double _brightness = 0.5;
+  Timer? _pollingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _initBrightness();
+    // 创建定时器来定期检查亮度变化
+    _pollingTimer = Timer.periodic(Duration(milliseconds: 50), (_) {
+      _updateBrightness();
     });
   }
 
-  void cancelTimer() {
-    _timer?.cancel();
+  void _initBrightness() async {
+    try {
+      final brightness = await Screen.brightness??0.5;
+      if (mounted) {
+        setState(() {
+          _brightness = brightness.clamp(0.0, 0.99);
+        });
+      }
+    } catch (e) {
+      print('初始化亮度时发生错误: $e');
+    }
+  }
+
+  void _updateBrightness() async {
+    try {
+      final brightness = await Screen.brightness??0.5;
+      if (mounted && (brightness != _brightness)) {
+        setState(() {
+          _brightness = brightness.clamp(0.0, 0.99);
+        });
+      }
+    } catch (e) {
+      print('更新亮度时发生错误: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Slider(
+      value: _brightness,
+      min: 0.0,
+      max: 0.99, // 设为0.99以避免潜在的边界问题
+      onChanged: (value) async {
+        if (value != _brightness) {
+          setState(() {
+            _brightness = value;
+          });
+          
+          try {
+            await Screen.setBrightness(value);
+            if (widget.onBrightnessChanged != null) {
+              widget.onBrightnessChanged!(value);
+            }
+          } catch (e) {
+            print('设置亮度时发生错误: $e');
+          }
+        }
+      },
+    );
   }
 }
 
@@ -141,7 +223,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
   void initState() {
     super.initState();
     _brightnessSliderTimer = BrightnessSliderTimer(
-      onTimerEnd: () {
+      onTimeout: () {
         setState(() {
           showBrightnessSlider = false;
         });
@@ -151,8 +233,15 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
 
   @override
   void dispose() {
-    _brightnessSliderTimer?.cancelTimer();
+    _brightnessSliderTimer?.cancel();
     super.dispose();
+  }
+
+  void _showBrightnessSlider() {
+    setState(() {
+      showBrightnessSlider = true;
+    });
+    _brightnessSliderTimer?.start();
   }
 
   @override
@@ -388,8 +477,8 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                   final double screenWidth = MediaQuery.of(context).size.width;
 
                   // Define a range for the middle part of the screen
-                  final double middleRangeStart = screenWidth * 0.4;
-                  final double middleRangeEnd = screenWidth * 0.6;
+                  final double middleRangeStart = screenWidth * 0.2;
+                  final double middleRangeEnd = screenWidth * 0.8;
 
                   // Determine the position of the double tap
                   if (details.globalPosition.dx < middleRangeStart) {
@@ -448,25 +537,25 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
 
                     if (delta < 0) {
                       // 上滑增加亮度
-                      _brightness = (_brightness + 0.005).clamp(0.0, 1.0);
+                      _brightness = (_brightness + 0.005).clamp(0.0, 0.99);
                     } else if (delta > 0) {
                       // 下滑减少亮度
-                      _brightness = (_brightness - 0.005).clamp(0.0, 1.0);
+                      _brightness = (_brightness - 0.005).clamp(0.0, 0.99);
                     }
 
                     // 设置亮度
                     Screen.setBrightness(_brightness);
 
                     // 显示亮度变化提示
-                    Fluttertoast.showToast(
-                      msg: '亮度: ${(_brightness * 100).toStringAsFixed(0)}%',
-                      toastLength: Toast.LENGTH_SHORT,
-                      gravity: ToastGravity.CENTER,
-                      timeInSecForIosWeb: 1,
-                      backgroundColor: Colors.black.withOpacity(0.7),
-                      textColor: Colors.white,
-                      fontSize: 16.0,
-                    );
+                    // Fluttertoast.showToast(
+                    //   msg: '亮度: ${(_brightness * 100).toStringAsFixed(0)}%',
+                    //   toastLength: Toast.LENGTH_SHORT,
+                    //   gravity: ToastGravity.CENTER,
+                    //   timeInSecForIosWeb: 1,
+                    //   backgroundColor: Colors.black.withOpacity(0.7),
+                    //   textColor: Colors.white,
+                    //   fontSize: 16.0,
+                    // );
                     // 显示音量滑块
                     // setState(() {
                     //   chewieController.showBrightnessSlider = true;
@@ -478,7 +567,7 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                     });
 
                     // 启动计时器
-                    _brightnessSliderTimer?.startTimer();
+                    _brightnessSliderTimer?.start();
                   } else if (touchX > (2 * screenWidth / 3)) {
                     // 右侧 1/3 区域：调整音量
                     double delta = details.primaryDelta ?? 0;
@@ -499,15 +588,15 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                     // VolumeViewController volumeViewController = VolumeViewController();
                     // volumeExample.getController()?.sendMessageToOhosView('0.0');
                     // 显示音量变化提示
-                    Fluttertoast.showToast(
-                      msg: '音量: ${(nextVolume / 15 * 100).toStringAsFixed(0)}%',
-                      toastLength: Toast.LENGTH_SHORT,
-                      gravity: ToastGravity.CENTER,
-                      timeInSecForIosWeb: 1,
-                      backgroundColor: Colors.black.withOpacity(0.7),
-                      textColor: Colors.white,
-                      fontSize: 16.0,
-                    );
+                    // Fluttertoast.showToast(
+                    //   msg: '音量: ${(nextVolume / 15 * 100).toStringAsFixed(0)}%',
+                    //   toastLength: Toast.LENGTH_SHORT,
+                    //   gravity: ToastGravity.CENTER,
+                    //   timeInSecForIosWeb: 1,
+                    //   backgroundColor: Colors.black.withOpacity(0.7),
+                    //   textColor: Colors.white,
+                    //   fontSize: 16.0,
+                    // );
 
                     // 显示音量滑块
                     setState(() {
@@ -576,30 +665,68 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                   //     ),
                   //   ),
                   // ),
+                  // Then inside your build method:
                   if (showBrightnessSlider)
                     Positioned(
-                      bottom: 100, // 悬浮在按钮上方
-                      left: 20, // 靠近音量按钮
-                      child: Container(
-                        height: 200, // 增加高度
-                        width: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: RotatedBox(
-                          quarterTurns: 3, // 旋转270度，使Slider变为纵向
-                          child: SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 4, // 调整轨道高度
-                              thumbShape: RoundSliderThumbShape(
-                                  enabledThumbRadius: 8), // 调整滑块大小
-                              overlayShape: RoundSliderOverlayShape(
-                                  overlayRadius: 12), // 调整滑块点击区域大小
+                      bottom: 100,
+                      left: 20,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                          child: Container(
+                            height: 200,
+                            width: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.2),
+                                width: 0.5,
+                              ),
                             ),
-                            child: BrightnessSlider(
-                                brightnessStream: brightnessStream),
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.brightness_6,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                const SizedBox(height: 8),
+                                Expanded(
+                                  child: RotatedBox(
+                                    quarterTurns: 3,
+                                    child: SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        trackHeight: 4,
+                                        activeTrackColor: Colors.white,
+                                        inactiveTrackColor:
+                                            Colors.white.withOpacity(0.3),
+                                        thumbColor: Colors.white,
+                                        thumbShape: RoundSliderThumbShape(
+                                            enabledThumbRadius: 8),
+                                        overlayShape: RoundSliderOverlayShape(
+                                            overlayRadius: 12),
+                                      ),
+                                      child: BrightnessSlider(
+                                        onBrightnessChanged: (value) {
+                                          // Restart the timer when brightness changes
+                                          _brightnessSliderTimer?.start();
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Icon(
+                                  Icons.brightness_7,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -612,38 +739,3 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
   }
 }
 
-class BrightnessSlider extends StatelessWidget {
-  final Stream<double?> brightnessStream;
-
-  BrightnessSlider({required this.brightnessStream});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<double?>(
-      stream: brightnessStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return CircularProgressIndicator(); // 加载中显示进度条
-        } else if (snapshot.hasError) {
-          print('Error: ${snapshot.error}'); // 出错时打印错误信息
-          return _buildSlider(0.5); // 出错时使用默认值
-        } else {
-          // 数据加载完成后显示 Slider
-          double brightnessValue = (snapshot.data ?? 0.5).toDouble();
-          return _buildSlider(brightnessValue);
-        }
-      },
-    );
-  }
-
-  Widget _buildSlider(double brightnessValue) {
-    return Slider(
-      value: brightnessValue,
-      min: 0.0,
-      max: 1.0,
-      onChanged: (value) async {
-        await Screen.setBrightness(value); // 设置亮度值
-      },
-    );
-  }
-}

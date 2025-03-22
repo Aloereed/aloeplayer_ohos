@@ -97,6 +97,6 @@ export default class EntryAbility extends FlutterAbility {
         super.onWindowStageCreate(windowStage);
       
         // 给Index页面传递windowStage
-        AppStorage.setOrCreate('windowStage', windowStage);
+        AppStorage.setOrCreate('windowStage2', windowStage);
       }
 }

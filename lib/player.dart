@@ -41,8 +41,6 @@ import 'package:dart_libass/dart_libass.dart';
 import 'history_service.dart';
 import 'package:aloeplayer/ass.dart';
 
-
-
 int rgbToColor(int rgb) {
   // 将 RGB 值转换为 ARGB 值，透明度为 0xFF（完全不透明）
   return 0xFF000000 | rgb;
@@ -328,7 +326,11 @@ class _PlayerTabState extends State<PlayerTab>
 // 调用原生方法
     _systemMaxVolume =
         ((await _platform.invokeMethod<int>('getMaxVolume')) ?? 15).toDouble();
-    subtitleFontFamily =  await _settingsService.loadFontFromFile(await _settingsService.getSubtitleFont());
+    _systemVolume =
+        ((await _platform.invokeMethod<int>('getCurrentVolume')) ?? 7.5)
+            .toDouble();
+    subtitleFontFamily = await _settingsService
+        .loadFontFromFile(await _settingsService.getSubtitleFont());
     _openUri(widget.openfile);
     // _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
     // _ffmpegExample = FfmpegExample(initUri: '');
@@ -896,7 +898,10 @@ class _PlayerTabState extends State<PlayerTab>
         return nextVolume;
       },
       subtitleBuilder: (context, subtitle) {
-        return SubtitleBuilder(subtitle: subtitle, fontFamily: subtitleFontFamily,);
+        return SubtitleBuilder(
+          subtitle: subtitle,
+          fontFamily: subtitleFontFamily,
+        );
       },
       additionalOptions: (context) {
         return <OptionItem>[
@@ -1321,7 +1326,7 @@ class _PlayerTabState extends State<PlayerTab>
       return;
     }
     String folderPath = path.substring(0, path.lastIndexOf('/'));
-    List<String> excludeExts = ['ux_store', 'srt', 'ass', 'jpg','pdf','aac'];
+    List<String> excludeExts = ['ux_store', 'srt', 'ass', 'jpg', 'pdf', 'aac'];
     // 如果文件夹位于 /storage/Users/currentUser/Download/com.aloereed.aloeplayer/下，打开该文件夹
     if (folderPath.startsWith(
         '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/')) {
@@ -1473,8 +1478,10 @@ class _PlayerTabState extends State<PlayerTab>
       if (_useFfmpegForPlay == 3) {
         if (_ffmpegExample == null) {
           _ffmpegExample = FfmpegExample(
-              initUri: convertUriToPath(widget.openfile),
-              toggleFullScreen: this.toggleFullScreen,videoMode: false,);
+            initUri: convertUriToPath(widget.openfile),
+            toggleFullScreen: this.toggleFullScreen,
+            videoMode: false,
+          );
         }
         _ffmpegExample?.controller?.sendMessageToOhosView(
             "newPlay", convertUriToPath(widget.openfile));
@@ -1563,8 +1570,10 @@ class _PlayerTabState extends State<PlayerTab>
       if (_useFfmpegForPlay == 3) {
         if (_ffmpegExample == null) {
           _ffmpegExample = FfmpegExample(
-              initUri: convertUriToPath(widget.openfile),
-              toggleFullScreen: this.toggleFullScreen, videoMode: false,);
+            initUri: convertUriToPath(widget.openfile),
+            toggleFullScreen: this.toggleFullScreen,
+            videoMode: false,
+          );
         }
         _ffmpegExample?.controller?.sendMessageToOhosView(
             "newPlay", convertUriToPath(widget.openfile));
@@ -2436,125 +2445,7 @@ class _PlayerTabState extends State<PlayerTab>
     return WillPopScope(
         onWillPop: _onWillPop,
         child: Scaffold(
-            appBar: widget.isFullScreen
-                ? null
-                : AppBar(
-                    title: GestureDetector(
-                        onLongPress: () {
-                          setState(() {
-                            _showPlaylist = !_showPlaylist;
-                          });
-                        },
-                        child: widget.openfile == ''
-                            ? Text('AloePlayer播放器')
-                            : SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Text('当前文件：' + widget.openfile))),
-                    actions: [
-                      // IconButton(
-                      //   icon: Icon(Icons.open_in_browser),
-                      //   onPressed: _openFile,
-                      // ),
-                      // IconButton(
-                      //   icon: Icon(Icons.link),
-                      //   onPressed: () => _showUrlDialog(context),
-                      // ),
-                      IconButton(
-                          onPressed: () => _shareFileOrText(context),
-                          icon: Icon(Icons.share)),
-                      // 主题切换按钮
-                      PopupMenuButton<ThemeMode>(
-                        icon: Icon(Icons.brightness_medium),
-                        offset: Offset(0, 10), // 菜单偏移量，让菜单不会太贴近图标
-                        elevation: 0, // 移除默认阴影
-                        color: Colors.transparent, // 透明背景色
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16), // 圆角边框
-                        ),
-                        onSelected: (ThemeMode mode) {
-                          Provider.of<ThemeProvider>(context, listen: false)
-                              .setThemeMode(mode);
-                        },
-                        itemBuilder: (BuildContext context) {
-                          // 获取当前亮暗主题
-                          bool isDarkMode =
-                              Theme.of(context).brightness == Brightness.dark;
-
-                          // 返回包含BackdropFilter的项目列表
-                          return [
-                            // 使用一个自定义PopupMenuItem包装真正的选项
-                            PopupMenuItem<ThemeMode>(
-                              enabled: false, // 禁用此项，因为它只是容器
-                              height: 0, // 设为0使其不占用额外空间
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(
-                                      sigmaX: 10, sigmaY: 10), // 高斯模糊效果
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: isDarkMode
-                                          ? Colors.grey[900]!.withOpacity(0.7)
-                                          : Colors.white.withOpacity(0.7),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: isDarkMode
-                                            ? Colors.white.withOpacity(0.1)
-                                            : Colors.black.withOpacity(0.1),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        // 亮色主题选项
-                                        _buildThemeMenuItem(
-                                            context,
-                                            ThemeMode.light,
-                                            Icon(Icons.brightness_high,
-                                                color: Colors.orange),
-                                            '亮色主题'),
-
-                                        Divider(
-                                            height: 1,
-                                            color:
-                                                Colors.grey.withOpacity(0.3)),
-
-                                        // 暗色主题选项
-                                        _buildThemeMenuItem(
-                                            context,
-                                            ThemeMode.dark,
-                                            Icon(Icons.brightness_2,
-                                                color: Colors.blue),
-                                            '暗色主题'),
-
-                                        Divider(
-                                            height: 1,
-                                            color:
-                                                Colors.grey.withOpacity(0.3)),
-
-                                        // 跟随系统选项
-                                        _buildThemeMenuItem(
-                                            context,
-                                            ThemeMode.system,
-                                            Icon(Icons.settings_suggest,
-                                                color: Colors.grey),
-                                            '跟随系统'),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ];
-                        },
-                      ),
-
-// 不要忘记导入
-// import 'dart:ui'; // 为 ImageFilter.blur 导入
-                    ],
-                  ),
+            appBar: null,
             body: GestureDetector(
               child: Stack(
                 children: [
@@ -2648,6 +2539,10 @@ class _PlayerTabState extends State<PlayerTab>
                       Expanded(
                         child: Stack(
                           children: [
+                            // 黑色背景
+                            Container(
+                              color: Colors.black,
+                            ),
                             // HDR 播放器
                             if (_useFfmpegForPlay == 2 && (_hdrExample != null))
                               Transform(
@@ -2658,7 +2553,8 @@ class _PlayerTabState extends State<PlayerTab>
                                 child: this._hdrExample!,
                               ),
                             // FFMPEG 播放器
-                            if ((_useFfmpegForPlay == 1 || _useFfmpegForPlay == 3)  &&
+                            if ((_useFfmpegForPlay == 1 ||
+                                    _useFfmpegForPlay == 3) &&
                                 (_ffmpegExample != null))
                               Transform(
                                 alignment: Alignment.center,
@@ -3192,7 +3088,7 @@ class SubtitleBuilder extends StatefulWidget {
   final String subtitle;
   final String? fontFamily;
 
-  SubtitleBuilder({required this.subtitle,this.fontFamily});
+  SubtitleBuilder({required this.subtitle, this.fontFamily});
 
   @override
   _SubtitleBuilderState createState() => _SubtitleBuilderState();
@@ -3214,12 +3110,12 @@ class _SubtitleBuilderState extends State<SubtitleBuilder> {
       future: _fontSizeFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildSubtitle(18.0,widget.fontFamily); // 默认字体大小
+          return _buildSubtitle(18.0, widget.fontFamily); // 默认字体大小
         } else if (snapshot.hasError) {
           return _buildErrorSubtitle();
         } else {
           final fontSize = snapshot.data ?? 18.0; // 如果获取失败，使用默认值
-          return _buildSubtitle(fontSize,widget.fontFamily);
+          return _buildSubtitle(fontSize, widget.fontFamily);
         }
       },
     );
@@ -3252,7 +3148,6 @@ class _SubtitleBuilderState extends State<SubtitleBuilder> {
               color: Colors.white,
               fontSize: fontSize,
               fontFamily: fontFamily,
-
             ),
           ),
         ],

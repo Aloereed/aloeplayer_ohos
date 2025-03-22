@@ -45,6 +45,8 @@ export default class HDRAbility extends UIAbility {
     //     });
     // })
     // 3.为沉浸式窗口加载对应的目标页面。
+    AppStorage.setOrCreate('windowStage', windowStage);
+
     windowStage.loadContent("pages/Player", (err: BusinessError) => {
       let errCode: number = err.code;
       if (errCode) {

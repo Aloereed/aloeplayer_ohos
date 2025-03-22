@@ -2943,137 +2943,141 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
         final theme = Theme.of(context);
         final isDarkMode = theme.brightness == Brightness.dark;
 
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-          child: Container(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            decoration: BoxDecoration(
-              color: isDarkMode
-                  ? theme.colorScheme.surface.withOpacity(0.9)
-                  : Colors.white.withOpacity(0.9),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  spreadRadius: 0,
-                )
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 顶部指示器
-                Container(
-                  margin: EdgeInsets.only(top: 12, bottom: 8),
-                  height: 4,
-                  width: 40,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurface.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                // 标题
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0, bottom: 16.0),
-                  child: Text(
-                    '音频选项',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
+        // 使用ClipRRect确保BackdropFilter只应用于圆角矩形内部
+        return ClipRRect(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+            // 使用Stack+Positioned来确保BackdropFilter作用范围仅限于Container显示区域
+            child: Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? theme.colorScheme.surface.withOpacity(0.8)
+                    : Colors.white.withOpacity(0.8),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    spreadRadius: 0,
+                  )
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 顶部指示器
+                  Container(
+                    margin: EdgeInsets.only(top: 12, bottom: 8),
+                    height: 4,
+                    width: 40,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurface.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                ),
-                // 选项列表
-                _buildOptionTile(
-                  icon: Icons.play_arrow,
-                  iconColor: Colors.green,
-                  title: '播放',
-                  theme: theme,
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            MusicPlayerPage(filePath: file.path),
+                  // 标题
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0, bottom: 16.0),
+                    child: Text(
+                      '音频选项',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
                       ),
-                    );
-                  },
-                ),
-                _buildDivider(theme),
-                _buildOptionTile(
-                  icon: Icons.play_circle_fill_sharp,
-                  iconColor: Colors.blue,
-                  title: '使用视频播放器播放',
-                  theme: theme,
-                  onTap: () {
-                    widget.getopenfile(file.path); // 更新_openfile状态
-                    widget.startPlayerPage(context);
-                  },
-                ),
-                _buildDivider(theme),
-                _buildOptionTile(
-                  icon: Icons.edit,
-                  iconColor: Colors.blue,
-                  title: '元信息修改',
-                  theme: theme,
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            AudioInfoEditor(filePath: file.path),
-                      ),
-                    ).then((_) => _loadItems());
-                  },
-                ),
-                _buildDivider(theme),
-                _buildOptionTile(
-                    icon: Icons.cast,
-                    iconColor: Colors.cyan,
-                    title: '投播(测试)',
+                    ),
+                  ),
+                  // 选项列表
+                  _buildOptionTile(
+                    icon: Icons.play_arrow,
+                    iconColor: Colors.green,
+                    title: '播放',
                     theme: theme,
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => CastScreenPage(
-                            mediaPath: file.path,
-                          ),
+                          builder: (context) =>
+                              MusicPlayerPage(filePath: file.path),
                         ),
                       );
-                    }),
-
-                _buildDivider(theme),
-                _buildOptionTile(
-                  icon: Icons.share,
-                  iconColor: Colors.purple,
-                  title: '分享',
-                  theme: theme,
-                  onTap: () {
-                    Navigator.pop(context);
-                    Share.shareXFiles([XFile(file.path)]);
-                  },
-                ),
-                _buildDivider(theme),
-                _buildOptionTile(
-                  icon: Icons.delete,
-                  iconColor: Colors.red,
-                  title: '删除',
-                  theme: theme,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _confirmDeleteDialog(file);
-                  },
-                ),
-                SizedBox(height: 16),
-              ],
+                    },
+                  ),
+                  _buildDivider(theme),
+                  _buildOptionTile(
+                    icon: Icons.play_circle_fill_sharp,
+                    iconColor: Colors.blue,
+                    title: '使用视频播放器播放',
+                    theme: theme,
+                    onTap: () {
+                      widget.getopenfile(file.path); // 更新_openfile状态
+                      widget.startPlayerPage(context);
+                    },
+                  ),
+                  _buildDivider(theme),
+                  _buildOptionTile(
+                    icon: Icons.edit,
+                    iconColor: Colors.blue,
+                    title: '元信息修改',
+                    theme: theme,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              AudioInfoEditor(filePath: file.path),
+                        ),
+                      ).then((_) => _loadItems());
+                    },
+                  ),
+                  _buildDivider(theme),
+                  _buildOptionTile(
+                      icon: Icons.cast,
+                      iconColor: Colors.cyan,
+                      title: '投播(测试)',
+                      theme: theme,
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CastScreenPage(
+                              mediaPath: file.path,
+                            ),
+                          ),
+                        );
+                      }),
+                  _buildDivider(theme),
+                  _buildOptionTile(
+                    icon: Icons.share,
+                    iconColor: Colors.purple,
+                    title: '分享',
+                    theme: theme,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Share.shareXFiles([XFile(file.path)]);
+                    },
+                  ),
+                  _buildDivider(theme),
+                  _buildOptionTile(
+                    icon: Icons.delete,
+                    iconColor: Colors.red,
+                    title: '删除',
+                    theme: theme,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _confirmDeleteDialog(file);
+                    },
+                  ),
+                  SizedBox(height: 16),
+                ],
+              ),
             ),
           ),
         );

@@ -16,7 +16,7 @@ class VideoOperateUtil {
     try {
       this.mainWin.setWindowBrightness(screenBrightness, (err) => {
         if (err) {
-          hilog.error(0x0000, 'AVPlayer', `Failed to set the brightness. Cause: ${JSON.stringify(err)}`);
+          hilog.error(0x0000, 'AVPlayer', `Failed to set the brightness ${screenBrightness}. Cause: ${JSON.stringify(err)}`);
           return;
         }
         hilog.info(0x0000, 'AVPlayer', `Succeeded in setting the brightness.`);

@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-22 17:31:56
+ * @LastEditTime: 2025-03-22 21:15:06
  * @Description: file content
  */
 import 'dart:convert';
@@ -415,7 +415,7 @@ class _SettingsTabState extends State<SettingsTab> {
 
   // 辅助方法: 构建单个选项行
   Widget _buildOptionTile(BuildContext context, int value, String label,
-      IconData icon, int groupValue, Function(int?) onChanged) {
+      dynamic icon, int groupValue, Function(int?) onChanged) {
     final isSelected = value == groupValue;
 
     return InkWell(
@@ -438,13 +438,15 @@ class _SettingsTabState extends State<SettingsTab> {
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              size: 22,
-              color: isSelected
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).iconTheme.color,
-            ),
+            icon is String
+                ? buildIcon(icon)
+                : Icon(
+                    icon,
+                    size: 22,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).iconTheme.color,
+                  ),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
@@ -606,158 +608,161 @@ class _SettingsTabState extends State<SettingsTab> {
   void _showFontSelectionDialog(BuildContext context) async {
     final currentFont = await _settingsService.getSubtitleFont();
     final customFonts = await _getCustomFonts();
-
     // 添加系统默认选项
     final allFonts = [''].followedBy(customFonts).toList();
-
     showDialog(
       context: context,
-      builder: (context) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Dialog(
-          backgroundColor: Theme.of(context).brightness == Brightness.dark
-              ? Colors.black.withOpacity(0.8)
-              : Colors.white.withOpacity(0.9),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: FractionallySizedBox(
-            widthFactor: 0.95,
-            child: Container(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '字幕字体管理',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent, // 使对话框背景透明
+        elevation: 0, // 移除阴影
+        insetPadding: EdgeInsets.zero, // 移除内边距
+        child: FractionallySizedBox(
+          widthFactor: 0.95,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.black.withOpacity(0.5)
+                      : Colors.white.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '字幕字体管理',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
+                        IconButton(
+                          icon: Icon(Icons.add_circle_outline),
+                          color: Colors.lightBlue,
+                          tooltip: '导入字体',
+                          onPressed: () async {
+                            final newFont = await _importFont();
+                            if (newFont != null) {
+                              Navigator.of(context).pop();
+                              _showFontSelectionDialog(context); // 刷新对话框
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 10),
+                    Divider(),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.5,
                       ),
-                      IconButton(
-                        icon: Icon(Icons.add_circle_outline),
-                        color: Colors.lightBlue,
-                        tooltip: '导入字体',
-                        onPressed: () async {
-                          final newFont = await _importFont();
-                          if (newFont != null) {
-                            Navigator.of(context).pop();
-                            _showFontSelectionDialog(context); // 刷新对话框
-                          }
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: allFonts.length,
+                        itemBuilder: (context, index) {
+                          final String fontPath = allFonts[index];
+                          final bool isSelected = fontPath == currentFont;
+                          final bool isDefault = fontPath.isEmpty;
+                          return FutureBuilder<String?>(
+                            // 对于非默认字体，确保字体已加载
+                            future: isDefault
+                                ? Future.value(null)
+                                : loadFontFromFile(fontPath),
+                            builder: (context, snapshot) {
+                              final String? fontFamily = snapshot.data;
+                              final bool fontLoaded =
+                                  fontFamily != null || isDefault;
+                              return ListTile(
+                                title: Text(
+                                  isDefault
+                                      ? '系统默认'
+                                      : getDisplayFontName(fontPath),
+                                  style: TextStyle(
+                                    fontFamily: isDefault ? null : fontFamily,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  isDefault ? '使用系统默认字体' : '示例文字：中文English123',
+                                  style: TextStyle(
+                                    fontFamily: isDefault ? null : fontFamily,
+                                  ),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (!fontLoaded)
+                                      SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2))
+                                    else if (isSelected)
+                                      Icon(Icons.check_circle,
+                                          color: Colors.lightBlue),
+                                    if (!isDefault)
+                                      IconButton(
+                                        icon: Icon(Icons.delete_outline,
+                                            color: Colors.redAccent),
+                                        onPressed: () async {
+                                          bool deleted =
+                                              await _deleteFont(fontPath);
+                                          if (deleted) {
+                                            if (fontPath == currentFont) {
+                                              await _settingsService
+                                                  .saveSubtitleFont('');
+                                            }
+                                            Navigator.of(context).pop();
+                                            _showFontSelectionDialog(
+                                                context); // 刷新对话框
+                                          }
+                                        },
+                                      ),
+                                  ],
+                                ),
+                                onTap: () async {
+                                  if (fontLoaded) {
+                                    await _settingsService
+                                        .saveSubtitleFont(fontPath);
+                                    setState(() {});
+                                    Navigator.of(context).pop();
+                                  }
+                                },
+                              );
+                            },
+                          );
                         },
                       ),
-                    ],
-                  ),
-                  SizedBox(height: 10),
-                  Divider(),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.5,
                     ),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: allFonts.length,
-                      itemBuilder: (context, index) {
-                        final String fontPath = allFonts[index];
-                        final bool isSelected = fontPath == currentFont;
-                        final bool isDefault = fontPath.isEmpty;
-
-                        return FutureBuilder<String?>(
-                          // 对于非默认字体，确保字体已加载
-                          future: isDefault
-                              ? Future.value(null)
-                              : loadFontFromFile(fontPath),
-                          builder: (context, snapshot) {
-                            final String? fontFamily = snapshot.data;
-                            final bool fontLoaded =
-                                fontFamily != null || isDefault;
-
-                            return ListTile(
-                              title: Text(
-                                isDefault
-                                    ? '系统默认'
-                                    : getDisplayFontName(fontPath),
-                                style: TextStyle(
-                                  fontFamily: isDefault ? null : fontFamily,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              subtitle: Text(
-                                isDefault ? '使用系统默认字体' : '示例文字：中文English123',
-                                style: TextStyle(
-                                  fontFamily: isDefault ? null : fontFamily,
-                                ),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (!fontLoaded)
-                                    SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2))
-                                  else if (isSelected)
-                                    Icon(Icons.check_circle,
-                                        color: Colors.lightBlue),
-                                  if (!isDefault)
-                                    IconButton(
-                                      icon: Icon(Icons.delete_outline,
-                                          color: Colors.redAccent),
-                                      onPressed: () async {
-                                        bool deleted =
-                                            await _deleteFont(fontPath);
-                                        if (deleted) {
-                                          if (fontPath == currentFont) {
-                                            await _settingsService
-                                                .saveSubtitleFont('');
-                                          }
-                                          Navigator.of(context).pop();
-                                          _showFontSelectionDialog(
-                                              context); // 刷新对话框
-                                        }
-                                      },
-                                    ),
-                                ],
-                              ),
-                              onTap: () async {
-                                if (fontLoaded) {
-                                  await _settingsService
-                                      .saveSubtitleFont(fontPath);
-                                  setState(() {});
-                                  Navigator.of(context).pop();
-                                }
-                              },
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                  Divider(),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(
-                      '提示: 点击字体选择，点击加号导入新字体',
-                      style: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        color: Colors.grey,
+                    Divider(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Text(
+                        '提示: 点击字体选择，点击加号导入新字体',
+                        style: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey,
+                        ),
                       ),
                     ),
-                  ),
-                  Center(
-                    child: TextButton(
-                      child: Text('关闭'),
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
+                    Center(
+                      child: TextButton(
+                        child: Text('关闭'),
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -766,19 +771,24 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-Widget buildIcon(dynamic icon) {
-  if (icon is String && icon.endsWith('.png')) {
-    // PNG图片处理
-    return Image.asset(
-      icon,
-      width: 24,  // 设置合适的宽度
-      height: 24, // 设置合适的高度
-    );
-  } else{
-    return Icon(icon, color: Colors.lightBlue);
+  Widget buildIcon(dynamic icon) {
+    try {
+      if (icon is String) {
+        print('加载PNG图片: ${icon}');
+        // PNG图片处理
+        return Image.asset(
+          icon,
+          width: 24, // 设置合适的宽度
+          height: 24, // 设置合适的高度
+        );
+      } else {
+        return Icon(icon as IconData, color: Colors.lightBlue);
+      }
+    } catch (e) {
+      print('加载图标出错: $e');
+      return SizedBox(); // 默认返回空Widget
+    }
   }
-  return SizedBox(); // 默认返回空Widget
-}
 
 // 字体选择Tile
   ListTile buildFontSelectionTile() {
@@ -1080,7 +1090,7 @@ Widget buildIcon(dynamic icon) {
                                 {
                                   'value': 4,
                                   'label': '流心视频(HDR)',
-                                  'icon': Icons.extension_rounded
+                                  'icon': 'Assets/sweet_video.png'
                                 }
                               ];
 
@@ -1101,9 +1111,18 @@ Widget buildIcon(dynamic icon) {
                                           16, 0, 16, 16),
                                       child: Row(
                                         children: [
-                                          buildIcon(options.firstWhere((opt) =>
-                                                    opt['value'] ==
-                                                    currentValue)['icon']),
+                                          currentValue == 4
+                                              ? buildIcon(options.firstWhere(
+                                                      (opt) =>
+                                                          opt['value'] ==
+                                                          currentValue)['icon']
+                                                  as String)
+                                              : Icon(
+                                                  options.firstWhere((opt) =>
+                                                          opt['value'] ==
+                                                          currentValue)['icon']
+                                                      as IconData,
+                                                  color: Colors.lightBlue),
                                           const SizedBox(width: 8),
                                           Text(
                                             '当前选择: ${options.firstWhere((opt) => opt['value'] == currentValue)['label']}',
@@ -1119,7 +1138,7 @@ Widget buildIcon(dynamic icon) {
                                               context,
                                               option['value'] as int,
                                               option['label'] as String,
-                                              option['icon'] as IconData,
+                                              option['icon'] as dynamic,
                                               currentValue,
                                               (value) {
                                                 if (value != null) {
@@ -1429,8 +1448,7 @@ Widget buildIcon(dynamic icon) {
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),
                       IconButton(
-                        icon: Icon(Icons.info_outline,
-                            color: Colors.lightBlue),
+                        icon: Icon(Icons.info_outline, color: Colors.lightBlue),
                         onPressed: () => _showAboutDialog(context),
                       ),
                     ],
@@ -1636,8 +1654,7 @@ void _showAboutDialog(BuildContext context) {
                             EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
-                          side:
-                              BorderSide(color: Colors.lightBlue),
+                          side: BorderSide(color: Colors.lightBlue),
                         ),
                       ),
                     ),

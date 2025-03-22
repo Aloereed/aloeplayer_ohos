@@ -69,7 +69,7 @@
         "description": "$string:HDRAbility_desc",
         "icon": "$media:icon",
         "label": "$string:HDRAbility_label",
-        "startWindowIcon": "$media:startIcon",
+        "startWindowIcon": "$media:icon",
         "startWindowBackground": "$color:start_window_background"
       }
     ],

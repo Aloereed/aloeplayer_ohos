@@ -228,6 +228,8 @@ struct Player {
   @State isHorizontalSwiping: boolean = false
   @State isVerticalSwiping: boolean = false
   @State isSliderPlayTimeChange: boolean = false
+  @State verticalSwipeStartY: number = 0
+  @State lastY: number = 0
   @State videoDataSource: IDataSource = new VideoDataSource([])
   @StorageLink('allowBackgroundPlay') allowBackgroundPlay: boolean = true
   @StorageLink('fastForwardSeconds') fastForwardSeconds: string = '15'
@@ -1005,8 +1007,8 @@ struct Player {
                   this.onSwiping = true
                 }
                 if (this.isVerticalSwiping) {
-                  const volumeStep = 0.0002; // 每像素音量变化量
-                  const brightnessStep = 0.00001; // 每像素亮度变化量
+                  const volumeStep = 0.0008; // 每像素音量变化量
+                  const brightnessStep = 0.00005; // 每像素亮度变化量
                   if (this.isLeftSideSwipe) {
                     this.onSwipingBrightness = true
                     const newBrightness = this.screenBrightness - (deltaY * brightnessStep);
@@ -1412,6 +1414,12 @@ struct Player {
       Row() {
         AVVolumePanel({
           volumeLevel: this.volume,
+          volumeParameter: {
+            position: {
+              x: -1,
+              y: -1
+            }
+          }
         })
       }.visibility(Visibility.None)
 

@@ -148,7 +148,7 @@ class HdrApi {
 
   CreateSubWindow(result: MethodResult){
     // 获取windowStage
-    windowStage_ = AppStorage.get('windowStage');
+    windowStage_ = AppStorage.get('windowStage2');
     // 1.创建应用子窗口。
     if (windowStage_ == null) {
       console.error('Failed to create the subwindow. Cause: windowStage_ is null');
