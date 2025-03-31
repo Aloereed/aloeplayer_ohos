@@ -197,19 +197,29 @@ class DownloadApi {
     Log.i(TAG, "startBgTask finish");
   }
 
-  async persistPermission(exts: string,result: MethodResult) {
+ async persistPermission(exts: string, result: MethodResult) {
   try {
-    let DocumentSelectOptions : picker.DocumentSelectOptions = {fileSuffixFilters: [exts]};
+    let DocumentSelectOptions: picker.DocumentSelectOptions = {fileSuffixFilters: [exts]};
     let documentPicker = new picker.DocumentViewPicker();
+    // Get multiple URIs from document picker
     let uris = await documentPicker.select(DocumentSelectOptions);
-    let policyInfo: fileShare.PolicyInfo = {
-      uri: uris[0],
-      operationMode: fileShare.OperationMode.READ_MODE,
-    };
-    let policies: Array<fileShare.PolicyInfo> = [policyInfo];
+    
+    // Create array of PolicyInfo objects for each selected URI
+    let policies: Array<fileShare.PolicyInfo> = [];
+    for (let uri of uris) {
+      let policyInfo: fileShare.PolicyInfo = {
+        uri: uri,
+        operationMode: fileShare.OperationMode.READ_MODE,
+      };
+      policies.push(policyInfo);
+    }
+    
+    // Request persistent permissions for all selected files
     fileShare.persistPermission(policies).then(() => {
       console.info("persistPermission successfully");
-      result.success(uris[0]);
+      // Join all URIs with "|||" separator
+      let uriString = uris.join("|||");
+      result.success(uriString);
     }).catch((err: BusinessError<Array<fileShare.PolicyErrorResult>>) => {
       console.error("persistPermission failed with error message: " + err.message + ", error code: " + err.code);
       result.success("");

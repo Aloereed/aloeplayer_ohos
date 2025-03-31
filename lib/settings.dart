@@ -2,11 +2,12 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-22 21:15:06
+ * @LastEditTime: 2025-03-31 12:39:27
  * @Description: file content
  */
 import 'dart:convert';
 import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -59,6 +60,414 @@ class FontCache {
   }
 }
 
+String sanitizeFileName(String input) {
+  if (input == null || input.isEmpty) {
+    return '_';
+  }
+
+  // 定义不允许在文件名中使用的字符的正则表达式
+  // 这包括: / \ : * ? " < > | 以及其他控制字符
+  final RegExp invalidChars = RegExp(r'[\\/:*?"<>|\x00-\x1F]');
+
+  // 替换所有不合法字符为下划线
+  String sanitized = input.replaceAll(invalidChars, '_');
+
+  // 移除前导和尾随空格
+  sanitized = sanitized.trim();
+
+  // 如果结果为空字符串，返回一个下划线
+  if (sanitized.isEmpty) {
+    return '_';
+  }
+
+  // 在一些操作系统中，以点开头的文件可能会被视为隐藏文件
+  // 所以如果字符串以点开头，添加一个下划线
+  if (sanitized.startsWith('.')) {
+    sanitized = '_' + sanitized;
+  }
+
+  return sanitized;
+}
+
+/// 解析字幕轨道信息并返回友好的中文描述
+///
+/// [jsonString]: 从FFmpeg获取的字幕轨道JSON字符串
+/// [useOriginalIndices]: 是否使用原始索引（true）或从0开始重新编号（false）
+Map<int, String> parseSubtitleTracks(String jsonString,
+    {bool useOriginalIndices = true}) {
+  // 如果JSON字符串为空，返回空Map
+  if (jsonString.isEmpty) {
+    return {};
+  }
+
+  try {
+    // 解析JSON字符串
+    final Map<String, dynamic> data = json.decode(jsonString);
+    final List<dynamic> tracks = data['subtitleTracks'] ?? [];
+
+    // 创建字幕轨道索引到友好描述的映射
+    final Map<int, String> friendlyTracks = {};
+
+    // 如果使用从0开始的索引，则需要一个计数器
+    int newIndex = 0;
+
+    for (final track in tracks) {
+      final int originalIndex = track['index'] ?? -1;
+      if (originalIndex == -1) continue; // 跳过无效索引
+
+      // 确定要使用的索引
+      final int indexToUse = useOriginalIndices ? originalIndex : newIndex++;
+
+      // 获取各项参数
+      final String language =
+          _getSubtitleLanguageName(track['language'] ?? 'und');
+      final String codec = _formatSubtitleCodec(track['codec'] ?? '');
+      String title = track['title'] ?? '';
+
+      // 构建友好的描述
+      String description = language;
+
+      // 如果有标题，添加到描述中
+      if (title.isNotEmpty) {
+        // 确保标题不是语言的重复
+        if (!title.toLowerCase().contains(language.toLowerCase()) &&
+            !language.toLowerCase().contains(title.toLowerCase())) {
+          description += ' - $title';
+        }
+      }
+
+      // 添加编解码器信息（如果不是太技术性的话）
+      if (codec != '未知格式' && !codec.contains('未知')) {
+        description += ' ($codec)';
+      }
+
+      friendlyTracks[indexToUse] = sanitizeFileName(description);
+    }
+
+    return friendlyTracks;
+  } catch (e) {
+    print('解析字幕轨道时出错: $e');
+    return {};
+  }
+}
+
+/// 获取字幕语言的友好中文名称
+String _getSubtitleLanguageName(String languageCode) {
+  // 语言代码到友好中文名称的映射
+  const languageMap = {
+    'und': '未知语言',
+    'eng': '英语',
+    'en': '英语',
+    'chi': '中文',
+    'zh': '中文',
+    'zho': '中文',
+    'cmn': '普通话',
+    'yue': '粤语',
+    'jpn': '日语',
+    'ja': '日语',
+    'kor': '韩语',
+    'ko': '韩语',
+    'fre': '法语',
+    'fra': '法语',
+    'fr': '法语',
+    'ger': '德语',
+    'deu': '德语',
+    'de': '德语',
+    'spa': '西班牙语',
+    'es': '西班牙语',
+    'ita': '意大利语',
+    'it': '意大利语',
+    'rus': '俄语',
+    'ru': '俄语',
+    'por': '葡萄牙语',
+    'pt': '葡萄牙语',
+    'ara': '阿拉伯语',
+    'ar': '阿拉伯语',
+    'hin': '印地语',
+    'hi': '印地语',
+    'ben': '孟加拉语',
+    'bn': '孟加拉语',
+    'pan': '旁遮普语',
+    'pa': '旁遮普语',
+    'tam': '泰米尔语',
+    'ta': '泰米尔语',
+    'tel': '泰卢固语',
+    'te': '泰卢固语',
+    'mar': '马拉地语',
+    'mr': '马拉地语',
+    'vie': '越南语',
+    'vi': '越南语',
+    'tha': '泰语',
+    'th': '泰语',
+    'ind': '印尼语',
+    'id': '印尼语',
+    'may': '马来语',
+    'ms': '马来语',
+    'msa': '马来语',
+    'tur': '土耳其语',
+    'tr': '土耳其语',
+    'nld': '荷兰语',
+    'dut': '荷兰语',
+    'nl': '荷兰语',
+    'swe': '瑞典语',
+    'sv': '瑞典语',
+    'nor': '挪威语',
+    'no': '挪威语',
+    'fin': '芬兰语',
+    'fi': '芬兰语',
+    'dan': '丹麦语',
+    'da': '丹麦语',
+    'pol': '波兰语',
+    'pl': '波兰语',
+    'hun': '匈牙利语',
+    'hu': '匈牙利语',
+    'ces': '捷克语',
+    'cze': '捷克语',
+    'cs': '捷克语',
+    'gre': '希腊语',
+    'ell': '希腊语',
+    'el': '希腊语',
+    'heb': '希伯来语',
+    'he': '希伯来语',
+    'urd': '乌尔都语',
+    'ur': '乌尔都语',
+    'fas': '波斯语',
+    'per': '波斯语',
+    'fa': '波斯语',
+    // 简称和双字符代码
+    'cn': '中文',
+    'tw': '繁体中文',
+    'hk': '繁体中文(香港)',
+  };
+
+  return languageMap[languageCode.toLowerCase()] ?? '未知语言';
+}
+
+/// 格式化字幕编解码器名称为友好的中文描述
+String _formatSubtitleCodec(String codec) {
+  // 编解码器友好中文名称映射
+  const codecMap = {
+    'subrip': 'SRT字幕',
+    'srt': 'SRT字幕',
+    'ass': 'ASS字幕',
+    'ssa': 'SSA字幕',
+    'mov_text': 'MOV文本',
+    'webvtt': 'WebVTT字幕',
+    'dvb_subtitle': 'DVB字幕',
+    'dvd_subtitle': 'DVD字幕',
+    'hdmv_pgs_subtitle': 'PGS字幕',
+    'xsub': 'XSUB字幕',
+    'dvb_teletext': '图文字幕',
+    'microdvd': 'MicroDVD字幕',
+    'jacosub': 'JacoSub字幕',
+    'sami': 'SAMI字幕',
+    'realtext': 'RealText字幕',
+    'subviewer': 'SubViewer字幕',
+    'subviewer1': 'SubViewer 1字幕',
+    'pjs': 'PJS字幕',
+    'mpl2': 'MPL2字幕',
+    'vplayer': 'VPlayer字幕',
+    'stl': 'STL字幕',
+    'cc_dec': '闭路字幕',
+  };
+
+  return codecMap[codec.toLowerCase()] ?? '未知格式';
+}
+
+/// 解析音频轨道信息并返回友好的显示格式
+Map<int, String> parseAudioTracks(String jsonString) {
+  // 如果JSON字符串为空，返回空Map
+  if (jsonString.isEmpty) {
+    return {};
+  }
+
+  try {
+    // 解析JSON字符串
+    final Map<String, dynamic> data = json.decode(jsonString);
+    final List<dynamic> tracks = data['audioTracks'] ?? [];
+
+    // 创建音轨索引到友好描述的映射
+    final Map<int, String> friendlyTracks = {};
+
+    for (final track in tracks) {
+      final int index = track['index'] ?? -1;
+      if (index == -1) continue; // 跳过无效索引
+
+      // 获取各项参数
+      final String language = _getLanguageName(track['language'] ?? 'und');
+      final String codec = _formatCodec(track['codec'] ?? '');
+      final int channels = track['channels'] ?? 0;
+      final int sampleRate = track['sampleRate'] ?? 0;
+
+      // 构建友好的描述
+      final String channelDesc = _formatChannels(channels);
+      final String sampleRateDesc = _formatSampleRate(sampleRate);
+
+      // 组合成最终描述
+      friendlyTracks[index] = '$language-$codec-$channelDesc-$sampleRateDesc';
+    }
+
+    return friendlyTracks;
+  } catch (e) {
+    print('Error parsing audio tracks: $e');
+    return {};
+  }
+}
+
+/// 获取语言的友好名称
+String _getLanguageName(String languageCode) {
+  // 语言代码到友好名称的映射
+  const languageMap = {
+    'und': '未知语言',
+    'eng': '英语',
+    'chi': '汉语',
+    'zho': '汉语',
+    'cmn': '普通话',
+    'yue': '粤语',
+    'jpn': '日语',
+    'kor': '韩语',
+    'fre': '法语',
+    'fra': '法语',
+    'ger': '德语',
+    'deu': '德语',
+    'spa': '西班牙语',
+    'ita': '意大利语',
+    'rus': '俄语',
+    'por': '葡萄牙语',
+    'ara': '阿拉伯语',
+    'hin': '印地语',
+    'ben': '孟加拉语',
+    'pan': '旁遮普语',
+    'tam': '泰米尔语',
+    'tel': '泰卢固语',
+    'mar': '马拉地语',
+    'vie': '越南语',
+    'tha': '泰语',
+    'ind': '印尼语',
+    'may': '马来语',
+    'msa': '马来语',
+    'tur': '土耳其语',
+    'nld': '荷兰语',
+    'dut': '荷兰语',
+    'swe': '瑞典语',
+    'nor': '挪威语',
+    'fin': '芬兰语',
+    'dan': '丹麦语',
+    'pol': '波兰语',
+    'hun': '匈牙利语',
+    'ces': '捷克语',
+    'cze': '捷克语',
+    'gre': '希腊语',
+    'ell': '希腊语',
+    'heb': '希伯来语',
+    'urd': '乌尔都语',
+    'fas': '波斯语',
+    'per': '波斯语',
+    // 可以根据需要添加更多语言
+  };
+
+  return languageMap[languageCode.toLowerCase()] ?? languageCode;
+}
+
+/// 格式化编解码器名称
+String _formatCodec(String codec) {
+  // 编解码器友好名称映射
+  const codecMap = {
+    'aac': 'AAC',
+    'mp3': 'MP3',
+    'ac3': 'AC3',
+    'eac3': 'E-AC3',
+    'dts': 'DTS',
+    'truehd': 'TrueHD',
+    'opus': 'Opus',
+    'vorbis': 'Vorbis',
+    'flac': 'FLAC',
+    'alac': 'ALAC',
+    'pcm_s16le': 'PCM',
+    'pcm_s24le': 'PCM',
+    'pcm_s32le': 'PCM',
+    // 添加更多编解码器
+  };
+
+  return codecMap[codec.toLowerCase()] ?? codec.toUpperCase();
+}
+
+/// 根据通道数格式化通道描述
+String _formatChannels(int channels) {
+  switch (channels) {
+    case 1:
+      return '单声道';
+    case 2:
+      return '双声道/立体声';
+    case 6:
+      return '5.1声道';
+    case 8:
+      return '7.1声道';
+    default:
+      return channels > 0 ? '$channels声道' : '未知声道';
+  }
+}
+
+/// 格式化采样率
+String _formatSampleRate(int sampleRate) {
+  if (sampleRate <= 0) {
+    return '未知采样率';
+  }
+
+  // 转换为kHz并格式化
+  final double kHz = sampleRate / 1000.0;
+  if (kHz.toInt() == kHz) {
+    return '${kHz.toInt()}kHz';
+  } else {
+    return '${kHz.toStringAsFixed(1)}kHz';
+  }
+}
+
+class DeviceInfo {
+  final bool isTablet;
+  final bool isLandscape;
+
+  DeviceInfo({required this.isTablet, required this.isLandscape});
+
+  @override
+  String toString() {
+    String deviceType = isTablet ? "平板" : "手机";
+    String orientation = isLandscape ? "横屏" : "竖屏";
+    return "$deviceType，$orientation";
+  }
+}
+
+DeviceInfo getDeviceInfo(BuildContext context) {
+  // 获取媒体查询对象
+  final MediaQueryData mediaQuery = MediaQuery.of(context);
+
+  // 获取屏幕宽度和高度（像素）
+  final Size size = mediaQuery.size;
+  final double width = size.width;
+  final double height = size.height;
+
+  // 获取设备像素比
+  final double devicePixelRatio = mediaQuery.devicePixelRatio;
+
+  // 计算物理像素大小
+  final double physicalWidth = width * devicePixelRatio;
+  final double physicalHeight = height * devicePixelRatio;
+
+  // 计算屏幕对角线尺寸（英寸）
+  // 假设像素密度为160dpi，平板与手机的分界线通常为7英寸
+  final double diagonalInches = math.sqrt(
+          physicalWidth * physicalWidth + physicalHeight * physicalHeight) /
+      (160 * devicePixelRatio);
+
+  // 判断是否为平板（对角线尺寸大于7英寸）
+  final bool isTablet = diagonalInches >= 7.0;
+
+  // 判断当前是否为横屏
+  final bool isLandscape = width > height;
+
+  return DeviceInfo(isTablet: isTablet, isLandscape: isLandscape);
+}
+
 class SettingsService {
   static const String _fontSizeKey = 'subtitle_font_size';
   static const String _backgroundPlayKey = 'background_play';
@@ -73,8 +482,10 @@ class SettingsService {
   static const String _useInnerThumbnail = 'use_inner_thumbnail';
   static const String _disableThumbnail = 'disable_thumbnail';
   static const String _subtitleFont = 'subtitle_font';
-  static const String _versionName = '2.0.4';
-  static const int _versionNumber = 27;
+  static const String _hdrForHdr = 'hdr_for_hdr';
+  static const String _subtitleMany = 'subtitle_many';
+  static const String _versionName = '2.0.6';
+  static const int _versionNumber = 30;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -252,6 +663,26 @@ class SettingsService {
   Future<bool> getDisableThumbnail() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_disableThumbnail) ?? false; // 默认值为false
+  }
+
+  Future<void> saveHdrForHdr(bool hdrForHdr) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_hdrForHdr, hdrForHdr);
+  }
+
+  Future<bool> getHdrForHdr() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_hdrForHdr) ?? false; // 默认值为false
+  }
+
+  Future<void> saveSubtitleMany(int subtitleMany) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_subtitleMany, subtitleMany);
+  }
+
+  Future<int> getSubtitleMany() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_subtitleMany) ?? 0; // 默认值为0
   }
 
   // 清除缓存 递归删除“/data/storage/el2/base/haps/entry/cache/”下的所有文件
@@ -952,6 +1383,63 @@ class _SettingsTabState extends State<SettingsTab> {
                       },
                     ),
                   ),
+                  FutureBuilder<bool>(
+                    future: _settingsService.getAutoLoadSubtitle(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData && snapshot.data!) {
+                        return ListTile(
+                          leading: Icon(Icons.subtitles_outlined,
+                              color: Colors.lightBlue),
+                          title: Text('自动提取字幕副轨道数量'),
+                          subtitle: Text('提取副轨道可能导致闪退和卡顿'),
+                          trailing: FutureBuilder<int>(
+                            future: _settingsService.getSubtitleMany(),
+                            builder: (context, subtitleManySnapshot) {
+                              if (subtitleManySnapshot.hasData) {
+                                final value = subtitleManySnapshot.data!;
+                                return DropdownButton<int>(
+                                  value: value,
+                                  onChanged: (newValue) {
+                                    if (newValue != null) {
+                                      _settingsService
+                                          .saveSubtitleMany(newValue);
+                                      setState(() {});
+                                    }
+                                  },
+                                  items: [
+                                    DropdownMenuItem<int>(
+                                      value: 0,
+                                      child: Text('不提取'),
+                                    ),
+                                    DropdownMenuItem<int>(
+                                      value: 1,
+                                      child: Text('1个'),
+                                    ),
+                                    DropdownMenuItem<int>(
+                                      value: 2,
+                                      child: Text('2个'),
+                                    ),
+                                    DropdownMenuItem<int>(
+                                      value: 3,
+                                      child: Text('3个'),
+                                    ),
+                                    DropdownMenuItem<int>(
+                                      value: -1,
+                                      child: Text('不限制'),
+                                    ),
+                                  ],
+                                );
+                              } else {
+                                return const CircularProgressIndicator();
+                              }
+                            },
+                          ),
+                        );
+                      } else {
+                        return Container(); // Return empty container when auto load subtitle is false
+                      }
+                    },
+                  ),
                   ListTile(
                     leading:
                         Icon(Icons.subtitles_outlined, color: Colors.lightBlue),
@@ -1161,6 +1649,28 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   ),
                   ListTile(
+                    leading: Icon(Icons.high_quality, color: Colors.lightBlue),
+                    title: Text('使用HDR播放器打开HDR视频'),
+                    subtitle: Text('仅限从视频库中点击时'),
+                    trailing: FutureBuilder<bool>(
+                      future: _settingsService.getHdrForHdr(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return Switch(
+                            value: snapshot.data!,
+                            onChanged: (value) {
+                              _settingsService.saveHdrForHdr(value);
+                              setState(() {});
+                            },
+                            activeColor: Colors.lightBlue,
+                          );
+                        } else {
+                          return const CircularProgressIndicator();
+                        }
+                      },
+                    ),
+                  ),
+                  ListTile(
                     leading: Icon(Icons.list, color: Colors.lightBlue),
                     title: Text('默认列表模式'),
                     subtitle: Text('启动时视频库和音频库为列表模式'),
@@ -1287,7 +1797,7 @@ class _SettingsTabState extends State<SettingsTab> {
                       leading: Icon(Icons.display_settings_rounded,
                           color: Colors.lightBlue),
                       title: Text('禁用视频库缩略图和时长获取'),
-                      subtitle: Text('临时缓解闪退'),
+                      subtitle: Text('HDR获取也会禁用以临时缓解闪退'),
                       trailing: FutureBuilder<bool>(
                           future: _settingsService.getDisableThumbnail(),
                           builder: (context, snapshot) {

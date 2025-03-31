@@ -329,6 +329,7 @@ class ChewieController extends ChangeNotifier {
     this.assSubtitles,
     this.subtitleFontsize = 18,
     this.subtitleFontFamily,
+    this.isMirrored = false,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
           'The playbackSpeeds values must all be greater than 0',
@@ -399,6 +400,7 @@ class ChewieController extends ChangeNotifier {
     List<AssSubtitle>? assSubtitles,
     double? subtitleFontsize,
     String? subtitleFontFamily,
+    bool isMirrored = false,
   }) {
     return ChewieController(
       draggableProgressBar: draggableProgressBar ?? this.draggableProgressBar,
@@ -468,6 +470,7 @@ class ChewieController extends ChangeNotifier {
       assSubtitles: assSubtitles ?? this.assSubtitles,
       subtitleFontsize: subtitleFontsize ?? this.subtitleFontsize,
       subtitleFontFamily: subtitleFontFamily ?? this.subtitleFontFamily,
+      isMirrored: isMirrored ?? this.isMirrored,
     );
   }
 
@@ -476,8 +479,22 @@ class ChewieController extends ChangeNotifier {
   /// If false, the options button in MaterialUI and MaterialDesktopUI
   /// won't be shown.
   final bool showOptions;
-
+  bool isMirrored = false;
   int ffmpeg = 0;
+
+  double scale = 1.0;
+  Offset position = Offset.zero;
+
+  // 手势状态追踪
+  bool isScaling = false;
+  bool isHorizontalDragging = false;
+  bool isVerticalDragging = false;
+  bool isLongPressing = false;
+  
+  // 缩放初始状态
+  double initialScale = 1.0;
+  Offset initialPosition = Offset.zero;
+
   FfmpegExample? sendToFfmpegPlayer;
   HdrExample? sendToHdrPlayer;
   String? subtitleFontFamily;
@@ -501,6 +518,11 @@ class ChewieController extends ChangeNotifier {
   ///
   /// These are required for the default `OptionItem`'s
   final OptionsTranslation? optionsTranslation;
+
+  void resetZoomPan() {
+    scale = 1.0;
+    position = Offset.zero;
+  }
 
   /// Build your own options with default chewieOptions shiped through
   /// the builder method. Just add your own options to the Widget
@@ -552,6 +574,7 @@ class ChewieController extends ChangeNotifier {
 
   /// Max scale when zooming
   final double maxScale;
+  final double minScale = 0.5;
 
   /// Defines customised controls. Check [MaterialControls] or
   /// [CupertinoControls] for reference.
@@ -569,7 +592,7 @@ class ChewieController extends ChangeNotifier {
   /// video!
   ///
   /// Will fallback to fitting within the space allowed.
-  final double? aspectRatio;
+  double? aspectRatio;
 
   /// The colors to use for controls on iOS. By default, the iOS player uses
   /// colors sampled from the original iOS 11 designs.
@@ -879,11 +902,15 @@ class ChewieController extends ChangeNotifier {
       print("kernelTime: $kernelTime, controllerTime: $controllerTime");
       if (kernelTime != null &&
           controllerTime != null &&
-          (controllerTime - kernelTime).abs() > (ffmpeg == 1?3000:500)) {
+          (controllerTime - kernelTime).abs() > (ffmpeg == 1 ? 3000 : 500)) {
         // await videoPlayerController.seekTo(Duration(milliseconds: kernelTime));
         // await videoPlayerController.pause();
-        await sendToFfmpegPlayer?.controller
-            ?.sendMessageToOhosView("seekTo", ((controllerTime+100>duration)?controllerTime:(controllerTime+100)).toString());
+        await sendToFfmpegPlayer?.controller?.sendMessageToOhosView(
+            "seekTo",
+            ((controllerTime + 100 > duration)
+                    ? controllerTime
+                    : (controllerTime + 100))
+                .toString());
         // await videoPlayerController.play();
         // seekTo(videoPlayerController.value.position);
       }

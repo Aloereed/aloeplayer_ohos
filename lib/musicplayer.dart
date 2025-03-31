@@ -367,8 +367,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
             continue;
           }
           if (includeExts.contains(file.path.split('.').last)) {
-            final metadata =
-                await readMetadata(File(file.path), getImage: true);
             // setState(() {
             //   _title = metadata.title ?? 'Unknown Title';
             //   _artist = metadata.artist ?? 'Unknown Artist';
@@ -376,21 +374,34 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
             //   _coverBytes =
             //       metadata.pictures.isNotEmpty ? metadata.pictures[0].bytes : null;
             // });
-            String title = await AudioMetadata.getTitle(file.path);
-            String artist = await AudioMetadata.getArtist(file.path);
-            String album = await AudioMetadata.getAlbum(file.path);
-            _playlist.add({
-              'name': file.path.split('/').last,
-              'path': file.path,
-              'title': title == "" ? "Unknown Title" : title,
-              'artist': artist == "" ? 'Unknown Artist' : artist,
-              'album': album == "" ? 'Unknown Album' : album,
-              'coverBytes': metadata.pictures.isNotEmpty
-                  ? String.fromCharCodes(metadata.pictures[0].bytes)
-                  : (String.fromCharCodes(await _settingsService
-                          .fetchCoverNative(pathToUri(file.path)) ??
-                      Uint8List.fromList([]))),
-            });
+            try {
+              String title = await AudioMetadata.getTitle(file.path);
+              String artist = await AudioMetadata.getArtist(file.path);
+              String album = await AudioMetadata.getAlbum(file.path);
+              final metadata =
+                  await readMetadata(File(file.path), getImage: true);
+              _playlist.add({
+                'name': file.path.split('/').last,
+                'path': file.path,
+                'title': title == "" ? "Unknown Title" : title,
+                'artist': artist == "" ? 'Unknown Artist' : artist,
+                'album': album == "" ? 'Unknown Album' : album,
+                'coverBytes': metadata.pictures.isNotEmpty
+                    ? String.fromCharCodes(metadata.pictures[0].bytes)
+                    : (String.fromCharCodes(await _settingsService
+                            .fetchCoverNative(pathToUri(file.path)) ??
+                        Uint8List.fromList([]))),
+              });
+            } catch (e) {
+              _playlist.add({
+                'name': file.path.split('/').last,
+                'path': file.path,
+                'title': file.path.split('/').last,
+                'artist': 'Unknown Artist',
+                'album': 'Unknown Album',
+                'coverBytes': String.fromCharCodes(Uint8List.fromList([])),
+              });
+            }
           } else {
             _playlist.add({
               'name': file.path.split('/').last,
@@ -462,10 +473,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
   }
 
   Future<void> _initPlayer() async {
-    // 加载歌词
-    try {
-      await _loadLyrics();
-    } catch (e) {}
     // 初始化视频播放器
     isBgPlay = await _settingsService.getBackgroundPlay();
     try {
@@ -491,25 +498,38 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
       // 读取音频元数据
       List<String> includeExts = ['mp3', 'm4a', 'flac', 'ogg'];
       if (includeExts.contains(widget.filePath.split('.').last)) {
-        final metadata =
-            await readMetadata(File(widget.filePath), getImage: true);
-        _artist = await AudioMetadata.getArtist(widget.filePath);
-        _title = await AudioMetadata.getTitle(widget.filePath);
-        _album = await AudioMetadata.getAlbum(widget.filePath);
-        _coverBytes = metadata.pictures.isEmpty
-            ? await _settingsService
-                .fetchCoverNative(pathToUri(widget.filePath))
-            : metadata.pictures[0].bytes;
-        setState(() {
-          _title = _title == "" ? widget.filePath.split('/').last : _title;
-          _artist = _artist == "" ? 'Unknown Artist' : _artist;
-          _album = _album == "" ? 'Unknown Album' : _album;
-          _coverBytes = _coverBytes;
-        });
-        _audioService.album = _album;
-        _audioService.artist = _artist;
-        _audioService.title = _title;
-        _audioService.coverBytes = _coverBytes;
+        try {
+          final metadata =
+              await readMetadata(File(widget.filePath), getImage: true);
+          _artist = await AudioMetadata.getArtist(widget.filePath);
+          _title = await AudioMetadata.getTitle(widget.filePath);
+          _album = await AudioMetadata.getAlbum(widget.filePath);
+          _coverBytes = metadata.pictures.isEmpty
+              ? await _settingsService
+                  .fetchCoverNative(pathToUri(widget.filePath))
+              : metadata.pictures[0].bytes;
+          setState(() {
+            _title = _title == "" ? widget.filePath.split('/').last : _title;
+            _artist = _artist == "" ? 'Unknown Artist' : _artist;
+            _album = _album == "" ? 'Unknown Album' : _album;
+            _coverBytes = _coverBytes;
+          });
+          _audioService.album = _album;
+          _audioService.artist = _artist;
+          _audioService.title = _title;
+          _audioService.coverBytes = _coverBytes;
+        } catch (e) {
+          setState(() {
+            _title = widget.filePath.split('/').last;
+            _artist = 'Unknown Artist';
+            _album = 'Unknown Album';
+            _coverBytes = null;
+          });
+          _audioService.album = _album;
+          _audioService.artist = _artist;
+          _audioService.title = _title;
+          _audioService.coverBytes = _coverBytes;
+        }
       } else {
         setState(() {
           _title = widget.filePath.split('/').last;
@@ -523,6 +543,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
         _audioService.coverBytes = _coverBytes;
         // _audioService.loopMode = _loopMode;
       }
+      // 加载歌词
+      try {
+        await _loadLyrics();
+      } catch (e) {}
 
       // 监听播放位置
       _controller.addListener(() {

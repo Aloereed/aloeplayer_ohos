@@ -2,7 +2,7 @@
  * @Author:
  * @Date: 2025-01-21 20:39:36
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-10 21:14:37
+ * @LastEditTime: 2025-03-25 20:30:46
  * @Description: file content
  */
 #include "utils.hpp"
@@ -11,6 +11,9 @@ extern "C" {
 #include <libavutil/log.h>
 #include <libavutil/error.h>
 #include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h> 
+#include <libavutil/hdr_dynamic_metadata.h>
+#include <libavutil/mastering_display_metadata.h>
 #include <ass/ass.h>
 }
 #include <vector>
@@ -85,6 +88,234 @@ int64_t get_video_duration(const std::string &file_path) {
     // 将微秒转换为毫秒
     return duration / 1000;
 }
+
+// 结构体定义用于返回音轨和字幕轨信息
+struct TrackInfo {
+    int index;
+    std::string language;
+    // 可以根据需要添加更多字段
+};
+
+// 帮助函数：检查视频是否为HDR
+bool isHDRVideo(const char* filePath) {
+    AVFormatContext* formatContext = nullptr;
+    bool isHDR = false;
+
+    // 初始化FFmpeg库（在较新版本的FFmpeg中不需要）
+    #if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(58, 9, 100)
+        av_register_all();
+    #endif
+
+    // 打开输入文件
+    if (avformat_open_input(&formatContext, filePath, nullptr, nullptr) != 0) {
+        std::cerr << "Cannot open input file: " << filePath << std::endl;
+        return false;
+    }
+
+    // 读取流信息
+    if (avformat_find_stream_info(formatContext, nullptr) < 0) {
+        std::cerr << "Cannot find stream information" << std::endl;
+        avformat_close_input(&formatContext);
+        return false;
+    }
+
+    // 遍历所有流，寻找视频流
+    for (unsigned int i = 0; i < formatContext->nb_streams; i++) {
+        AVStream* stream = formatContext->streams[i];
+        if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            // 检查是否含有HDR相关的side data
+            for (int j = 0; j < stream->nb_side_data; j++) {
+                const AVPacketSideData* sd = &stream->side_data[j];
+                if (sd->type == AV_PKT_DATA_MASTERING_DISPLAY_METADATA ||
+                    sd->type == AV_PKT_DATA_CONTENT_LIGHT_LEVEL) {
+                    isHDR = true;
+                    break;
+                }
+            }
+            
+            // 检查帧中是否有HDR元数据 - 使用简化的方法
+            if (!isHDR) {
+                // 获取解码器
+                const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
+                if (codec) {
+                    AVCodecContext* codecContext = avcodec_alloc_context3(codec);
+                    if (codecContext) {
+                        if (avcodec_parameters_to_context(codecContext, stream->codecpar) >= 0) {
+                            if (avcodec_open2(codecContext, codec, NULL) >= 0) {
+                                // 检查色彩空间信息
+                                if (codecContext->color_primaries == AVCOL_PRI_BT2020 &&
+                                    (codecContext->color_trc == AVCOL_TRC_SMPTE2084 || 
+                                     codecContext->color_trc == AVCOL_TRC_ARIB_STD_B67)) {
+                                    isHDR = true;
+                                }
+                                avcodec_free_context(&codecContext);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 检查色彩空间特征
+            if (!isHDR && stream->codecpar->color_primaries == AVCOL_PRI_BT2020 &&
+                (stream->codecpar->color_trc == AVCOL_TRC_SMPTE2084 || 
+                 stream->codecpar->color_trc == AVCOL_TRC_ARIB_STD_B67)) {
+                isHDR = true;
+            }
+            
+            break;  // 只检查第一个视频流
+        }
+    }
+
+    avformat_close_input(&formatContext);
+    return isHDR;
+}
+
+// 实现导出函数1：获取视频是否为HDR
+std::string GetVideoHDRInfo(const std::string& filePath) {
+    bool isHDR = isHDRVideo(filePath.c_str());
+    
+    // 构造JSON返回结果
+    std::ostringstream json;
+    json << "{\"isHDR\": " << (isHDR ? "true" : "false") << "}";
+    
+    return json.str();
+}
+
+// 实现导出函数2：获取所有音轨及其语言
+std::string GetAudioTracks(const std::string& filePath) {
+    AVFormatContext* formatContext = nullptr;
+    std::ostringstream json;
+    json << "{\"audioTracks\": [";
+
+    // 初始化FFmpeg库（在较新版本的FFmpeg中不需要）
+    #if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(58, 9, 100)
+        av_register_all();
+    #endif
+
+    // 打开输入文件
+    if (avformat_open_input(&formatContext, filePath.c_str(), nullptr, nullptr) != 0) {
+        json << "]}";
+        return json.str();
+    }
+
+    // 读取流信息
+    if (avformat_find_stream_info(formatContext, nullptr) < 0) {
+        avformat_close_input(&formatContext);
+        json << "]}";
+        return json.str();
+    }
+
+    bool firstTrack = true;
+    // 遍历所有流，寻找音频流
+    for (unsigned int i = 0; i < formatContext->nb_streams; i++) {
+        AVStream* stream = formatContext->streams[i];
+        if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            if (!firstTrack) {
+                json << ",";
+            }
+            firstTrack = false;
+            
+            json << "{\"index\": " << i;
+            
+            // 尝试获取语言标签
+            AVDictionaryEntry* lang = av_dict_get(stream->metadata, "language", nullptr, 0);
+            if (lang) {
+                json << ", \"language\": \"" << lang->value << "\"";
+            } else {
+                json << ", \"language\": \"und\"";
+            }
+            
+            // 获取编解码器名称
+            const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
+            if (codec) {
+                json << ", \"codec\": \"" << codec->name << "\"";
+            }
+            
+            // 获取通道数
+            if (stream->codecpar->ch_layout.nb_channels > 0) {
+                json << ", \"channels\": " << stream->codecpar->ch_layout.nb_channels;
+            } else {
+                // 对于较旧版本的FFmpeg，可能需要使用不同的方式获取通道数
+                json << ", \"channels\": " << 0; // 使用默认值
+            }
+            
+            // 获取采样率
+            json << ", \"sampleRate\": " << stream->codecpar->sample_rate;
+            
+            json << "}";
+        }
+    }
+
+    json << "]}";
+    avformat_close_input(&formatContext);
+    return json.str();
+}
+
+// 实现导出函数3：获取所有字幕轨及其语言
+std::string GetSubtitleTracks(const std::string& filePath) {
+    AVFormatContext* formatContext = nullptr;
+    std::ostringstream json;
+    json << "{\"subtitleTracks\": [";
+
+    // 初始化FFmpeg库（在较新版本的FFmpeg中不需要）
+    #if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(58, 9, 100)
+        av_register_all();
+    #endif
+
+    // 打开输入文件
+    if (avformat_open_input(&formatContext, filePath.c_str(), nullptr, nullptr) != 0) {
+        json << "]}";
+        return json.str();
+    }
+
+    // 读取流信息
+    if (avformat_find_stream_info(formatContext, nullptr) < 0) {
+        avformat_close_input(&formatContext);
+        json << "]}";
+        return json.str();
+    }
+
+    bool firstTrack = true;
+    // 遍历所有流，寻找字幕流
+    for (unsigned int i = 0; i < formatContext->nb_streams; i++) {
+        AVStream* stream = formatContext->streams[i];
+        if (stream->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+            if (!firstTrack) {
+                json << ",";
+            }
+            firstTrack = false;
+            
+            json << "{\"index\": " << i;
+            
+            // 尝试获取语言标签
+            AVDictionaryEntry* lang = av_dict_get(stream->metadata, "language", nullptr, 0);
+            if (lang) {
+                json << ", \"language\": \"" << lang->value << "\"";
+            } else {
+                json << ", \"language\": \"und\"";
+            }
+            
+            // 获取字幕编解码器信息
+            const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
+            if (codec) {
+                json << ", \"codec\": \"" << codec->name << "\"";
+            }
+            
+            // 尝试获取字幕标题
+            AVDictionaryEntry* title = av_dict_get(stream->metadata, "title", nullptr, 0);
+            if (title) {
+                json << ", \"title\": \"" << title->value << "\"";
+            }
+            
+            json << "}";
+        }
+    }
+
+    json << "]}";
+    avformat_close_input(&formatContext);
+    return json.str();
+}
+
 std::wstring fromUTF8(const std::string &str) {
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     return converter.from_bytes(str);
@@ -1138,6 +1369,9 @@ JSBIND_GLOBAL() {
     JSBIND_PFUNCTION(executeFFmpegCommandAPP2);
     JSBIND_FUNCTION(showLog);
     JSBIND_FUNCTION(get_video_duration);
+    JSBIND_FUNCTION(GetVideoHDRInfo);
+    JSBIND_FUNCTION(GetAudioTracks);
+    JSBIND_FUNCTION(GetSubtitleTracks);
     JSBIND_PFUNCTION(getTitle);
     JSBIND_PFUNCTION(setTitle);
     JSBIND_PFUNCTION(getArtist);

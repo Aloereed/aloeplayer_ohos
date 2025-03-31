@@ -1105,8 +1105,17 @@ struct Player {
         .fontSize(40)
         .fontColor(['#f0f0f0'])
         .onClick(() => {
-          this.avPlayer?.reset()
-          router.back()
+          // this.avPlayer?.reset()
+          this.avPlayer?.release()
+          let context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext; // UIAbilityContext
+              // context为需要停止的UIAbility实例的AbilityContext
+          context.terminateSelf((err) => {
+            if (err.code) {
+              hilog.error(DOMAIN_NUMBER, TAG, `Failed to terminate self. Code is ${err.code}, message is ${err.message}`);
+              return;
+            }
+          });
+              
         })
         .padding({ right: 5 })
       Row() {
@@ -1416,8 +1425,8 @@ struct Player {
           volumeLevel: this.volume,
           volumeParameter: {
             position: {
-              x: -1,
-              y: -1
+              x: 10000,
+              y: 20000
             }
           }
         })

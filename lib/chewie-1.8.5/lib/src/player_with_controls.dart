@@ -32,8 +32,9 @@ class BrightnessSliderTimer {
 
 class BrightnessSlider extends StatefulWidget {
   final ValueChanged<double>? onBrightnessChanged;
-  
-  const BrightnessSlider({Key? key, this.onBrightnessChanged}) : super(key: key);
+
+  const BrightnessSlider({Key? key, this.onBrightnessChanged})
+      : super(key: key);
 
   @override
   _BrightnessSliderState createState() => _BrightnessSliderState();
@@ -55,7 +56,7 @@ class _BrightnessSliderState extends State<BrightnessSlider> {
 
   void _initBrightness() async {
     try {
-      final brightness = await Screen.brightness??0.5;
+      final brightness = await Screen.brightness ?? 0.5;
       if (mounted) {
         setState(() {
           _brightness = brightness.clamp(0.0, 0.99);
@@ -68,7 +69,7 @@ class _BrightnessSliderState extends State<BrightnessSlider> {
 
   void _updateBrightness() async {
     try {
-      final brightness = await Screen.brightness??0.5;
+      final brightness = await Screen.brightness ?? 0.5;
       if (mounted && (brightness != _brightness)) {
         setState(() {
           _brightness = brightness.clamp(0.0, 0.99);
@@ -96,7 +97,7 @@ class _BrightnessSliderState extends State<BrightnessSlider> {
           setState(() {
             _brightness = value;
           });
-          
+
           try {
             await Screen.setBrightness(value);
             if (widget.onBrightnessChanged != null) {
@@ -353,7 +354,18 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                     chewieController.videoPlayerController.value.aspectRatio,
                 child: (chewieController.ffmpeg == 0 ||
                         chewieController.ffmpeg == 3)
-                    ? VideoPlayer(chewieController.videoPlayerController)
+                    ? Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()
+                          ..translate(chewieController.position.dx,
+                              chewieController.position.dy)
+                          ..scale(
+                            chewieController.scale *
+                                (chewieController.isMirrored ? -1.0 : 1.0),
+                            chewieController.scale,
+                          ),
+                        child:
+                            VideoPlayer(chewieController.videoPlayerController))
                     : Container(color: Colors.transparent),
               ),
             ),
@@ -401,6 +413,55 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
               aspectRatio: calculateAspectRatio(context),
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
+                onScaleStart: chewieController.zoomAndPan
+                    ? (ScaleStartDetails details) {
+                        setState(() {
+                          // 记录开始缩放
+                          chewieController.isScaling = true;
+                          // 记录初始缩放值
+                          chewieController.initialScale =
+                              chewieController.scale;
+                          chewieController.initialPosition =
+                              chewieController.position;
+                        });
+                      }
+                    : null,
+                onScaleUpdate: chewieController.zoomAndPan
+                    ? (ScaleUpdateDetails details) {
+                        if (details.pointerCount >= 1) {
+                          setState(() {
+                            // 确保只有在缩放模式下才执行缩放操作
+                            if (details.scale != 1.0 ||
+                                chewieController.isScaling) {
+                              // 更新缩放比例
+                              chewieController.scale =
+                                  (chewieController.initialScale *
+                                          details.scale)
+                                      .clamp(chewieController.minScale,
+                                          chewieController.maxScale);
+
+                              // 计算新的位置偏移 - 只在双指操作或确认为缩放模式时更新位置
+                              if (details.pointerCount >= 2 ||
+                                  chewieController.isScaling) {
+                                chewieController.position =
+                                    chewieController.initialPosition +
+                                        details.focalPointDelta;
+                              }
+                            }
+                          });
+                        }
+                      }
+                    : null,
+                onScaleEnd: chewieController.zoomAndPan
+                    ? (ScaleEndDetails details) {
+                        setState(() {
+                          // 缩放操作结束
+                          chewieController.isScaling = false;
+                        });
+                      }
+                    : null,
+
+                // 长按相关手势
                 onLongPress: () {
                   // 记录当前的播放速率
                   chewieController.previousPlaybackSpeed =
@@ -409,6 +470,10 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                   chewieController.videoPlayerController.setPlaybackSpeed(3.0);
                   // 显示倍速选择控件
                   showSpeedSelector(context, 3.0);
+                  // 标记为长按模式
+                  setState(() {
+                    chewieController.isLongPressing = true;
+                  });
                 },
                 onLongPressEnd: (_) {
                   // 松开恢复到长按之前的播放速率
@@ -416,23 +481,58 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                       .setPlaybackSpeed(chewieController.previousPlaybackSpeed);
                   // 隐藏倍速选择控件
                   hideSpeedSelector();
+                  // 结束长按模式
+                  setState(() {
+                    chewieController.isLongPressing = false;
+                  });
                 },
                 onLongPressMoveUpdate: (details) {
                   // 处理长按时的左右滑动来选择倍速
-                  handleSpeedSelectionDrag(details);
+                  if (chewieController.isLongPressing) {
+                    handleSpeedSelectionDrag(details);
+                  }
+                },
+
+                // 水平滑动相关
+                onHorizontalDragStart: (_) {
+                  // 标记正在水平滑动
+                  setState(() {
+                    chewieController.isHorizontalDragging = true;
+                  });
                 },
                 onHorizontalDragUpdate: (details) {
-                  // 获取屏幕宽度
-                  final double screenWidth = MediaQuery.of(context).size.width;
-                  // 计算右侧 20% 区域的起始位置
-                  final double rightZoneStart = screenWidth * 0.8;
-                  // 检测滑动是否从右侧 20% 区域开始
-                  if (details.globalPosition.dx >= rightZoneStart) {
-                    // 检测滑动方向是否是从右往左
-                    if (details.delta.dx < 0) {
-                      // 执行打开播放列表的逻辑
-                      if (chewieController.openPlaylist != null)
-                        chewieController.openPlaylist!();
+                  // 只有在非缩放模式下才处理水平滑动
+                  if (!chewieController.isScaling &&
+                      chewieController.isHorizontalDragging) {
+                    // 获取屏幕宽度
+                    final double screenWidth =
+                        MediaQuery.of(context).size.width;
+                    // 计算右侧 20% 区域的起始位置
+                    final double rightZoneStart = screenWidth * 0.8;
+                    // 检测滑动是否从右侧 20% 区域开始
+                    if (details.globalPosition.dx >= rightZoneStart) {
+                      // 检测滑动方向是否是从右往左
+                      if (details.delta.dx < 0) {
+                        // 执行打开播放列表的逻辑
+                        if (chewieController.openPlaylist != null)
+                          chewieController.openPlaylist!();
+                      } else {
+                        // 计算滑动的距离
+                        chewieController.swipeDistance += details.delta.dx;
+                        // 根据滑动距离计算快进或快退的时间
+                        final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
+                        final Duration seekDuration = Duration(
+                            milliseconds:
+                                (chewieController.swipeDistance / sensitivity)
+                                        .round() *
+                                    1000);
+                        if (seekDuration.inMilliseconds != 0) {
+                          chewieController.seekTo(chewieController
+                                  .videoPlayerController.value.position +
+                              seekDuration);
+                          chewieController.swipeDistance = 0.0; // 重置滑动距离
+                        }
+                      }
                     } else {
                       // 计算滑动的距离
                       chewieController.swipeDistance += details.delta.dx;
@@ -450,221 +550,128 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
                         chewieController.swipeDistance = 0.0; // 重置滑动距离
                       }
                     }
-                  } else {
-                    // 计算滑动的距离
-                    chewieController.swipeDistance += details.delta.dx;
-                    // 根据滑动距离计算快进或快退的时间
-                    final double sensitivity = 10.0; // 灵敏度，可以根据需要调整
-                    final Duration seekDuration = Duration(
-                        milliseconds:
-                            (chewieController.swipeDistance / sensitivity)
-                                    .round() *
-                                1000);
-                    if (seekDuration.inMilliseconds != 0) {
-                      chewieController.seekTo(chewieController
-                              .videoPlayerController.value.position +
-                          seekDuration);
-                      chewieController.swipeDistance = 0.0; // 重置滑动距离
-                    }
                   }
                 },
                 onHorizontalDragEnd: (details) {
                   // 滑动结束时重置滑动距离
                   chewieController.swipeDistance = 0.0;
+                  // 结束水平滑动状态
+                  setState(() {
+                    chewieController.isHorizontalDragging = false;
+                  });
                 },
+
+                // 双击相关
                 onDoubleTapDown: (details) {
-                  // Get the width of the screen
-                  final double screenWidth = MediaQuery.of(context).size.width;
-
-                  // Define a range for the middle part of the screen
-                  final double middleRangeStart = screenWidth * 0.2;
-                  final double middleRangeEnd = screenWidth * 0.8;
-
-                  // Determine the position of the double tap
-                  if (details.globalPosition.dx < middleRangeStart) {
-                    // Left part of the screen: rewind 10 seconds
-                    Fluttertoast.showToast(
-                      msg: '快退10秒',
-                      toastLength: Toast.LENGTH_SHORT,
-                      gravity: ToastGravity.CENTER,
-                      timeInSecForIosWeb: 1,
-                      backgroundColor: Colors.red,
-                      textColor: Colors.white,
-                      fontSize: 16.0,
-                    );
-                    chewieController.seekTo(
-                        chewieController.videoPlayerController.value.position -
-                            Duration(seconds: 10));
-                  } else if (details.globalPosition.dx > middleRangeEnd) {
-                    // Right part of the screen: fast forward 10 seconds
-                    Fluttertoast.showToast(
-                      msg: '快进10秒',
-                      toastLength: Toast.LENGTH_SHORT,
-                      gravity: ToastGravity.CENTER,
-                      timeInSecForIosWeb: 1,
-                      backgroundColor: Colors.red,
-                      textColor: Colors.white,
-                      fontSize: 16.0,
-                    );
-                    chewieController.seekTo(
-                        chewieController.videoPlayerController.value.position +
-                            Duration(seconds: 10));
-                  } else {
-                    // Middle part of the screen: toggle fullscreen
-                    // Fluttertoast.showToast(
-                    //   msg: '切换全屏模式',
-                    //   toastLength: Toast.LENGTH_SHORT,
-                    //   gravity: ToastGravity.CENTER,
-                    //   timeInSecForIosWeb: 1,
-                    //   backgroundColor: Colors.blue,
-                    //   textColor: Colors.white,
-                    //   fontSize: 16.0,
-                    // );
-                    // chewieController.toggleFullScreen();
-                    chewieController.togglePause();
+                  // 只有在非缩放和非滑动模式下才处理双击
+                  if (!chewieController.isScaling &&
+                      !chewieController.isHorizontalDragging &&
+                      !chewieController.isVerticalDragging) {
+                    // Get the width of the screen
+                    final double screenWidth =
+                        MediaQuery.of(context).size.width;
+                    // Define a range for the middle part of the screen
+                    final double middleRangeStart = screenWidth * 0.2;
+                    final double middleRangeEnd = screenWidth * 0.8;
+                    // Determine the position of the double tap
+                    if (details.globalPosition.dx < middleRangeStart) {
+                      // Left part of the screen: rewind 10 seconds
+                      Fluttertoast.showToast(
+                        msg: '快退10秒',
+                        toastLength: Toast.LENGTH_SHORT,
+                        gravity: ToastGravity.CENTER,
+                        timeInSecForIosWeb: 1,
+                        backgroundColor: Colors.red,
+                        textColor: Colors.white,
+                        fontSize: 16.0,
+                      );
+                      chewieController.seekTo(chewieController
+                              .videoPlayerController.value.position -
+                          Duration(seconds: 10));
+                    } else if (details.globalPosition.dx > middleRangeEnd) {
+                      // Right part of the screen: fast forward 10 seconds
+                      Fluttertoast.showToast(
+                        msg: '快进10秒',
+                        toastLength: Toast.LENGTH_SHORT,
+                        gravity: ToastGravity.CENTER,
+                        timeInSecForIosWeb: 1,
+                        backgroundColor: Colors.red,
+                        textColor: Colors.white,
+                        fontSize: 16.0,
+                      );
+                      chewieController.seekTo(chewieController
+                              .videoPlayerController.value.position +
+                          Duration(seconds: 10));
+                    } else {
+                      chewieController.togglePause();
+                    }
                   }
+                },
+
+                // 垂直滑动相关
+                onVerticalDragStart: (_) {
+                  // 标记正在垂直滑动
+                  setState(() {
+                    chewieController.isVerticalDragging = true;
+                  });
                 },
                 onVerticalDragUpdate: (details) async {
-                  // 获取滑动的起始位置
-                  double screenWidth = MediaQuery.of(context).size.width;
-                  double touchX = details.localPosition.dx;
-
-                  // 判断滑动区域
-                  if (touchX < screenWidth / 3) {
-                    // 左侧 1/3 区域：调整亮度
-                    double delta = details.primaryDelta ?? 0;
-                    double _brightness = (await Screen.brightness) ?? 0.5;
-
-                    if (delta < 0) {
-                      // 上滑增加亮度
-                      _brightness = (_brightness + 0.005).clamp(0.0, 0.99);
-                    } else if (delta > 0) {
-                      // 下滑减少亮度
-                      _brightness = (_brightness - 0.005).clamp(0.0, 0.99);
+                  // 只有在非缩放模式下才处理垂直滑动
+                  if (!chewieController.isScaling &&
+                      chewieController.isVerticalDragging) {
+                    // 获取滑动的起始位置
+                    double screenWidth = MediaQuery.of(context).size.width;
+                    double touchX = details.localPosition.dx;
+                    // 判断滑动区域
+                    if (touchX < screenWidth / 3) {
+                      // 左侧 1/3 区域：调整亮度
+                      double delta = details.primaryDelta ?? 0;
+                      double _brightness = (await Screen.brightness) ?? 0.5;
+                      if (delta < 0) {
+                        // 上滑增加亮度
+                        _brightness = (_brightness + 0.005).clamp(0.0, 0.99);
+                      } else if (delta > 0) {
+                        // 下滑减少亮度
+                        _brightness = (_brightness - 0.005).clamp(0.0, 0.99);
+                      }
+                      // 设置亮度
+                      Screen.setBrightness(_brightness);
+                      // 显示亮度滑块
+                      setState(() {
+                        showBrightnessSlider = true;
+                      });
+                      // 启动计时器
+                      _brightnessSliderTimer?.start();
+                    } else if (touchX > (2 * screenWidth / 3)) {
+                      // 右侧 1/3 区域：调整音量
+                      double delta = details.primaryDelta ?? 0;
+                      double _volume = 0.0;
+                      if (delta < 0) {
+                        // 上滑增加音量
+                        _volume = 0.005;
+                      } else if (delta > 0) {
+                        // 下滑减少音量
+                        _volume = -0.005;
+                      }
+                      // 设置音量
+                      double nextVolume =
+                          chewieController.setSystemVolume!(_volume);
+                      // 显示音量滑块
+                      setState(() {
+                        chewieController.showVolumeSlider = true;
+                      });
                     }
-
-                    // 设置亮度
-                    Screen.setBrightness(_brightness);
-
-                    // 显示亮度变化提示
-                    // Fluttertoast.showToast(
-                    //   msg: '亮度: ${(_brightness * 100).toStringAsFixed(0)}%',
-                    //   toastLength: Toast.LENGTH_SHORT,
-                    //   gravity: ToastGravity.CENTER,
-                    //   timeInSecForIosWeb: 1,
-                    //   backgroundColor: Colors.black.withOpacity(0.7),
-                    //   textColor: Colors.white,
-                    //   fontSize: 16.0,
-                    // );
-                    // 显示音量滑块
-                    // setState(() {
-                    //   chewieController.showBrightnessSlider = true;
-                    // });
-                    // chewieController.startBrightnessSliderTimer();
-                    // 显示亮度滑块
-                    setState(() {
-                      showBrightnessSlider = true;
-                    });
-
-                    // 启动计时器
-                    _brightnessSliderTimer?.start();
-                  } else if (touchX > (2 * screenWidth / 3)) {
-                    // 右侧 1/3 区域：调整音量
-                    double delta = details.primaryDelta ?? 0;
-                    // double _volume =
-                    //     chewieController.videoPlayerController.value.volume;
-                    double _volume = 0.0;
-                    if (delta < 0) {
-                      // 上滑增加音量
-                      _volume = 0.005;
-                    } else if (delta > 0) {
-                      // 下滑减少音量
-                      _volume = -0.005;
-                    }
-
-                    // 设置音量
-                    double nextVolume =
-                        chewieController.setSystemVolume!(_volume);
-                    // VolumeViewController volumeViewController = VolumeViewController();
-                    // volumeExample.getController()?.sendMessageToOhosView('0.0');
-                    // 显示音量变化提示
-                    // Fluttertoast.showToast(
-                    //   msg: '音量: ${(nextVolume / 15 * 100).toStringAsFixed(0)}%',
-                    //   toastLength: Toast.LENGTH_SHORT,
-                    //   gravity: ToastGravity.CENTER,
-                    //   timeInSecForIosWeb: 1,
-                    //   backgroundColor: Colors.black.withOpacity(0.7),
-                    //   textColor: Colors.white,
-                    //   fontSize: 16.0,
-                    // );
-
-                    // 显示音量滑块
-                    setState(() {
-                      chewieController.showVolumeSlider = true;
-                    });
-                    // chewieController.startVolumeSliderTimer();
                   }
+                },
+                onVerticalDragEnd: (_) {
+                  // 结束垂直滑动状态
+                  setState(() {
+                    chewieController.isVerticalDragging = false;
+                  });
                 },
                 child: Stack(children: [
                   buildPlayerWithControls(chewieController, context),
-                  if (false && chewieController.showVolumeSlider)
-                    Positioned(
-                      bottom: 100, // 悬浮在音量按钮上方
-                      right: 20, // 靠近音量按钮
-                      child: Container(
-                        height: 200, // 增加高度
-                        width: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: RotatedBox(
-                          quarterTurns: 3, // 旋转270度，使Slider变为纵向
-                          child: SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 4, // 调整轨道高度
-                              thumbShape: RoundSliderThumbShape(
-                                  enabledThumbRadius: 8), // 调整滑块大小
-                              overlayShape: RoundSliderOverlayShape(
-                                  overlayRadius: 12), // 调整滑块点击区域大小
-                            ),
-                            child: Slider(
-                              value: chewieController
-                                  .videoPlayerController.value.volume,
-                              min: 0.0,
-                              max: 1.0,
-                              onChanged: (value) {
-                                chewieController.setVolume(value);
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  // Visibility(
-                  //   visible: false&&chewieController.danmakuOn,
-                  //   child: Positioned.fill(
-                  //     child: DanmakuScreen(
-                  //       key: chewieController.danmuKey,
-                  //       createdController: (DanmakuController e) {
-                  //         chewieController.danmakuController = e;
-                  //       },
-                  //       option: DanmakuOption(
-                  //         opacity: chewieController.opacity,
-                  //         fontSize: chewieController.fontSize,
-                  //         fontWeight:chewieController.fontWeight,
-                  //         duration: chewieController.duration,
-                  //         showStroke: chewieController.showStroke,
-                  //         // massiveMode: chewieController.massiveMode,
-                  //         hideScroll: chewieController.hideScroll,
-                  //         hideTop: chewieController.hideTop,
-                  //         hideBottom: chewieController.hideBottom,
-                  //         // safeArea: chewieController.safeArea,
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
+
                   // Then inside your build method:
                   if (showBrightnessSlider)
                     Positioned(
@@ -738,4 +745,3 @@ class _PlayerWithControlsState extends State<PlayerWithControls> {
     });
   }
 }
-

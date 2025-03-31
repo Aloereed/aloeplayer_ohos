@@ -278,6 +278,16 @@ class HistoryService {
     ''', [positionMs, DateTime.now().toIso8601String(), filePath]);
   }
 
+  // 快速记录媒体总时长（无需加载完整对象）
+  Future<void> updateDuration(String filePath, int durationMs) async {
+    final db = await database;
+    await db.rawUpdate('''
+      UPDATE $_tableName
+      SET durationMs = ?
+      WHERE filePath = ?
+    ''', [durationMs, filePath]);
+  }
+
   // 检查文件是否存在于历史记录中
   Future<bool> exists(String filePath) async {
     final db = await database;

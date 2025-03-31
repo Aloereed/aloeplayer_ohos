@@ -71,7 +71,11 @@ export default class FfmpegPlugin implements FlutterPlugin {
             break;
           case "getass":
             console.info("getassstart");
-            that.api.getass(result, call.argument("path") as string, call.argument("type") as string, call.argument("output"));
+            that.api.getass(result, call.argument("path") as string, call.argument("type") as string, call.argument("output"),'0');
+            break;
+          case "getasstrack":
+            console.info("getassstarttrack");
+            that.api.getass(result, call.argument("path") as string, call.argument("type") as string, call.argument("output"), call.argument("track") as string);
             break;
           case "tomp4":
             console.info("tomp4 start");
@@ -82,6 +86,16 @@ export default class FfmpegPlugin implements FlutterPlugin {
             break;
           case "getVideoDurationMs":
             that.api.getVideoDurationMs(result, call.argument("path") as string);
+            break;
+          case "getVideoHDRInfo":
+            console.error("[ffprobe] getVideoHDRInfo start");
+            that.api.getVideoHDRInfo(result, call.argument("path") as string);
+            break;
+          case "getSubtitleTracks":
+            that.api.getSubtitleTracks(result, call.argument("path") as string);
+            break;
+          case "getAudioTracks":
+            that.api.getAudioTracks(result, call.argument("path") as string);
             break;
           case "openFileManager":
             that.api.openFileManager(result);
@@ -256,7 +270,7 @@ function uriToPath(uri: string): string {
   return path;
 }
 @Concurrent
-async function StartExtractAss(command: string, typ: string, output: string): Promise<void> {
+async function StartExtractAss(command: string, typ: string, output: string, track: string): Promise<void> {
   emitter.on({ eventId: 1 }, () => {
     emitter.off(1)
   });
@@ -273,7 +287,7 @@ async function StartExtractAss(command: string, typ: string, output: string): Pr
   };
 
   const options: FFmpegCommandOptions = {
-    cmds: ['ffmpeg', '-i', command, '-map', '0:s:0', output + "." + typ,'-y'], // 替换为实际的 FFmpeg 命令
+    cmds: ['ffmpeg', '-i', command, '-map',`0:s:${track}`, output + "." + typ,'-y'], // 替换为实际的 FFmpeg 命令
     onFFmpegProgress,
     onFFmpegFail,
     onFFmpegSuccess,
@@ -501,9 +515,9 @@ class FfmpegApi {
   }
 
 
-  getass(result: MethodResult, path: string, typ: string, output: string) {
+  getass(result: MethodResult, path: string, typ: string, output: string, track: string) {
     let command = `./getsrt "${path}" "${path}"`;
-    this.task1 = new taskpool.Task(StartExtractAss, path, typ, output);
+    this.task1 = new taskpool.Task(StartExtractAss, path, typ, output, track);
     taskpool.execute(this.task1, taskpool.Priority.LOW);
     let uri: string = '';
     // 请确保 getContext(this) 返回结果为 UIAbilityContext
@@ -641,6 +655,39 @@ class FfmpegApi {
       result.success(duration);
     } catch (error) {
       result.error("UNAVAILABLE", "Failed to get video duration", error);
+    }
+  }
+  getVideoHDRInfo(result: MethodResult, path: string) {
+    console.error("[ffprobe] getVideoHDRInfo start");
+    let hdrinfo = '';
+    try {
+      console.error("[ffprobe] getVideoHDRInfo start");
+      hdrinfo = libAddon.GetVideoHDRInfo(path);
+      console.error(`[ffprobe] getVideoHDRInfo end: ${hdrinfo}`);
+      result.success(hdrinfo);
+    } catch (error) {
+      console.error("[ffprobe] getVideoHDRInfo error");
+      result.error("UNAVAILABLE", "Failed to get video hdr", error);
+    }
+  }
+  getSubtitleTracks(result: MethodResult, path: string) {
+    let SubtitleTracks = '';
+    try {
+      console.log("[ffprobe] getSubtitleTracks start");
+      SubtitleTracks = libAddon.GetSubtitleTracks(path);
+      result.success(SubtitleTracks);
+    } catch (error) {
+      result.error("UNAVAILABLE", "Failed to get video subinfo", error);
+    }
+  }
+  getAudioTracks(result: MethodResult, path: string) {
+    let audioTracks = '';
+    try {
+      console.log("[ffprobe] getAudioTracks start");
+      audioTracks = libAddon.GetAudioTracks(path);
+      result.success(audioTracks);
+    } catch (error) {
+      result.error("UNAVAILABLE", "Failed to get video audioinfo", error);
     }
   }
   openFileManager(result: MethodResult) {

@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-22 17:15:01
+ * @LastEditTime: 2025-03-26 16:31:39
  * @Description: file content
  */
 /*
@@ -75,6 +75,105 @@ void main() async {
     androidNotificationChannelName: 'Audio playback',
     androidNotificationOngoing: true,
   );
+  ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0.0, end: 1.0),
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) {
+            return Opacity(
+              opacity: value,
+              child: Transform.scale(
+                scale: 0.9 + (0.1 * value),
+                child: child,
+              ),
+            );
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 自定义加载动画
+              SizedBox(
+                width: 70,
+                height: 70,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // 背景圆圈
+                    SizedBox(
+                      width: 70,
+                      height: 70,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white.withOpacity(0.15)),
+                        strokeWidth: 2,
+                      ),
+                    ),
+                    // 主要进度指示器
+                    SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white.withOpacity(0.8)),
+                        strokeWidth: 3,
+                      ),
+                    ),
+                    // 中心小圆点
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 25),
+              // 优雅的文字设计
+              Text(
+                "视频准备中",
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.95),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w200,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              const SizedBox(height: 10),
+              // 底部提示文本，带有半透明背景
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.1), width: 1),
+                ),
+                child: Text(
+                  "高品质视频播放体验即将呈现",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w300,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  };
 
   runApp(
     ChangeNotifierProvider(
@@ -1057,7 +1156,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<String> getPlaylist(String path) async {
-    List<String> results = [  ];
+    List<String> results = [];
     //提取文件夹路径
     if (!await _settingsService.getUsePlaylist()) {
       return '';
@@ -1066,7 +1165,7 @@ class _HomeScreenState extends State<HomeScreen>
       return '';
     }
     String folderPath = path.substring(0, path.lastIndexOf('/'));
-    List<String> excludeExts = ['ux_store', 'srt', 'ass', 'jpg','pdf','aac'];
+    List<String> excludeExts = ['ux_store', 'srt', 'ass', 'jpg', 'pdf', 'aac'];
     // 如果文件夹位于 /storage/Users/currentUser/Download/com.aloereed.aloeplayer/下，打开该文件夹
     if (folderPath.startsWith(
         '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/')) {
@@ -1076,7 +1175,8 @@ class _HomeScreenState extends State<HomeScreen>
       // 把<文件名, 文件路径>添加到_playlist中
       for (FileSystemEntity file in files) {
         if (file is File) {
-          if (excludeExts.contains(file.path.split('.').last)||file.path==path) {
+          if (excludeExts.contains(file.path.split('.').last) ||
+              file.path == path) {
             continue;
           }
           results.add(pathToUri(file.path));
@@ -1088,33 +1188,88 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  void startPlayerPage(BuildContext context) async {
-    if (await _settingsService.getUseFfmpegForPlay() != 4) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PlayerTab(
-            key: ValueKey(_openfile),
-            toggleFullScreen: _toggleFullScreen,
-            isFullScreen: _isFullScreen,
-            getopenfile: _getopenfile,
-            openfile: _openfile,
-            setHomeWH: setHomeWH,
+  Future<bool> _getHdr(File file) async {
+    try {
+      // 调用原生方法获取HDR信息的JSON字符串
+      String filePath = file.path;
+      // 调用原生方法获取HDR信息的JSON字符串
+      if (file.path.endsWith('.lnk')) {
+        // 读取文件内容
+        filePath = await file.readAsString();
+      }
+      final _ffmpegplatform =
+          const MethodChannel('samples.flutter.dev/ffmpegplugin');
+      final String hdrJson = await _ffmpegplatform
+              .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
+          '';
+
+      // 如果返回的JSON字符串为空，默认为非HDR
+      if (hdrJson.isEmpty) {
+        print('获取HDR信息失败：返回空JSON');
+        return false;
+      }
+
+      // 解析JSON字符串
+      try {
+        final Map<String, dynamic> data = json.decode(hdrJson);
+
+        // 提取isHDR字段
+        final bool isHdr = data['isHDR'] ?? false;
+
+        print('视频HDR状态: ${isHdr ? "是HDR" : "非HDR"}');
+        return isHdr;
+      } catch (e) {
+        print('解析HDR JSON出错: $e');
+        print('原始JSON: $hdrJson');
+        return false;
+      }
+    } catch (e) {
+      print('获取HDR信息时发生错误: $e');
+      return false;
+    }
+  }
+
+  void startPlayerPage(BuildContext context, {bool forceHdr = false}) async {
+    final hdrForHdr = await _settingsService.getHdrForHdr();
+    bool isHdr = false;
+    try {
+      isHdr = await _getHdr(File(_openfile));
+    } catch (e) {
+      isHdr = false;
+    }
+    if (await _settingsService.getUseFfmpegForPlay() != 4 &&
+        !forceHdr &&
+        !(isHdr && hdrForHdr)) {
+      // 使用 PageRouteBuilder 创建淡入淡出效果
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              FadeTransition(
+            opacity: animation,
+            // 使用 PlayerTab 本身负责显示加载状态
+            child: PlayerTab(
+              key: ValueKey(_openfile),
+              toggleFullScreen: _toggleFullScreen,
+              isFullScreen: _isFullScreen,
+              getopenfile: _getopenfile,
+              openfile: _openfile,
+              setHomeWH: setHomeWH,
+            ),
           ),
+          transitionDuration: const Duration(milliseconds: 300),
         ),
       );
     } else {
-      if(_openfile.contains('http')){
+      if (_openfile.contains('http')) {
         // 弹出通知，流心视频方式不支持播放网络视频
         Fluttertoast.showToast(
-          msg: "流心视频方式不支持播放网络视频",
-          toastLength: Toast.LENGTH_SHORT,
-          gravity: ToastGravity.CENTER,
-          timeInSecForIosWeb: 1,
-          backgroundColor: Colors.red,
-          textColor: Colors.white,
-          fontSize: 16.0
-        );
+            msg: "流心视频方式不支持播放网络视频",
+            toastLength: Toast.LENGTH_SHORT,
+            gravity: ToastGravity.CENTER,
+            timeInSecForIosWeb: 1,
+            backgroundColor: Colors.red,
+            textColor: Colors.white,
+            fontSize: 16.0);
         return;
       }
       final _platform = const MethodChannel('samples.flutter.dev/hdrplugin');
@@ -1123,8 +1278,10 @@ class _HomeScreenState extends State<HomeScreen>
       if (_openfile.endsWith('.lnk')) {
         waitToStart = File(_openfile).readAsStringSync();
       }
-      _platform.invokeMethod<String>(
-          'createNewWindow', {'path': pathToUri(waitToStart),'uris':await getPlaylist(waitToStart)});
+      _platform.invokeMethod<String>('createNewWindow', {
+        'path': pathToUri(waitToStart),
+        'uris': await getPlaylist(waitToStart)
+      });
     }
   }
 

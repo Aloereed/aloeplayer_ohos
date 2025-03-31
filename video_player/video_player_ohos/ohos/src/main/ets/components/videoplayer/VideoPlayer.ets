@@ -325,7 +325,7 @@ export class VideoPlayer {
             mediaImage: this.pixelMap,
             artist: this.artist ?? "正在播放",
             duration: this.duration, // 资源的时长，以ms为单位
-            lyric:this.lrc,
+            // lyric:this.lrc,
         }
         this.session
             .setAVMetadata(metadata)
@@ -517,6 +517,12 @@ export class VideoPlayer {
                 } else {
                     this.avPlayer.fdSrc = this.rawFile!
                 }
+                // /// 网络直播视频必须设置之后才能正常缓存
+                // let playbackStrategy: media.PlaybackStrategy = { preferredHdr: false}
+                // // 设置媒体来源和播放策略
+                // await this.avPlayer.setPlaybackStrategy(
+                //     playbackStrategy
+                // )
             } else {
                 let mediaSource: media.MediaSource =
                     media.createMediaSourceWithUrl(this.url, this.headers)

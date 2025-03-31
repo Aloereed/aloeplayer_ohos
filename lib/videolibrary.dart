@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -24,10 +25,267 @@ import 'package:path_provider/path_provider.dart';
 import 'history_page.dart';
 import 'screens/cast_screen_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'history_service.dart';
 
 // 常量键值
 const String sortTypeKey = 'sort_type';
 const String sortOrderKey = 'sort_order';
+
+Future<Map<int, String>> _getSubtitleTracks(String filePath) async {
+  final _platform = MethodChannel('samples.flutter.dev/ffmpegplugin');
+  final subtitleTracksJson = await _platform
+          .invokeMethod<String>('getSubtitleTracks', {'path': filePath}) ??
+      '';
+  print("[ffprobe] subtitleTracksJson: $subtitleTracksJson");
+  return parseSubtitleTracks(subtitleTracksJson, useOriginalIndices: false);
+}
+
+class _SubtitleTracksSelector extends StatefulWidget {
+  final Map<int, String> subtitleTracks;
+  final File file;
+  final VoidCallback onExtractComplete;
+  final Function(String) onError;
+  final SettingsService settingsService;
+
+  const _SubtitleTracksSelector({
+    Key? key,
+    required this.subtitleTracks,
+    required this.file,
+    required this.onExtractComplete,
+    required this.onError,
+    required this.settingsService,
+  }) : super(key: key);
+
+  @override
+  _SubtitleTracksSelectorState createState() => _SubtitleTracksSelectorState();
+}
+
+class _SubtitleTracksSelectorState extends State<_SubtitleTracksSelector> {
+  int? selectedTrack;
+  bool extractAllTracks = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default to first track
+    selectedTrack = widget.subtitleTracks.keys.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('请选择要抽取的字幕轨道：'),
+        SizedBox(height: 16),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey[700]!
+                    : Colors.grey[300]!),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.grey[800]!.withOpacity(0.7)
+                : Colors.white.withOpacity(0.7),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: selectedTrack,
+              isExpanded: true,
+              icon: Icon(Icons.arrow_drop_down,
+                  color: Theme.of(context).primaryColor),
+              dropdownColor: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey[800]
+                  : Colors.white,
+              items: widget.subtitleTracks.entries.map((entry) {
+                return DropdownMenuItem<int>(
+                  value: entry.key,
+                  child: Text("轨道 ${entry.key}: ${entry.value}"),
+                );
+              }).toList(),
+              onChanged: (int? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    selectedTrack = newValue;
+                  });
+                }
+              },
+            ),
+          ),
+        ),
+        SizedBox(height: 16),
+        CheckboxListTile(
+          title: Text('抽取所有字幕轨道'),
+          value: extractAllTracks,
+          onChanged: (value) {
+            setState(() {
+              extractAllTracks = value ?? false;
+            });
+          },
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          activeColor: Theme.of(context).primaryColor,
+        ),
+        SizedBox(height: 8),
+        Text(
+          '提示: 抽取SRT字幕时会同时输出所有字幕流',
+          style: TextStyle(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey[400]
+                  : Colors.grey[600]),
+        ),
+        SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text('取消',
+                  style: TextStyle(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[400]
+                          : Colors.grey[700])),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                _showProgressDialog(context);
+                try {
+                  if (extractAllTracks) {
+                    await _extractAllSubtitles(widget.file.path);
+                  } else if (selectedTrack != null) {
+                    await _extractSingleSubtitle(
+                        widget.file.path, selectedTrack!);
+                  }
+                  widget.onExtractComplete();
+                } catch (e) {
+                  widget.onError(e.toString());
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              child: Text(
+                '开始抽取',
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _showProgressDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: AlertDialog(
+            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                ? Colors.grey[900]!.withOpacity(0.9)
+                : Colors.white.withOpacity(0.9),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(height: 20),
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      Theme.of(context).primaryColor),
+                ),
+                SizedBox(height: 24),
+                Text(
+                  extractAllTracks
+                      ? '正在抽取所有字幕轨道...'
+                      : '正在抽取字幕轨道 $selectedTrack...',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                SizedBox(height: 10),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _extractSingleSubtitle(String filePath, int trackIndex) async {
+    String realFilePath = filePath;
+    if (filePath.endsWith('.lnk')) {
+      realFilePath = File(filePath).readAsStringSync();
+    }
+
+    final _platform = MethodChannel('samples.flutter.dev/ffmpegplugin');
+
+    // 使用相对路径
+    String directoryPath = path.dirname(filePath);
+    String fileName = path.basenameWithoutExtension(filePath);
+    String trackName = widget.subtitleTracks[trackIndex] ?? "subtitle";
+
+    if (await widget.settingsService.getExtractAssSubtitle()) {
+      await _platform.invokeMethod<String>('getasstrack', {
+        "path": realFilePath,
+        "type": "ass",
+        "output": path.join(directoryPath, "${fileName}_${trackName}"),
+        "track": "$trackIndex"
+      });
+    } else {
+      await _platform.invokeMethod<String>('getassold', {
+        "path": realFilePath,
+        "type": "srt",
+        "output": filePath,
+      });
+    }
+  }
+
+  Future<void> _extractAllSubtitles(String filePath) async {
+    if (filePath.endsWith('.lnk')) {
+      filePath = File(filePath).readAsStringSync();
+    }
+
+    String directoryPath = path.dirname(filePath);
+    String fileName = path.basenameWithoutExtension(filePath);
+
+    final _platform = MethodChannel('samples.flutter.dev/ffmpegplugin');
+
+    if (await widget.settingsService.getExtractAssSubtitle()) {
+      for (var entry in widget.subtitleTracks.entries) {
+        int key = entry.key;
+        String value = entry.value;
+
+        await _platform.invokeMethod<String>('getasstrack', {
+          "path": filePath,
+          "type": "ass",
+          "output": path.join(directoryPath, "${fileName}_${value}"),
+          "track": "$key"
+        });
+        // 休息1秒，避免过快请求
+        await Future.delayed(Duration(seconds: 1));
+      }
+    } else {
+      await _platform.invokeMethod<String>('getsrtold', {
+        "path": filePath,
+        "type": "srt",
+      });
+    }
+  }
+}
 
 // import 'mpvplayer.dart';
 // import 'package:path/path.dart';
@@ -71,12 +329,19 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   // 添加缓存
   Map<String, Uint8List?> _thumbnailCache = {};
   Map<String, Duration?> _durationCache = {};
+  Map<String, bool?> _hdrCache = {};
   final SettingsService _settingsService = SettingsService();
   final FavoritesDatabase _favoritesDb = FavoritesDatabase.instance;
   Map<String, bool> _favoriteStatus = {};
   bool _showOnlyFavorites = false;
   bool isFFmpeged = false;
   bool disableThumbnail = false;
+  final historyService = HistoryService();
+  // 是否处于多选模式
+  bool _isMultiSelectMode = false;
+
+// 存储已选中的文件
+  Set<FileSystemEntity> _selectedItems = {};
 
   // 初始化方法，在类初始化时调用
   Future<void> initPreferences() async {
@@ -509,19 +774,29 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     await _ensureVideoDirectoryExists();
     // 创建实例
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
-// 调用方法 getBatteryLevel
-    String uri = await _platform.invokeMethod<String>('persistPermission', {
+    // 调用方法 persistPermission
+    String uriString = await _platform.invokeMethod<String>(
+            'persistPermission', {
           "exts": '视频文件|.mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,.rmvb,.wmv,.ts'
         }) ??
         '';
-    if (uri.startsWith('file://docs')) {
-      // 删除file://docs并解析unicode码
-      uri = Uri.decodeFull(uri.substring(11));
-    }
 
     // 检查是否选择了文件
-    if (uri != '') {
-      await _createLinkFile(uri);
+    if (uriString.isNotEmpty) {
+      // 分割多个URI
+      List<String> uris = uriString.split('|||');
+
+      // 处理每个URI
+      for (String uri in uris) {
+        String processedUri = uri;
+        if (processedUri.startsWith('file://docs')) {
+          // 删除file://docs并解析unicode码
+          processedUri = Uri.decodeFull(processedUri.substring(11));
+        }
+
+        // 为每个选中的文件创建链接
+        await _createLinkFile(processedUri);
+      }
     } else {
       // 用户取消了选择
       print('用户取消了文件选择');
@@ -884,14 +1159,14 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     // 从file.path提取文件名
     String fileName = path.basename(file.path);
     String filePath = file.path;
+    String realFilePath = file.path;
     if (_thumbnailCache.containsKey(filePath)) {
       return _thumbnailCache[filePath];
     }
     // 检查file是否是".lnk"文件
     if (file.path.endsWith('.lnk')) {
       // 读取文件内容
-      filePath = await file.readAsString();
-      fileName = path.basename(filePath);
+      realFilePath = await file.readAsString();
     }
     // 尝试读取$_thumbnailPath/$fileName.nothumbnail
     String thumbnailPath = '$_thumbnailPath/$fileName.nothumbnail';
@@ -912,12 +1187,18 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       return result;
     }
 
-    final thumbnail = await VideoThumbnailOhos.thumbnailData(
-      video: filePath,
-      imageFormat: ImageFormat.JPEG,
-      maxWidth: 128, // 缩略图的最大宽度
-      quality: 25, // 缩略图的质量 (0-100)
-    );
+    Uint8List? thumbnail;
+    try {
+      thumbnail = await VideoThumbnailOhos.thumbnailData(
+        video: realFilePath,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 128, // 缩略图的最大宽度
+        quality: 25, // 缩略图的质量 (0-100)
+      );
+    } catch (e) {
+      thumbnail = null;
+      print("获取缩略图失败: $e");
+    }
     _thumbnailCache[filePath] = thumbnail;
 
     try {
@@ -936,6 +1217,57 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     return thumbnail;
   }
 
+  /// 检查视频文件是否为HDR格式
+  Future<bool> _getHdr(File file) async {
+    if (disableThumbnail) {
+      return false;
+    }
+    try {
+      String filePath = file.path;
+      if (_hdrCache.containsKey(filePath)) {
+        return _hdrCache[filePath] ?? false;
+      }
+      // 调用原生方法获取HDR信息的JSON字符串
+      if (file.path.endsWith('.lnk')) {
+        // 读取文件内容
+        filePath = await file.readAsString();
+      }
+      final _ffmpegplatform =
+          const MethodChannel('samples.flutter.dev/ffmpegplugin');
+      final String hdrJson = await _ffmpegplatform
+              .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
+          '';
+
+      // 如果返回的JSON字符串为空，默认为非HDR
+      if (hdrJson.isEmpty) {
+        print('获取HDR信息失败：返回空JSON');
+        _hdrCache[file.path] = false;
+        return false;
+      }
+
+      // 解析JSON字符串
+      try {
+        final Map<String, dynamic> data = json.decode(hdrJson);
+
+        // 提取isHDR字段
+        final bool isHdr = data['isHDR'] ?? false;
+
+        print('视频HDR状态: ${isHdr ? "是HDR" : "非HDR"}');
+        _hdrCache[file.path] = isHdr;
+        return isHdr;
+      } catch (e) {
+        print('解析HDR JSON出错: $e');
+        print('原始JSON: $hdrJson');
+        _hdrCache[file.path] = false;
+        return false;
+      }
+    } catch (e) {
+      print('获取HDR信息时发生错误: $e');
+      _hdrCache[file.path] = false;
+      return false;
+    }
+  }
+
   // 获取视频时长
   Future<Duration> _getVideoDuration(File file) async {
     if (disableThumbnail) {
@@ -950,19 +1282,20 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     // // 从元数据中提取视频时长
     // int durationInMilliseconds = metadata['durationMs'];
     String filePath = file.path;
+    String realFilePath = file.path;
     if (_durationCache.containsKey(filePath)) {
       return _durationCache[filePath] ?? Duration.zero;
     }
     // 检查file是否是".lnk"文件
     if (file.path.endsWith('.lnk')) {
       // 读取文件内容
-      filePath = await file.readAsString();
-      _settingsService.activatePersistPermission(pathToUri(filePath));
+      realFilePath = await file.readAsString();
+      _settingsService.activatePersistPermission(pathToUri(realFilePath));
     }
     final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
     // 调用方法 getBatteryLevel
     final result = await _platform
-        .invokeMethod<int>('getVideoDurationMs', {"path": filePath});
+        .invokeMethod<int>('getVideoDurationMs', {"path": realFilePath});
 
     // 将毫秒转换为 Duration 对象
     Duration duration = Duration(milliseconds: result ?? 0);
@@ -1183,474 +1516,539 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Scaffold(
-      backgroundColor: Theme.of(context).brightness == Brightness.dark
-          ? Color(0xFF121212)
-          : Color(0xFFF5F5F5),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? Color(0xFF121212)
-            : Color(0xFFF5F5F5),
-        titleSpacing: 0,
-        title: AnimatedContainer(
-          duration: Duration(milliseconds: 300),
-          width: double.infinity,
-          height: 40,
-          margin: EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.grey[800]
-                : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 5,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Center(
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: '搜索视频...',
-                border: InputBorder.none,
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: Theme.of(context).brightness != Brightness.dark
-                      ? Colors.grey[800]!.withOpacity(0.7)
-                      : Colors.white.withOpacity(0.7),
-                ),
-                contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                hintStyle: TextStyle(color: Colors.grey),
-              ),
-              style: TextStyle(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white
-                    : Colors.black87,
-              ),
-              onChanged: _filterItems,
-            ),
-          ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: Colors.transparent),
-        ),
-        actions: [
-          AnimatedSwitcher(
-            duration: Duration(milliseconds: 300),
-            child: IconButton(
-              key: ValueKey<bool>(_isGridView),
-              icon: Icon(
-                _isGridView ? Icons.list_rounded : Icons.grid_view_rounded,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white
-                    : Colors.black,
-              ),
-              tooltip: _isGridView ? "列表视图" : "网格视图",
-              onPressed: () {
-                setState(() {
-                  _isGridView = !_isGridView;
-                });
-              },
-            ),
-          ),
-          AnimatedSwitcher(
-            duration: Duration(milliseconds: 300),
-            child: IconButton(
-              key: ValueKey<bool>(_showOnlyFavorites),
-              icon: Icon(
-                _showOnlyFavorites ? Icons.favorite : Icons.favorite_border,
-                color: _showOnlyFavorites
-                    ? Colors.red
-                    : Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black,
-              ),
-              tooltip: _showOnlyFavorites ? "显示全部" : "只看收藏",
-              onPressed: () {
-                setState(() {
-                  _showOnlyFavorites = !_showOnlyFavorites;
-                  _applyFavoritesFilter();
-                });
-
-                // 显示切换状态提示
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(_showOnlyFavorites ? '只显示收藏视频' : '显示全部视频'),
-                    behavior: SnackBarBehavior.floating,
-                    width: 160,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              },
-            ),
-          ),
-          Visibility(
-            visible: _currentPath != _videoDirPath,
-            child: IconButton(
-              icon: Icon(Icons.arrow_upward_rounded,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black),
-              tooltip: "返回上级",
-              onPressed: _navigateUp,
-            ),
-          ),
-          PopupMenuButton<String>(
-            icon: Icon(
-              Icons.add_rounded,
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.white
-                  : Colors.black,
-            ),
-            tooltip: "添加视频",
+    return WillPopScope(
+        onWillPop: () async {
+          if (_videoDirPath != _currentPath) {
+            _navigateUp();
+            return true;
+          } else {
+            return true;
+          }
+        },
+        child: Scaffold(
+          backgroundColor: Theme.of(context).brightness == Brightness.dark
+              ? Color(0xFF121212)
+              : Color(0xFFF5F5F5),
+          appBar: AppBar(
             elevation: 0,
-            offset: const Offset(0, 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            color: Colors.transparent,
-            onSelected: (value) {
-              if (value == 'pick') {
-                _pickVideoWithFilePicker();
-              } else if (value == 'folder') {
-                _createNewFolder(context);
-              } else if (value == 'gallery') {
-                _pickVideoWithImagePicker();
-              } else if (value == 'webdav') {
-                _openWebDavFileManager(context);
-              } else if (value == 'softlink') {
-                _pickVideoWithPersist();
-              } else if (value == 'filemanager') {
-                _pickVideoWithFileManager(context);
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                padding: EdgeInsets.zero,
-                value: null,
-                enabled: false,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.black.withOpacity(0.6)
-                            : Colors.white.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white.withOpacity(0.2)
-                              : Colors.white.withOpacity(0.5),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Add files from file manager
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                                vertical: 8.0,
-                              ),
-                              child: Text(
-                                '添加视频',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.white
-                                      : Colors.black87,
-                                ),
-                              ),
-                            ),
-                            const Divider(height: 1, thickness: 1),
-                            // Add files from File Manager
-                            _buildActionMenuItem(
-                              context: context,
-                              title: '从文件管理器添加',
-                              icon: Icons.folder_open_rounded,
-                              iconColor: Colors.lightBlue,
-                              onTap: () {
-                                Navigator.pop(context);
-                                _pickVideoWithFileManager(context);
-                              },
-                            ),
-
-                            // Add local video
-                            _buildActionMenuItem(
-                              context: context,
-                              title: '添加本地视频文件',
-                              icon: Icons.file_upload,
-                              iconColor: Colors.lightBlue,
-                              onTap: () {
-                                Navigator.pop(context);
-                                _pickVideoWithFilePicker();
-                              },
-                            ),
-
-                            // Add local video link
-                            _buildActionMenuItem(
-                              context: context,
-                              title: '添加本地视频文件链接',
-                              icon: Icons.dataset_linked_rounded,
-                              iconColor: Colors.lightBlue,
-                              onTap: () {
-                                Navigator.pop(context);
-                                _pickVideoWithPersist();
-                              },
-                            ),
-
-                            // Create new folder
-                            _buildActionMenuItem(
-                              context: context,
-                              title: '新建文件夹',
-                              icon: Icons.create_new_folder,
-                              iconColor: Colors.lightBlue,
-                              onTap: () {
-                                Navigator.pop(context);
-                                _createNewFolder(context);
-                              },
-                            ),
-
-                            // Pick from gallery
-                            _buildActionMenuItem(
-                              context: context,
-                              title: '从相册选择',
-                              icon: Icons.video_library_rounded,
-                              iconColor: Colors.lightBlue,
-                              onTap: () {
-                                Navigator.pop(context);
-                                _pickVideoWithImagePicker();
-                              },
-                            ),
-
-                            // WebDAV download
-                            _buildActionMenuItem(
-                              context: context,
-                              title: '从WebDAV下载',
-                              icon: Icons.cloud_upload_rounded,
-                              iconColor: Colors.lightBlue,
-                              onTap: () {
-                                Navigator.pop(context);
-                                _openWebDavFileManager(context);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          // IconButton(
-          //   icon: Icon(Icons.refresh_rounded,
-          //       color: Theme.of(context).brightness == Brightness.dark
-          //           ? Colors.white
-          //           : Colors.black),
-          //   tooltip: "刷新",
-          //   onPressed: () {
-          //     // Add loading indicator
-          //     _loadItems();
-          //   },
-          // ),
-          PopupMenuButton<Map<String, dynamic>>(
-            tooltip: '排序方式',
-            icon: Icon(
-              Icons.sort,
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.white
-                  : Colors.black,
-            ),
-            elevation: 0, // Remove default shadow
-            offset: const Offset(0, 10), // Give it some space from the icon
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            color: Colors.transparent, // Make default background transparent
-            onSelected: (Map<String, dynamic> option) {
-              setState(() {
-                _currentSortType = option['type'];
-                _currentSortOrder = option['order'];
-                _sortItems();
-              });
-            },
-            itemBuilder: (context) => [
-              // Custom popup menu with glassmorphism effect
-              PopupMenuItem(
-                padding: EdgeInsets.zero,
-                value: null, // This won't be selectable
-                enabled: false,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.black.withOpacity(0.6)
-                            : Colors.white.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white.withOpacity(0.2)
-                              : Colors.white.withOpacity(0.5),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Title
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                                vertical: 8.0,
-                              ),
-                              child: Text(
-                                '选择排序方式',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.white
-                                      : Colors.black87,
-                                ),
-                              ),
-                            ),
-                            const Divider(height: 1, thickness: 1),
-
-                            // Menu Items
-                            _buildSortMenuItem(
-                              context,
-                              '原始顺序',
-                              SortType.none,
-                              SortOrder.ascending,
-                            ),
-                            _buildSortMenuItem(
-                              context,
-                              '文件名 (A-Z)',
-                              SortType.name,
-                              SortOrder.ascending,
-                            ),
-                            _buildSortMenuItem(
-                              context,
-                              '文件名 (Z-A)',
-                              SortType.name,
-                              SortOrder.descending,
-                            ),
-                            _buildSortMenuItem(
-                              context,
-                              '最早修改日期在前',
-                              SortType.modifiedDate,
-                              SortOrder.ascending,
-                            ),
-                            _buildSortMenuItem(
-                              context,
-                              '最近修改日期在前',
-                              SortType.modifiedDate,
-                              SortOrder.descending,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // 筛选模式提示条
-          if (_showOnlyFavorites)
-            Container(
-              padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              color: Colors.red.withOpacity(0.1),
-              child: Row(
-                children: [
-                  Icon(Icons.favorite, size: 18, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text(
-                    '已筛选：仅显示收藏视频',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.red,
-                    ),
-                  ),
-                  Spacer(),
-                  TextButton(
-                    child: Text('取消筛选'),
-                    onPressed: () {
-                      setState(() {
-                        _showOnlyFavorites = false;
-                        _applyFavoritesFilter();
-                      });
-                    },
-                    style: TextButton.styleFrom(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      foregroundColor: Colors.red,
-                      minimumSize: Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
+            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                ? Color(0xFF121212)
+                : Color(0xFFF5F5F5),
+            titleSpacing: 0,
+            title: AnimatedContainer(
+              duration: Duration(milliseconds: 300),
+              width: double.infinity,
+              height: 40,
+              margin: EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey[800]
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 5,
+                    offset: Offset(0, 2),
                   ),
                 ],
               ),
-            ),
-
-          // 原有主体内容
-          Expanded(
-            child: _isLoading
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text("加载中...", style: TextStyle(color: Colors.grey)),
-                      ],
+              child: Center(
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: '搜索视频...',
+                    border: InputBorder.none,
+                    prefixIcon: Icon(
+                      Icons.search,
+                      color: Theme.of(context).brightness != Brightness.dark
+                          ? Colors.grey[800]!.withOpacity(0.7)
+                          : Colors.white.withOpacity(0.7),
                     ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: () async {
-                      await _loadItems();
-                    },
-                    child: _filteredItems.isEmpty
-                        ? ListView(
-                            // 包装在ListView中使RefreshIndicator在空状态下也能工作
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            children: [_buildEmptyStateView()])
-                        : _isGridView
-                            ? _buildGridView()
-                            : _buildListView(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                    hintStyle: TextStyle(color: Colors.grey),
                   ),
+                  style: TextStyle(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black87,
+                  ),
+                  onChanged: _filterItems,
+                ),
+              ),
+            ),
+            bottom: PreferredSize(
+              preferredSize: Size.fromHeight(1),
+              child: Divider(height: 1, color: Colors.transparent),
+            ),
+            actions: [
+              if (_isMultiSelectMode) ...[
+                IconButton(
+                  icon: Icon(Icons.delete),
+                  tooltip: '删除选中项目',
+                  onPressed: _selectedItems.isEmpty
+                      ? null
+                      : () {
+                          _showDeleteConfirmationDialog();
+                        },
+                ),
+                IconButton(
+                  icon: Icon(Icons.close,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black),
+                  tooltip: '退出多选',
+                  onPressed: () {
+                    setState(() {
+                      _isMultiSelectMode = false;
+                      _selectedItems.clear();
+                    });
+                  },
+                ),
+              ] else ...[
+                if (_searchQuery.isEmpty)
+                  AnimatedSwitcher(
+                    duration: Duration(milliseconds: 300),
+                    child: IconButton(
+                      key: ValueKey<bool>(_isGridView),
+                      icon: Icon(
+                        _isGridView
+                            ? Icons.list_rounded
+                            : Icons.grid_view_rounded,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.black,
+                      ),
+                      tooltip: _isGridView ? "列表视图" : "网格视图",
+                      onPressed: () {
+                        setState(() {
+                          _isGridView = !_isGridView;
+                        });
+                      },
+                    ),
+                  ),
+                AnimatedSwitcher(
+                  duration: Duration(milliseconds: 300),
+                  child: IconButton(
+                    key: ValueKey<bool>(_showOnlyFavorites),
+                    icon: Icon(
+                      _showOnlyFavorites
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                      color: _showOnlyFavorites
+                          ? Colors.red
+                          : Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black,
+                    ),
+                    tooltip: _showOnlyFavorites ? "显示全部" : "只看收藏",
+                    onPressed: () {
+                      setState(() {
+                        _showOnlyFavorites = !_showOnlyFavorites;
+                        _applyFavoritesFilter();
+                      });
+
+                      // 显示切换状态提示
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content:
+                              Text(_showOnlyFavorites ? '只显示收藏视频' : '显示全部视频'),
+                          behavior: SnackBarBehavior.floating,
+                          width: 160,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Visibility(
+                  visible: _currentPath != _videoDirPath,
+                  child: IconButton(
+                    icon: Icon(Icons.arrow_upward_rounded,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.black),
+                    tooltip: "返回上级",
+                    onPressed: _navigateUp,
+                  ),
+                ),
+                if (_searchQuery.isEmpty)
+                  PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.add_rounded,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black,
+                    ),
+                    tooltip: "添加视频",
+                    elevation: 0,
+                    offset: const Offset(0, 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    color: Colors.transparent,
+                    onSelected: (value) {
+                      if (value == 'pick') {
+                        _pickVideoWithFilePicker();
+                      } else if (value == 'folder') {
+                        _createNewFolder(context);
+                      } else if (value == 'gallery') {
+                        _pickVideoWithImagePicker();
+                      } else if (value == 'webdav') {
+                        _openWebDavFileManager(context);
+                      } else if (value == 'softlink') {
+                        _pickVideoWithPersist();
+                      } else if (value == 'filemanager') {
+                        _pickVideoWithFileManager(context);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        padding: EdgeInsets.zero,
+                        value: null,
+                        enabled: false,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: BackdropFilter(
+                            filter:
+                                ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.black.withOpacity(0.6)
+                                    : Colors.white.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.white.withOpacity(0.2)
+                                      : Colors.white.withOpacity(0.5),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Add files from file manager
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16.0,
+                                        vertical: 8.0,
+                                      ),
+                                      child: Text(
+                                        '添加视频',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: Theme.of(context).brightness ==
+                                                  Brightness.dark
+                                              ? Colors.white
+                                              : Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                    const Divider(height: 1, thickness: 1),
+                                    // Add files from File Manager
+                                    _buildActionMenuItem(
+                                      context: context,
+                                      title: '从文件管理器添加',
+                                      icon: Icons.folder_open_rounded,
+                                      iconColor: Colors.lightBlue,
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _pickVideoWithFileManager(context);
+                                      },
+                                    ),
+
+                                    // Add local video
+                                    _buildActionMenuItem(
+                                      context: context,
+                                      title: '添加本地视频文件',
+                                      icon: Icons.file_upload,
+                                      iconColor: Colors.lightBlue,
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _pickVideoWithFilePicker();
+                                      },
+                                    ),
+
+                                    // Add local video link
+                                    _buildActionMenuItem(
+                                      context: context,
+                                      title: '添加本地视频文件链接',
+                                      icon: Icons.dataset_linked_rounded,
+                                      iconColor: Colors.lightBlue,
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _pickVideoWithPersist();
+                                      },
+                                    ),
+
+                                    // Create new folder
+                                    _buildActionMenuItem(
+                                      context: context,
+                                      title: '新建文件夹',
+                                      icon: Icons.create_new_folder,
+                                      iconColor: Colors.lightBlue,
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _createNewFolder(context);
+                                      },
+                                    ),
+
+                                    // Pick from gallery
+                                    _buildActionMenuItem(
+                                      context: context,
+                                      title: '从相册选择',
+                                      icon: Icons.video_library_rounded,
+                                      iconColor: Colors.lightBlue,
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _pickVideoWithImagePicker();
+                                      },
+                                    ),
+
+                                    // WebDAV download
+                                    _buildActionMenuItem(
+                                      context: context,
+                                      title: '从WebDAV下载',
+                                      icon: Icons.cloud_upload_rounded,
+                                      iconColor: Colors.lightBlue,
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _openWebDavFileManager(context);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                // IconButton(
+                //   icon: Icon(Icons.refresh_rounded,
+                //       color: Theme.of(context).brightness == Brightness.dark
+                //           ? Colors.white
+                //           : Colors.black),
+                //   tooltip: "刷新",
+                //   onPressed: () {
+                //     // Add loading indicator
+                //     _loadItems();
+                //   },
+                // ),
+                PopupMenuButton<Map<String, dynamic>>(
+                  tooltip: '排序方式',
+                  icon: Icon(
+                    Icons.sort,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                  ),
+                  elevation: 0, // Remove default shadow
+                  offset:
+                      const Offset(0, 10), // Give it some space from the icon
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  color:
+                      Colors.transparent, // Make default background transparent
+                  onSelected: (Map<String, dynamic> option) {
+                    setState(() {
+                      _currentSortType = option['type'];
+                      _currentSortOrder = option['order'];
+                      _sortItems();
+                    });
+                  },
+                  itemBuilder: (context) => [
+                    // Custom popup menu with glassmorphism effect
+                    PopupMenuItem(
+                      padding: EdgeInsets.zero,
+                      value: null, // This won't be selectable
+                      enabled: false,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.black.withOpacity(0.6)
+                                  : Colors.white.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.white.withOpacity(0.2)
+                                    : Colors.white.withOpacity(0.5),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 8.0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Title
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16.0,
+                                      vertical: 8.0,
+                                    ),
+                                    child: Text(
+                                      '选择排序方式',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? Colors.white
+                                            : Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                  const Divider(height: 1, thickness: 1),
+
+                                  // Menu Items
+                                  _buildSortMenuItem(
+                                    context,
+                                    '原始顺序',
+                                    SortType.none,
+                                    SortOrder.ascending,
+                                  ),
+                                  _buildSortMenuItem(
+                                    context,
+                                    '文件名 (A-Z)',
+                                    SortType.name,
+                                    SortOrder.ascending,
+                                  ),
+                                  _buildSortMenuItem(
+                                    context,
+                                    '文件名 (Z-A)',
+                                    SortType.name,
+                                    SortOrder.descending,
+                                  ),
+                                  _buildSortMenuItem(
+                                    context,
+                                    '最早修改日期在前',
+                                    SortType.modifiedDate,
+                                    SortOrder.ascending,
+                                  ),
+                                  _buildSortMenuItem(
+                                    context,
+                                    '最近修改日期在前',
+                                    SortType.modifiedDate,
+                                    SortOrder.descending,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                IconButton(
+                  icon: Icon(Icons.checklist,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black),
+                  tooltip: '进入多选模式',
+                  onPressed: () {
+                    setState(() {
+                      _isMultiSelectMode = true;
+                      _selectedItems.clear();
+                    });
+                  },
+                ),
+              ],
+            ],
           ),
-        ],
-      ),
-      floatingActionButton: _buildSpeedDial(),
-    );
+          body: Column(
+            children: [
+              // 筛选模式提示条
+              if (_showOnlyFavorites)
+                Container(
+                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  color: Colors.red.withOpacity(0.1),
+                  child: Row(
+                    children: [
+                      Icon(Icons.favorite, size: 18, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text(
+                        '已筛选：仅显示收藏视频',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.red,
+                        ),
+                      ),
+                      Spacer(),
+                      TextButton(
+                        child: Text('取消筛选'),
+                        onPressed: () {
+                          setState(() {
+                            _showOnlyFavorites = false;
+                            _applyFavoritesFilter();
+                          });
+                        },
+                        style: TextButton.styleFrom(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          foregroundColor: Colors.red,
+                          minimumSize: Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // 原有主体内容
+              Expanded(
+                child: _isLoading
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text("加载中...",
+                                style: TextStyle(color: Colors.grey)),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: () async {
+                          await _loadItems();
+                        },
+                        child: _filteredItems.isEmpty
+                            ? ListView(
+                                // 包装在ListView中使RefreshIndicator在空状态下也能工作
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: [_buildEmptyStateView()])
+                            : _isGridView
+                                ? _buildGridView()
+                                : _buildListView(),
+                      ),
+              ),
+            ],
+          ),
+          floatingActionButton: _buildSpeedDial(),
+        ));
   }
 
   Widget _buildEmptyStateView() {
@@ -1712,29 +2110,144 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     );
   }
 
+  void _showDeleteConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('确认删除'),
+        content: Text('确定要删除选中的${_selectedItems.length}个项目吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _deleteSelectedItems();
+            },
+            child: Text('删除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteSelectedItems() async {
+    // 复制一份，避免在迭代过程中修改集合
+    final itemsToDelete = Set<FileSystemEntity>.from(_selectedItems);
+
+    for (var item in itemsToDelete) {
+      try {
+        await item.delete(recursive: item is Directory);
+      } catch (e) {
+        // 处理删除错误
+        print('删除失败: $e');
+      }
+    }
+
+    // 更新界面
+    setState(() {
+      _isMultiSelectMode = false;
+      _selectedItems.clear();
+      // 刷新文件列表（假设你有一个刷新文件列表的函数）
+      _refreshFileList();
+    });
+
+    // 显示删除成功提示
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已删除${itemsToDelete.length}个项目')),
+    );
+  }
+
+// 刷新文件列表的函数（如果你还没有这个函数）
+  void _refreshFileList() {
+    // 根据你的应用逻辑重新加载文件列表
+    _loadItems();
+  }
+
+
+
   Widget _buildGridView() {
+    DeviceInfo di = getDeviceInfo(context);
+    final isTablet = di.isTablet;
+    final isLandscape = di.isLandscape;
+    int ncols = 5;
+    if(isTablet){
+      if(isLandscape){
+        ncols=5;
+      }else{
+        ncols=4;
+      }
+    }else{
+      if(isLandscape){
+        ncols=3;
+      }else{
+        ncols=2;
+      }
+    }
     return AnimatedSwitcher(
       duration: Duration(milliseconds: 300),
       switchInCurve: Curves.easeOut,
       switchOutCurve: Curves.easeIn,
-      child: GridView.builder(
-        cacheExtent: 500,
-        key: ValueKey<String>('grid'),
-        padding: EdgeInsets.all(12),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 0.85,
-        ),
-        itemCount: _filteredItems.length,
-        itemBuilder: (context, index) {
-          final file = _filteredItems[index];
-          if (file is Directory) {
-            return _buildFolderCard(file);
-          }
-          return _buildVideoCard(file);
-        },
+      child: Column(
+        children: [
+          if (_isMultiSelectMode)
+            Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _selectedItems.length == _filteredItems.length &&
+                        _filteredItems.isNotEmpty,
+                    tristate: _selectedItems.isNotEmpty &&
+                        _selectedItems.length < _filteredItems.length,
+                    onChanged: (value) {
+                      setState(() {
+                        if (value == true) {
+                          _selectedItems = Set.from(_filteredItems);
+                        } else {
+                          _selectedItems.clear();
+                        }
+                      });
+                    },
+                  ),
+                  Text('全选'),
+                  Spacer(),
+                  Text('已选择 ${_selectedItems.length} 项'),
+                ],
+              ),
+            ),
+          Expanded(
+            child: GridView.builder(
+              cacheExtent: 500,
+              key: ValueKey<String>('grid'),
+              padding: EdgeInsets.all(12),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: ncols,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.85,
+              ),
+              itemCount: _filteredItems.length,
+              itemBuilder: (context, index) {
+                final file = _filteredItems[index];
+                Widget card;
+                if (file is Directory) {
+                  card = _buildFolderCard(file);
+                } else {
+                  card = _buildVideoCard(file);
+                }
+
+                if (_isMultiSelectMode) {
+                  return _wrapWithCheckbox(card, file);
+                } else {
+                  return card;
+                }
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1744,19 +2257,133 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       duration: Duration(milliseconds: 300),
       switchInCurve: Curves.easeOut,
       switchOutCurve: Curves.easeIn,
-      child: ListView.builder(
-        cacheExtent: 500,
-        key: ValueKey<String>('list'),
-        padding: EdgeInsets.symmetric(vertical: 8),
-        itemCount: _filteredItems.length,
-        itemBuilder: (context, index) {
-          final file = _filteredItems[index];
-          if (file is Directory) {
-            return _buildFolderListItem(file);
-          }
-          return _buildVideoCard(file, isListView: true);
-        },
+      child: Column(
+        children: [
+          if (_isMultiSelectMode)
+            Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _selectedItems.length == _filteredItems.length &&
+                        _filteredItems.isNotEmpty,
+                    tristate: _selectedItems.isNotEmpty &&
+                        _selectedItems.length < _filteredItems.length,
+                    onChanged: (value) {
+                      setState(() {
+                        if (value == true) {
+                          _selectedItems = Set.from(_filteredItems);
+                        } else {
+                          _selectedItems.clear();
+                        }
+                      });
+                    },
+                  ),
+                  Text('全选'),
+                  Spacer(),
+                  Text('已选择 ${_selectedItems.length} 项'),
+                ],
+              ),
+            ),
+          Expanded(
+            child: ListView.builder(
+              cacheExtent: 500,
+              key: ValueKey<String>('list'),
+              padding: EdgeInsets.symmetric(vertical: 8),
+              itemCount: _filteredItems.length,
+              itemBuilder: (context, index) {
+                final file = _filteredItems[index];
+                Widget item;
+                if (file is Directory) {
+                  item = _buildFolderListItem(file);
+                } else {
+                  item = _buildVideoCard(file, isListView: true);
+                }
+
+                if (_isMultiSelectMode) {
+                  return _wrapWithListCheckbox(item, file);
+                } else {
+                  return item;
+                }
+              },
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _wrapWithCheckbox(Widget child, FileSystemEntity file) {
+    final isSelected = _selectedItems.contains(file);
+
+    return Stack(
+      children: [
+        GestureDetector(
+          onTap: () {
+            // 点击时切换选中状态
+            setState(() {
+              if (isSelected) {
+                _selectedItems.remove(file);
+              } else {
+                _selectedItems.add(file);
+              }
+            });
+          },
+          child: child,
+        ),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.8),
+              shape: BoxShape.circle,
+            ),
+            child: Checkbox(
+              value: isSelected,
+              onChanged: (value) {
+                setState(() {
+                  if (value == true) {
+                    _selectedItems.add(file);
+                  } else {
+                    _selectedItems.remove(file);
+                  }
+                });
+              },
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _wrapWithListCheckbox(Widget child, FileSystemEntity file) {
+    return Row(
+      children: [
+        // 添加左侧复选框
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8.0),
+          child: Checkbox(
+            value: _selectedItems.contains(file),
+            onChanged: (value) {
+              setState(() {
+                if (value == true) {
+                  _selectedItems.add(file);
+                } else {
+                  _selectedItems.remove(file);
+                }
+              });
+            },
+          ),
+        ),
+        // 原始的列表项占据剩余空间
+        Expanded(
+          child: child,
+        ),
+      ],
     );
   }
 
@@ -2313,368 +2940,583 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   Widget _buildVideoCard(File file, {bool isListView = false}) {
     final fileName = path.basename(file.path);
-    final videoExtension = path.extension(file.path).toLowerCase();
+    // Modified extension handling for .lnk files
+    String videoExtension = path.extension(file.path).toLowerCase();
+    bool isShortcut = videoExtension == '.lnk';
+
+    // If it's a shortcut (.lnk), try to get the original extension
+    if (isShortcut) {
+      // Extract the original extension before .lnk
+      final nameWithoutLnk = fileName.substring(0, fileName.length - 4);
+      final originalExtension = path.extension(nameWithoutLnk).toLowerCase();
+      if (originalExtension.isNotEmpty) {
+        videoExtension = originalExtension;
+      }
+    }
+
     final heroTag = 'video-${file.path}';
+    // Add this function to get the history progress from HistoryService
+    Future<double> _getHistoryProgress(String filePath) async {
+      Duration duration = await _getVideoDuration(File(filePath));
+      final historyItem = await historyService.getHistoryByPath(filePath);
+      if (historyItem == null || duration.inMilliseconds <= 0) {
+        return 0.0;
+      }
+      // Calculate progress percentage (capped at 98% to indicate not complete)
+      double progress = historyItem.lastPosition / duration.inMilliseconds;
+      print('[history] $filePath $progress');
+      return progress > 0.98 ? 0.98 : progress;
+    }
 
     if (isListView) {
       return RepaintBoundary(
-          child: Hero(
-        tag: heroTag,
-        child: Card(
-          margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: ListTile(
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                width: 70,
-                height: 70,
-                color: Colors.black,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    FutureBuilder<Uint8List?>(
-                      future: _getVideoThumbnail(file),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return Container(
-                            color: Colors.grey.withOpacity(0.2),
-                            child: Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white70),
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                        if (snapshot.hasError || snapshot.data == null) {
-                          return Center(
-                            child: Icon(Icons.movie_outlined,
-                                size: 30, color: Colors.white54),
-                          );
-                        }
-                        return Image.memory(
-                          snapshot.data!,
-                          fit: BoxFit.cover,
-                        );
-                      },
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(4),
-                          ),
-                        ),
-                        child: Text(
-                          videoExtension,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+        child: Hero(
+          tag: heroTag,
+          child: Card(
+            margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            elevation: 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
-            title: Text(
-              fileName,
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: FutureBuilder<Duration?>(
-              future: _getVideoDuration(file),
-              builder: (context, snapshot) {
-                final fileSize = _getFileSize(file);
-                final fileDateString = _getFileDate(file);
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  final hours = '';
-                  final minutes = '00:';
-                  final seconds = '00';
-
-                  return Row(
+            child: ListTile(
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 70,
+                  height: 70,
+                  color: Colors.black,
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Icon(Icons.access_time,
-                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                      SizedBox(width: 4),
-                      Text(
-                        '$hours$minutes$seconds',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.sd_storage,
-                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                      SizedBox(width: 4),
-                      Text(
-                        fileSize,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.date_range,
-                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                      SizedBox(width: 4),
-                      Text(
-                        fileDateString,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
-                  );
-                }
-
-                if (snapshot.hasError || snapshot.data == null) {
-                  final hours = '';
-                  final minutes = '00:';
-                  final seconds = '00';
-
-                  return Row(
-                    children: [
-                      Icon(Icons.access_time,
-                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                      SizedBox(width: 4),
-                      Text(
-                        '$hours$minutes$seconds',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.sd_storage,
-                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                      SizedBox(width: 4),
-                      Text(
-                        fileSize,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.date_range,
-                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                      SizedBox(width: 4),
-                      Text(
-                        fileDateString,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
-                  );
-                }
-
-                final duration = snapshot.data!;
-                final hours =
-                    duration.inHours > 0 ? '${duration.inHours}:' : '';
-                final minutes =
-                    '${(duration.inMinutes % 60).toString().padLeft(2, '0')}:';
-                final seconds =
-                    '${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
-
-                return Row(
-                  children: [
-                    Icon(Icons.access_time,
-                        size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                    SizedBox(width: 4),
-                    Text(
-                      '$hours$minutes$seconds',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    SizedBox(width: 12),
-                    Icon(Icons.sd_storage,
-                        size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                    SizedBox(width: 4),
-                    Text(
-                      fileSize,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    SizedBox(width: 12),
-                    Icon(Icons.date_range,
-                        size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                    SizedBox(width: 4),
-                    Text(
-                      fileDateString,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ],
-                );
-              },
-            ),
-            trailing: IconButton(
-              icon: Icon(Icons.more_vert, color: Colors.grey[600]),
-              onPressed: () => _showVideoOptionsBottomSheet(file),
-            ),
-            onTap: () {
-              widget.getopenfile(file.path);
-              widget.startPlayerPage(context);
-            },
-            onLongPress: () => _showVideoOptionsBottomSheet(file),
-          ),
-        ),
-      ));
-    } else {
-      return RepaintBoundary(
-          child: Hero(
-        tag: heroTag,
-        child: Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: InkWell(
-            onTap: () {
-              widget.getopenfile(file.path);
-              widget.startPlayerPage(context);
-            },
-            onLongPress: () => _showVideoOptionsBottomSheet(file),
-            borderRadius: BorderRadius.circular(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(12),
-                    topRight: Radius.circular(12),
-                  ),
-                  child: AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        FutureBuilder<Uint8List?>(
-                          future: _getVideoThumbnail(file),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return Container(
-                                color: Colors.grey.withOpacity(0.2),
-                                child: Center(
-                                  child: SizedBox(
-                                    width: 30,
-                                    height: 30,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                          Colors.white70),
-                                    ),
+                      FutureBuilder<Uint8List?>(
+                        future: _getVideoThumbnail(file),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Container(
+                              color: Colors.grey.withOpacity(0.2),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white70),
                                   ),
                                 ),
-                              );
+                              ),
+                            );
+                          }
+                          if (snapshot.hasError || snapshot.data == null) {
+                            return Center(
+                              child: Icon(Icons.movie_outlined,
+                                  size: 30, color: Colors.white54),
+                            );
+                          }
+                          return Image.memory(
+                            snapshot.data!,
+                            fit: BoxFit.cover,
+                          );
+                        },
+                      ),
+                      // History progress bar for list view
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: FutureBuilder<double>(
+                          future: _getHistoryProgress(file.path),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData || snapshot.data == 0.0) {
+                              return SizedBox.shrink();
                             }
-                            if (snapshot.hasError || snapshot.data == null) {
-                              return Container(
-                                color: Colors.grey[800],
-                                child: Center(
-                                  child: Icon(Icons.movie_outlined,
-                                      size: 40, color: Colors.white54),
-                                ),
-                              );
-                            }
-                            return Image.memory(
-                              snapshot.data!,
-                              fit: BoxFit.cover,
+                            return Container(
+                              height: 3,
+                              child: LinearProgressIndicator(
+                                value: snapshot.data,
+                                backgroundColor: Colors.grey.withOpacity(0.3),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.redAccent),
+                              ),
                             );
                           },
                         ),
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(4),
+                            ),
+                          ),
+                          child: Text(
+                            videoExtension,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Shortcut indicator for .lnk files
+                      if (isShortcut)
                         Positioned(
-                          top: 8,
-                          right: 8,
+                          top: 0,
+                          right: 0,
                           child: Container(
                             padding: EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 3),
+                                horizontal: 4, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              videoExtension,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                              color: Colors.blue.withOpacity(0.7),
+                              borderRadius: BorderRadius.only(
+                                bottomLeft: Radius.circular(4),
                               ),
                             ),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Center(
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Icon(
-                                Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 30,
-                              ),
+                            child: Icon(
+                              Icons.link,
+                              size: 14,
+                              color: Colors.white,
                             ),
                           ),
                         ),
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: FutureBuilder<Duration?>(
-                            future: _getVideoDuration(file),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState ==
-                                      ConnectionState.waiting ||
-                                  snapshot.hasError ||
-                                  snapshot.data == null) {
-                                return SizedBox();
-                              }
-
-                              final duration = snapshot.data!;
-                              final hours = duration.inHours > 0
-                                  ? '${duration.inHours}:'
-                                  : '';
-                              final minutes =
-                                  '${(duration.inMinutes % 60).toString().padLeft(2, '0')}:';
-                              final seconds =
-                                  '${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
-
-                              return Container(
+                      // HDR indicator for list view
+                      FutureBuilder<bool>(
+                        future: _getHdr(file),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                                  ConnectionState.done &&
+                              snapshot.data == true) {
+                            return Positioned(
+                              top: 0,
+                              left: 0,
+                              child: Container(
                                 padding: EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
+                                    horizontal: 4, vertical: 2),
                                 decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.bottomCenter,
-                                    end: Alignment.topCenter,
-                                    colors: [
-                                      Colors.black.withOpacity(0.7),
-                                      Colors.transparent,
-                                    ],
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.amber.shade700,
+                                        Colors.orange.shade900
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.only(
+                                      bottomRight: Radius.circular(4),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 2,
+                                        offset: Offset(0, 1),
+                                      )
+                                    ]),
+                                child: Text(
+                                  'HDR',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
                                   ),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.access_time,
-                                        size: 12, color: Colors.white70),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      '$hours$minutes$seconds',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
+                              ),
+                            );
+                          }
+                          return SizedBox.shrink();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      fileName,
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: FutureBuilder<Duration?>(
+                future: _getVideoDuration(file),
+                builder: (context, snapshot) {
+                  final fileSize = _getFileSize(file);
+                  final fileDateString = _getFileDate(file);
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    final hours = '';
+                    final minutes = '00:';
+                    final seconds = '00';
+                    return Row(
+                      children: [
+                        Icon(Icons.access_time,
+                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
+                        SizedBox(width: 4),
+                        Text(
+                          '$hours$minutes$seconds',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        SizedBox(width: 12),
+                        Icon(Icons.sd_storage,
+                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
+                        SizedBox(width: 4),
+                        Text(
+                          fileSize,
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        SizedBox(width: 12),
+                        Icon(Icons.date_range,
+                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
+                        SizedBox(width: 4),
+                        Text(
+                          fileDateString,
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
+                    );
+                  }
+                  if (snapshot.hasError || snapshot.data == null) {
+                    final hours = '';
+                    final minutes = '00:';
+                    final seconds = '00';
+                    return Row(
+                      children: [
+                        Icon(Icons.access_time,
+                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
+                        SizedBox(width: 4),
+                        Text(
+                          '$hours$minutes$seconds',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        SizedBox(width: 12),
+                        Icon(Icons.sd_storage,
+                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
+                        SizedBox(width: 4),
+                        Text(
+                          fileSize,
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        SizedBox(width: 12),
+                        Icon(Icons.date_range,
+                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
+                        SizedBox(width: 4),
+                        Text(
+                          fileDateString,
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
+                    );
+                  }
+                  final duration = snapshot.data!;
+                  final hours =
+                      duration.inHours > 0 ? '${duration.inHours}:' : '';
+                  final minutes =
+                      '${(duration.inMinutes % 60).toString().padLeft(2, '0')}:';
+                  final seconds =
+                      '${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
+                  return Row(
+                    children: [
+                      Icon(Icons.access_time,
+                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
+                      SizedBox(width: 4),
+                      Text(
+                        '$hours$minutes$seconds',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      SizedBox(width: 12),
+                      Icon(Icons.sd_storage,
+                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
+                      SizedBox(width: 4),
+                      Text(
+                        fileSize,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      SizedBox(width: 12),
+                      Icon(Icons.date_range,
+                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
+                      SizedBox(width: 4),
+                      Text(
+                        fileDateString,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              trailing: IconButton(
+                icon: Icon(Icons.more_vert, color: Colors.grey[600]),
+                onPressed: () => _showVideoOptionsBottomSheet(file),
+              ),
+              onTap: () {
+                widget.getopenfile(file.path);
+                widget.startPlayerPage(context);
+              },
+              onLongPress: () => _showVideoOptionsBottomSheet(file),
+            ),
+          ),
+        ),
+      );
+    } else {
+      // Grid view layout
+      return RepaintBoundary(
+        child: Hero(
+          tag: heroTag,
+          child: Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: InkWell(
+              onTap: () {
+                widget.getopenfile(file.path);
+                widget.startPlayerPage(context);
+              },
+              onLongPress: () => _showVideoOptionsBottomSheet(file),
+              borderRadius: BorderRadius.circular(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      topRight: Radius.circular(12),
+                    ),
+                    child: Stack(
+                      children: [
+                        AspectRatio(
+                          aspectRatio: 16 / 9,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              FutureBuilder<Uint8List?>(
+                                future: _getVideoThumbnail(file),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return Container(
+                                      color: Colors.grey.withOpacity(0.2),
+                                      child: Center(
+                                        child: SizedBox(
+                                          width: 30,
+                                          height: 30,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                    Colors.white70),
+                                          ),
+                                        ),
                                       ),
+                                    );
+                                  }
+                                  if (snapshot.hasError ||
+                                      snapshot.data == null) {
+                                    return Container(
+                                      color: Colors.grey[800],
+                                      child: Center(
+                                        child: Icon(Icons.movie_outlined,
+                                            size: 40, color: Colors.white54),
+                                      ),
+                                    );
+                                  }
+                                  return Image.memory(
+                                    snapshot.data!,
+                                    fit: BoxFit.cover,
+                                  );
+                                },
+                              ),
+                              // Extension tag
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.6),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    videoExtension,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                  ],
+                                  ),
+                                ),
+                              ),
+                              // HDR indicator for grid view (now positioned below shortcut if present)
+                              FutureBuilder<bool>(
+                                future: _getHdr(file),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                          ConnectionState.done &&
+                                      snapshot.data == true) {
+                                    return Positioned(
+                                      top: isShortcut
+                                          ? 36
+                                          : 8, // Position below the shortcut indicator if present
+                                      left: 8,
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 3),
+                                        decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                Colors.amber.shade600,
+                                                Colors.orange.shade900
+                                              ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black38,
+                                                blurRadius: 3,
+                                                offset: Offset(0, 1),
+                                              )
+                                            ]),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.hdr_on_rounded,
+                                                size: 12, color: Colors.white),
+                                            SizedBox(width: 2),
+                                            Text(
+                                              'HDR',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return SizedBox.shrink();
+                                },
+                              ),
+                              Positioned.fill(
+                                child: Center(
+                                  child: Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.5),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Icon(
+                                      Icons.play_arrow_rounded,
+                                      color: Colors.white,
+                                      size: 30,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                child: FutureBuilder<Duration?>(
+                                  future: _getVideoDuration(file),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.connectionState ==
+                                            ConnectionState.waiting ||
+                                        snapshot.hasError ||
+                                        snapshot.data == null) {
+                                      return SizedBox();
+                                    }
+                                    final duration = snapshot.data!;
+                                    final hours = duration.inHours > 0
+                                        ? '${duration.inHours}:'
+                                        : '';
+                                    final minutes =
+                                        '${(duration.inMinutes % 60).toString().padLeft(2, '0')}:';
+                                    final seconds =
+                                        '${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
+                                    return Container(
+                                      padding: EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.bottomCenter,
+                                          end: Alignment.topCenter,
+                                          colors: [
+                                            Colors.black.withOpacity(0.7),
+                                            Colors.transparent,
+                                          ],
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.access_time,
+                                              size: 12, color: Colors.white70),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            '$hours$minutes$seconds',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Add history progress bar below the thumbnail
+                        Positioned(
+                          top: (16 /
+                              9 *
+                              100), // Position right below the 16/9 aspect ratio thumbnail
+                          left: 0,
+                          right: 0,
+                          child: FutureBuilder<double>(
+                            future: _getHistoryProgress(file.path),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData || snapshot.data == 0.0) {
+                                return SizedBox(
+                                    height:
+                                        3); // Keep consistent height even if no progress
+                              }
+                              return Container(
+                                height: 3,
+                                child: LinearProgressIndicator(
+                                  value: snapshot.data,
+                                  backgroundColor: Colors.grey.withOpacity(0.3),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.redAccent),
                                 ),
                               );
                             },
@@ -2683,39 +3525,93 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                       ],
                     ),
                   ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.all(10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          fileName,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  fileName,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isShortcut)
+                                Container(
+                                  margin: EdgeInsets.only(left: 4),
+                                  padding: EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                  child: Icon(
+                                    Icons.link,
+                                    size: 10,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                            ],
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Spacer(),
-                        Text(
-                          _getFileSize(file) + " " + _getFileDate(file),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey[600],
+                          Spacer(),
+                          // Show watched percentage if available
+                          FutureBuilder<double>(
+                            future: _getHistoryProgress(file.path),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData || snapshot.data == 0.0) {
+                                return Text(
+                                  _getFileSize(file) + " " + _getFileDate(file),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey[600],
+                                  ),
+                                );
+                              }
+                              // Display percentage watched
+                              final percentage = (snapshot.data! * 100).toInt();
+                              return Row(
+                                children: [
+                                  Icon(Icons.play_circle_outline,
+                                      size: 10, color: Colors.redAccent),
+                                  SizedBox(width: 2),
+                                  Text(
+                                    '$percentage% 已观看',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.redAccent,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Spacer(),
+                                  Text(
+                                    _getFileSize(file),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ));
+      );
     }
   }
 
@@ -3285,15 +4181,19 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   void _showExtractSubtitleDialog(File file) {
-    int selectedTrack = 1; // 默认选择轨道1
-
+    String filePath = file.path;
+    if (filePath.endsWith('.lnk')) {
+      filePath = file.readAsStringSync();
+    }
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
           child: AlertDialog(
-            backgroundColor: Colors.white.withOpacity(0.9),
+            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                ? Colors.grey[900]!.withOpacity(0.9)
+                : Colors.white.withOpacity(0.9),
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
@@ -3305,160 +4205,79 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                 Text('抽取内挂字幕', style: TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
-            content: StatefulBuilder(
-                builder: (BuildContext context, StateSetter setState) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('请选择要抽取的字幕轨道号：'),
-                  SizedBox(height: 16),
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                      color: Colors.white.withOpacity(0.7),
+            content: FutureBuilder<Map<int, String>>(
+              future: _getSubtitleTracks(filePath),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('正在解析字幕轨道...'),
+                      ],
                     ),
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<int>(
-                        value: selectedTrack,
-                        isExpanded: true,
-                        icon: Icon(Icons.arrow_drop_down,
-                            color: Theme.of(context).primaryColor),
-                        items: List.generate(30, (index) => index + 1)
-                            .map((int value) {
-                          return DropdownMenuItem<int>(
-                            value: value,
-                            child: Text("轨道 $value"),
-                          );
-                        }).toList(),
-                        onChanged: (int? newValue) {
-                          if (newValue != null) {
-                            setState(() {
-                              selectedTrack = newValue;
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Text('确定要抽取该视频的内挂字幕吗？(SRT字幕会抽取全部字幕轨道)',
-                      style: TextStyle(color: Colors.grey[600])),
-                ],
-              );
-            }),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                child: Text('取消', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  // 显示进度对话框
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (BuildContext context) {
-                      return BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: AlertDialog(
-                          backgroundColor: Colors.white.withOpacity(0.9),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(height: 20),
-                              CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                    Theme.of(context).primaryColor),
-                              ),
-                              SizedBox(height: 24),
-                              Text(
-                                '正在抽取字幕轨道 $selectedTrack...',
-                                style: TextStyle(fontWeight: FontWeight.w500),
-                              ),
-                              SizedBox(height: 10),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
                   );
-
-                  try {
-                    final _platform =
-                        const MethodChannel('samples.flutter.dev/ffmpegplugin');
-                    String filePath = file.path;
-
-                    if (file.path.endsWith('.lnk')) {
-                      Navigator.pop(context); // 关闭进度对话框
-                      _showLinkFileErrorDialog();
-                      return;
-                    }
-
-                    if (await _settingsService.getExtractAssSubtitle()) {
-                      await _platform.invokeMethod<String>('getsrt', {
-                        "path": filePath,
-                        "type": "ass",
-                        "track": selectedTrack - 1
-                      });
-                    } else {
-                      await _platform.invokeMethod<String>('getsrtold', {
-                        "path": filePath,
-                        "type": "srt",
-                      });
-                    }
-
-                    // 关闭进度对话框
-                    Navigator.pop(context);
-                    // 显示成功对话框
-                    _showSuccessDialog();
-                  } catch (e) {
-                    // 关闭进度对话框
-                    Navigator.pop(context);
-                    // 显示错误对话框
-                    _showErrorDialog(e.toString());
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                ),
-                child: Text(
-                  '开始抽取',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
+                } else if (snapshot.hasError) {
+                  return Text('解析字幕轨道时出错: ${snapshot.error}');
+                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Text('未找到字幕轨道');
+                } else {
+                  return _SubtitleTracksSelector(
+                    subtitleTracks: snapshot.data!,
+                    file: file,
+                    onExtractComplete: () {
+                      Navigator.pop(context);
+                      _showSuccessDialog();
+                    },
+                    onError: (error) {
+                      Navigator.pop(context);
+                      _showErrorDialog(error);
+                    },
+                    settingsService: _settingsService,
+                  );
+                }
+              },
+            ),
           ),
         );
       },
     );
   }
 
-  void _showExtractAudioTrackDialog(File file) {
-    int selectedTrack = 1; // 默认选择轨道1
+  void _showExtractAudioTrackDialog(File file) async {
+    // 获取音轨信息
+    String realFilePath = file.path;
+    if (file.path.endsWith('.lnk')) {
+      realFilePath = file.readAsStringSync();
+    }
+    final _ffmpegplatform =
+        const MethodChannel('samples.flutter.dev/ffmpegplugin');
+    // print("[ffprobe] getaudio" +
+    //     (await _ffmpegplatform.invokeMethod<String>(
+    //             'getAudioTracks', {'path': widget.openfile}) ??
+    //         ''));
+    // print("[ffprobe] gethdr");
+    final audiotrackjson = await _ffmpegplatform
+            .invokeMethod<String>('getAudioTracks', {'path': realFilePath}) ??
+        '';
+    final Map<int, String> audioTrackInfo = parseAudioTracks(audiotrackjson);
+    // 默认选择第一个可用的音轨（如果有）
+    int selectedTrack =
+        audioTrackInfo.isNotEmpty ? audioTrackInfo.keys.first : -1;
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
         return BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
           child: AlertDialog(
-            backgroundColor: Colors.white.withOpacity(0.9),
+            backgroundColor: isDarkMode
+                ? Colors.grey[850]!.withOpacity(0.9)
+                : Colors.white.withOpacity(0.9),
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
@@ -3476,41 +4295,61 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('请选择要抽取的音轨号：'),
+                  Text('请选择要抽取的音轨：'),
                   SizedBox(height: 16),
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<int>(
-                        value: selectedTrack,
-                        isExpanded: true,
-                        icon: Icon(Icons.arrow_drop_down,
-                            color: Theme.of(context).primaryColor),
-                        items: List.generate(30, (index) => index + 1)
-                            .map((int value) {
-                          return DropdownMenuItem<int>(
-                            value: value,
-                            child: Text("轨道 $value"),
-                          );
-                        }).toList(),
-                        onChanged: (int? newValue) {
-                          if (newValue != null) {
-                            setState(() {
-                              selectedTrack = newValue;
-                            });
-                          }
-                        },
+                  if (audioTrackInfo.isEmpty)
+                    Text('未检测到音轨',
+                        style: TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.bold))
+                  else
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: isDarkMode
+                                ? Colors.grey[700]!
+                                : Colors.grey[300]!),
+                        color: isDarkMode
+                            ? Colors.grey[800]!.withOpacity(0.7)
+                            : Colors.white.withOpacity(0.7),
+                      ),
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          value: selectedTrack,
+                          isExpanded: true,
+                          dropdownColor:
+                              isDarkMode ? Colors.grey[800] : Colors.white,
+                          icon: Icon(Icons.arrow_drop_down,
+                              color: Theme.of(context).primaryColor),
+                          items: audioTrackInfo.entries.map((entry) {
+                            return DropdownMenuItem<int>(
+                              value: entry.key,
+                              child: Text(
+                                "轨道 ${entry.key}: ${entry.value}",
+                                style: TextStyle(
+                                  color:
+                                      isDarkMode ? Colors.white : Colors.black,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (int? newValue) {
+                            if (newValue != null) {
+                              setState(() {
+                                selectedTrack = newValue;
+                              });
+                            }
+                          },
+                        ),
                       ),
                     ),
-                  ),
                   SizedBox(height: 16),
                   Text('确定要抽取该视频的音轨吗（本功能极其不稳定）？',
-                      style: TextStyle(color: Colors.grey[600])),
+                      style: TextStyle(
+                          color: isDarkMode
+                              ? Colors.grey[400]
+                              : Colors.grey[600])),
                 ],
               );
             }),
@@ -3519,72 +4358,77 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                 onPressed: () {
                   Navigator.pop(context);
                 },
-                child: Text('取消', style: TextStyle(color: Colors.grey)),
+                child: Text('取消',
+                    style: TextStyle(
+                        color: isDarkMode ? Colors.grey[400] : Colors.grey)),
               ),
               ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  // 显示进度对话框
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (BuildContext context) {
-                      return BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: AlertDialog(
-                          backgroundColor: Colors.white.withOpacity(0.9),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(height: 20),
-                              CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                    Theme.of(context).primaryColor),
+                onPressed: audioTrackInfo.isEmpty
+                    ? null
+                    : () async {
+                        Navigator.pop(context);
+                        // 显示进度对话框
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (BuildContext context) {
+                            final innerIsDarkMode =
+                                Theme.of(context).brightness == Brightness.dark;
+                            return BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                              child: AlertDialog(
+                                backgroundColor: innerIsDarkMode
+                                    ? Colors.grey[850]!.withOpacity(0.9)
+                                    : Colors.white.withOpacity(0.9),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(height: 20),
+                                    CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Theme.of(context).primaryColor),
+                                    ),
+                                    SizedBox(height: 24),
+                                    Text(
+                                      '正在抽取音频轨道 $selectedTrack: ${audioTrackInfo[selectedTrack] ?? ""}...',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                    SizedBox(height: 10),
+                                  ],
+                                ),
                               ),
-                              SizedBox(height: 24),
-                              Text(
-                                '正在抽取音频轨道 $selectedTrack...',
-                                style: TextStyle(fontWeight: FontWeight.w500),
-                              ),
-                              SizedBox(height: 10),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  );
-
-                  try {
-                    final _platform =
-                        const MethodChannel('samples.flutter.dev/ffmpegplugin');
-                    String filePath = file.path;
-
-                    if (file.path.endsWith('.lnk')) {
-                      Navigator.pop(context); // 关闭进度对话框
-                      _showLinkFileErrorDialog();
-                      return;
-                    }
-
-                    await _platform.invokeMethod<String>('getaudiotrack', {
-                      "path": filePath,
-                      "track": selectedTrack - 1,
-                      "output": filePath
-                    });
-
-                    // 关闭进度对话框
-                    Navigator.pop(context);
-                    // 显示成功对话框
-                    _showSuccessDialog();
-                  } catch (e) {
-                    // 关闭进度对话框
-                    Navigator.pop(context);
-                    // 显示错误对话框
-                    _showErrorDialog(e.toString());
-                  }
-                },
+                            );
+                          },
+                        );
+                        try {
+                          final _platform = const MethodChannel(
+                              'samples.flutter.dev/ffmpegplugin');
+                          String filePath = file.path;
+                          String realFilePath = file.path;
+                          if (file.path.endsWith('.lnk')) {
+                            realFilePath = file.readAsStringSync();
+                          }
+                          await _platform
+                              .invokeMethod<String>('getaudiotrack', {
+                            "path": realFilePath,
+                            "track": selectedTrack - 1, // 直接传入轨道号，而不是索引
+                            "output": filePath
+                          });
+                          // 关闭进度对话框
+                          Navigator.pop(context);
+                          // 显示成功对话框
+                          _showSuccessDialog();
+                        } catch (e) {
+                          // 关闭进度对话框
+                          Navigator.pop(context);
+                          // 显示错误对话框
+                          _showErrorDialog(e.toString());
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).primaryColor,
                   foregroundColor: Colors.white,
@@ -3593,11 +4437,18 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                     borderRadius: BorderRadius.circular(12),
                   ),
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  disabledBackgroundColor:
+                      isDarkMode ? Colors.grey[700] : Colors.grey[300],
+                  disabledForegroundColor:
+                      isDarkMode ? Colors.grey[500] : Colors.grey[500],
                 ),
                 child: Text(
                   '开始抽取',
                   style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600),
+                      color: audioTrackInfo.isEmpty
+                          ? (isDarkMode ? Colors.grey[500] : Colors.grey[500])
+                          : Colors.white,
+                      fontWeight: FontWeight.w600),
                 ),
               ),
             ],

@@ -40,6 +40,7 @@ import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:dart_libass/dart_libass.dart';
 import 'history_service.dart';
 import 'package:aloeplayer/ass.dart';
+import 'package:galactic_hotkeys/galactic_hotkeys_widget.dart';
 
 int rgbToColor(int rgb) {
   // 将 RGB 值转换为 ARGB 值，透明度为 0xFF（完全不透明）
@@ -274,7 +275,9 @@ class _PlayerTabState extends State<PlayerTab>
 // 定期或在播放暂停/停止时更新播放位置
   void _updatePlayPosition(String filePath) async {
     int currentPosition = _videoController?.value.position.inMilliseconds ?? 0;
+    int duration = _videoController?.value.duration.inMilliseconds ?? 0;
     await _historyService.updatePosition(filePath, currentPosition);
+    await _historyService.updateDuration(filePath, duration);
   }
 
 // 播放结束时更新完整记录
@@ -356,10 +359,62 @@ class _PlayerTabState extends State<PlayerTab>
     }
   }
 
+  Future<bool> _getHdr(File file) async {
+    try {
+      // 调用原生方法获取HDR信息的JSON字符串
+      String filePath = file.path;
+      // 调用原生方法获取HDR信息的JSON字符串
+      if (file.path.endsWith('.lnk')) {
+        // 读取文件内容
+        filePath = await file.readAsString();
+      }
+      final _ffmpegplatform =
+          const MethodChannel('samples.flutter.dev/ffmpegplugin');
+      final String hdrJson = await _ffmpegplatform
+              .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
+          '';
+
+      // 如果返回的JSON字符串为空，默认为非HDR
+      if (hdrJson.isEmpty) {
+        print('获取HDR信息失败：返回空JSON');
+        return false;
+      }
+
+      // 解析JSON字符串
+      try {
+        final Map<String, dynamic> data = json.decode(hdrJson);
+
+        // 提取isHDR字段
+        final bool isHdr = data['isHDR'] ?? false;
+
+        print('视频HDR状态: ${isHdr ? "是HDR" : "非HDR"}');
+        return isHdr;
+      } catch (e) {
+        print('解析HDR JSON出错: $e');
+        print('原始JSON: $hdrJson');
+        return false;
+      }
+    } catch (e) {
+      print('获取HDR信息时发生错误: $e');
+      return false;
+    }
+  }
+
   Future<void> _openAudioTrackDialog() async {
     if (_videoController == null) return;
     print('打开音轨列表');
-
+    final _ffmpegplatform =
+        const MethodChannel('samples.flutter.dev/ffmpegplugin');
+    // print("[ffprobe] getaudio" +
+    //     (await _ffmpegplatform.invokeMethod<String>(
+    //             'getAudioTracks', {'path': widget.openfile}) ??
+    //         ''));
+    // print("[ffprobe] gethdr");
+    final audiotrackjson = await _ffmpegplatform.invokeMethod<String>(
+            'getAudioTracks', {'path': widget.openfile}) ??
+        '';
+    print('[ffprobe] 获取音轨信息: $audiotrackjson');
+    final Map<int, String> audioTrackInfo = parseAudioTracks(audiotrackjson);
     List<String> audioTracks = ['0', '1', '2', '3', '4', '5'];
     List<String> externalAudioTracks = [];
     String videoBaseName = '';
@@ -374,6 +429,8 @@ class _PlayerTabState extends State<PlayerTab>
       if (audioTracks.isEmpty) {
         audioTracks = ['0', '1', '2', '3', '4', '5'];
       }
+      // 去除音轨列表中的空字符串
+      audioTracks.removeWhere((element) => element.isEmpty);
     } catch (e) {
       print('获取内置音轨列表失败: $e');
       audioTracks = ['0', '1', '2', '3', '4', '5'];
@@ -465,7 +522,7 @@ class _PlayerTabState extends State<PlayerTab>
                       border: Border.all(color: Colors.red.withOpacity(0.3)),
                     ),
                     child: const Text(
-                      '选择非音频轨道可能会导致错误。0一般为视频轨。然后是音频轨。其他轨道可能是字幕轨道。',
+                      '选择非音频轨道可能会导致错误。0一般为视频轨。然后是音频轨。其他轨道可能是字幕轨道。如果没有音频轨道，请尝试使用软解或提取外置音轨。',
                       style: TextStyle(color: Colors.red, fontSize: 14),
                     ),
                   ),
@@ -498,7 +555,7 @@ class _PlayerTabState extends State<PlayerTab>
                           ...audioTracks.map((track) {
                             return _buildTrackTile(
                               track,
-                              '内置音轨 $track',
+                              '轨道 $track - ${(int.tryParse(track) != null && audioTrackInfo.containsKey(int.tryParse(track))) ? audioTrackInfo[int.tryParse(track)] : '未知'}',
                               Icons.audio_file,
                               Colors.blue,
                               context,
@@ -852,6 +909,156 @@ class _PlayerTabState extends State<PlayerTab>
     }
   }
 
+  Future<void> showChewieAdjustmentDialog(BuildContext context) async {
+    // 获取当前值
+    double currentAspectRatio = _chewieController?.aspectRatio ??
+        _chewieController?.videoPlayerController.value.aspectRatio ??
+        16 / 9;
+    double currentScale = _chewieController?.scale ?? 1.0;
+    Offset currentPosition = _chewieController?.position ?? Offset.zero;
+
+    // 默认值
+    final double defaultAspectRatio =
+        _chewieController?.videoPlayerController.value.aspectRatio ?? 16 / 9;
+    final double defaultScale = 1.0;
+    final Offset defaultPosition = Offset.zero;
+
+    return showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        // 使用StatefulBuilder允许对话框内部状态更新
+        return StatefulBuilder(builder: (context, setState) {
+          return BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: AlertDialog(
+              backgroundColor: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.black.withOpacity(0.7)
+                  : Colors.white.withOpacity(0.7),
+              title: Text('调整视频显示'),
+              content: Container(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 宽高比调整
+                      Text('宽高比: ${currentAspectRatio.toStringAsFixed(2)}'),
+                      Slider(
+                        value: currentAspectRatio,
+                        min: 0.5,
+                        max: 2.5,
+                        divisions: 40,
+                        onChanged: (newValue) {
+                          setState(() {
+                            currentAspectRatio = newValue;
+                          });
+                        },
+                      ),
+
+                      SizedBox(height: 16),
+
+                      // 缩放调整
+                      Text('缩放: ${currentScale.toStringAsFixed(2)}'),
+                      Slider(
+                        value: currentScale,
+                        min: 0.5,
+                        max: 2.0,
+                        divisions: 30,
+                        onChanged: (newValue) {
+                          setState(() {
+                            currentScale = newValue;
+                          });
+                        },
+                      ),
+
+                      SizedBox(height: 16),
+
+                      // 位置调整
+                      Text(
+                          '位置调整: X: ${currentPosition.dx.toStringAsFixed(2)}, Y: ${currentPosition.dy.toStringAsFixed(2)}'),
+                      Container(
+                        height: 150,
+                        decoration: BoxDecoration(
+                          border:
+                              Border.all(color: Theme.of(context).dividerColor),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: GestureDetector(
+                          onPanUpdate: (details) {
+                            setState(() {
+                              double newDx =
+                                  currentPosition.dx + details.delta.dx ;
+                              double newDy =
+                                  currentPosition.dy + details.delta.dy ;
+                              // newDx = newDx.clamp(-1.0, 1.0);
+                              // newDy = newDy.clamp(-1.0, 1.0);
+                              currentPosition = Offset(newDx, newDy);
+                            });
+                          },
+                          child: Center(
+                            child: Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).primaryColor,
+                                shape: BoxShape.circle,
+                              ),
+                              margin: EdgeInsets.only(
+                                left: (currentPosition.dx * 50) + 50,
+                                top: (currentPosition.dy * 50) + 50,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: <Widget>[
+                // 重置按钮 - 恢复默认值
+                TextButton(
+                  child: Text('重置'),
+                  onPressed: () {
+                    setState(() {
+                      currentAspectRatio = defaultAspectRatio;
+                      currentScale = defaultScale;
+                      currentPosition = defaultPosition;
+                    });
+                  },
+                ),
+                TextButton(
+                  child: Text('取消'),
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                  },
+                ),
+                ElevatedButton(
+                  child: Text('应用'),
+                  onPressed: () {
+                    // 直接设置控制器的属性
+                    if (_chewieController != null) {
+                      setState(() {
+                        _chewieController!.aspectRatio = currentAspectRatio;
+                        _chewieController!.scale = currentScale;
+                        _chewieController!.position = currentPosition;
+                      });
+                      // 通知外部UI更新
+                      if (context is StatefulElement) {
+                        (context as StatefulElement).state.setState(() {});
+                      }
+                    }
+                    Navigator.of(dialogContext).pop();
+                  },
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    );
+  }
+
   Future<void> _initializeChewieController() async {
     _volumeController = _volumeExample?.controller;
     _videoController!.addListener(_checkIfVideoFinished);
@@ -910,11 +1117,12 @@ class _PlayerTabState extends State<PlayerTab>
           //   iconData: Icons.open_in_browser,
           //   title: '打开文件',
           // ),
-          // OptionItem(
-          //   onTap: () => _showUrlDialog(context),
-          //   iconData: Icons.link,
-          //   title: '打开URL',
-          // ),
+          if (_useFfmpegForPlay == 0 || _useFfmpegForPlay == 3)
+            OptionItem(
+              onTap: () async => showChewieAdjustmentDialog(context),
+              iconData: Icons.aspect_ratio,
+              title: '缩放和宽高比',
+            ),
           OptionItem(
             onTap: () => _openSRT(),
             iconData: Icons.subtitles,
@@ -946,30 +1154,11 @@ class _PlayerTabState extends State<PlayerTab>
                     : Icons.fullscreen,
             title: '切换全屏',
           ),
-//           OptionItem(
-//             onTap: () async {
-//               double nextVolume = _systemVolume + 0.01;
-
-// // 确保音量不超过最大音量
-//               if (nextVolume > _systemMaxVolume) {
-//                 nextVolume = _systemMaxVolume;
-//               }
-
-// // 确保音量不小于 0
-//               if (nextVolume < 0) {
-//                 nextVolume = 0;
-//               }
-
-//               _volumeController?.sendMessageToOhosView(
-//                   'getMessageFromFlutterView2', nextVolume.toString());
-//             },
-//             iconData: Icons.volume_up,
-//             title: '音量调节',
-//           ),
           OptionItem(
             onTap: () {
               setState(() {
                 _isMirrored = !_isMirrored; // 切换镜像状态
+                _chewieController?.isMirrored = _isMirrored; // 更新视频控制器的镜像状态
               });
             },
             iconData: _isMirrored ? Icons.flip : Icons.flip_camera_android,
@@ -1061,6 +1250,56 @@ class _PlayerTabState extends State<PlayerTab>
     // print("ffmpegcontroller is null?: ${this._ffmpegController == null}");
     // this._ffmpegController?.sendMessageToOhosView(
     //     "getMessageFromFlutterView", convertPathToOhosUri(this.widget.openfile));
+  }
+
+  /// 重新读取字幕文件
+  Future<void> reloadSubtitles(String path) async {
+    // 清空当前字幕
+    _subtitles.clear();
+
+    // 提取文件名和不带扩展名的文件名
+    final String fileName = path.split('/').last;
+    final String fileNameWithoutExt =
+        fileName.substring(0, fileName.lastIndexOf('.'));
+
+    // 从缓存目录读取字幕
+    await _readSubtitlesFromCacheDirectly(fileName);
+
+    // 从视频所在目录读取字幕
+    final String videoDirectory = path.substring(0, path.lastIndexOf('/'));
+    await _readSubtitlesFromVideoDirectory(videoDirectory, fileNameWithoutExt);
+  }
+
+  /// 从缓存目录直接读取字幕文件，不包含等待和重试机制
+  Future<void> _readSubtitlesFromCacheDirectly(String fileName) async {
+    try {
+      // 获取缓存目录路径
+      final cacheDir = await getTemporaryDirectory();
+      final String directoryPath = cacheDir.path;
+      print('缓存目录路径: $directoryPath');
+
+      // 列出目录中的所有文件
+      Directory directory = Directory(directoryPath);
+      List<FileSystemEntity> files = await directory.list().toList();
+
+      // 查找匹配的字幕文件
+      List<File> matchingFiles = _findSubtitleFiles(files, fileName);
+
+      // 打印找到的字幕文件
+      if (matchingFiles.isNotEmpty) {
+        print('在缓存目录中找到 ${matchingFiles.length} 个匹配的字幕文件：');
+        for (var file in matchingFiles) {
+          print(file.path);
+        }
+        // 处理所有找到的字幕文件
+        await _processSubtitleFiles(matchingFiles);
+      } else {
+        print('缓存中未找到字幕文件');
+      }
+    } catch (e) {
+      // 只记录错误，不重试
+      print('从缓存读取字幕失败: $e');
+    }
   }
 
   /// 尝试读取字幕文件，带有重试机制
@@ -1197,7 +1436,14 @@ class _PlayerTabState extends State<PlayerTab>
       String content = await file.readAsString();
       String name = file.path.split('/').last;
       String extension = file.path.split('.').last.toLowerCase();
-
+      if (name.contains('_内置_')) {
+        // 将名字改为'[内置] _内置_之后的部分'
+        name = '[内置] ' + name.split('_内置_')[1];
+        // 如果以“.ass”结尾要去掉
+        if (name.endsWith('.ass')) {
+          name = name.split('.ass')[0];
+        }
+      }
       // 创建字幕数据对象
       SubtitleData subtitleData = SubtitleData(
         name: name,
@@ -1249,16 +1495,65 @@ class _PlayerTabState extends State<PlayerTab>
   /// 设置默认字幕
   void _setDefaultSubtitle() {
     if (_currentSubtitleIndex == -1 && _subtitles.isNotEmpty) {
-      // 优先使用第一个 ASS 字幕
-      int assSubtitleIndex =
-          _subtitles.indexWhere((subtitle) => subtitle.assSubtitles != null);
+      // 定义中文字幕的优先关键词列表，按优先级从高到低排序
+      final chineseKeywords = [
+        "简",
+        "SC",
+        "sc",
+        "繁体",
+        "TC",
+        "tc",
+        "中",
+        "CN",
+        "cn",
+        "chi"
+      ];
 
-      if (assSubtitleIndex != -1) {
-        // 找到了 ASS 字幕
-        _currentSubtitleIndex = assSubtitleIndex;
+      // 首先尝试按优先级查找匹配的ASS字幕
+      int preferredAssIndex = -1;
+
+      // 按优先级查找匹配关键词的ASS字幕
+      for (String keyword in chineseKeywords) {
+        preferredAssIndex = _subtitles.indexWhere((subtitle) =>
+            subtitle.assSubtitles != null && subtitle.name.contains(keyword));
+
+        if (preferredAssIndex != -1) {
+          break; // 找到了匹配的ASS字幕，停止查找
+        }
+      }
+
+      if (preferredAssIndex != -1) {
+        // 找到了匹配关键词的ASS字幕
+        _currentSubtitleIndex = preferredAssIndex;
       } else {
-        // 没有 ASS 字幕，使用第一个普通字幕
-        _currentSubtitleIndex = 0;
+        // 没有匹配关键词的ASS字幕，查找任意ASS字幕
+        int anyAssIndex =
+            _subtitles.indexWhere((subtitle) => subtitle.assSubtitles != null);
+
+        if (anyAssIndex != -1) {
+          // 找到了ASS字幕
+          _currentSubtitleIndex = anyAssIndex;
+        } else {
+          // 查找匹配关键词的普通字幕
+          int preferredSubtitleIndex = -1;
+
+          for (String keyword in chineseKeywords) {
+            preferredSubtitleIndex = _subtitles.indexWhere((subtitle) =>
+                subtitle.subtitles != null && subtitle.name.contains(keyword));
+
+            if (preferredSubtitleIndex != -1) {
+              break; // 找到了匹配的普通字幕
+            }
+          }
+
+          if (preferredSubtitleIndex != -1) {
+            // 找到了匹配关键词的普通字幕
+            _currentSubtitleIndex = preferredSubtitleIndex;
+          } else {
+            // 没有任何匹配的字幕，使用第一个普通字幕
+            _currentSubtitleIndex = 0;
+          }
+        }
       }
 
       // 应用选择的字幕
@@ -1266,7 +1561,6 @@ class _PlayerTabState extends State<PlayerTab>
       _chewieController!.setSubtitle(subtitleData.subtitles!);
       _chewieController!.assStyles = subtitleData.styles;
       _chewieController!.assSubtitles = subtitleData.assSubtitles;
-
       // 更新 UI
       // setState(() {});
     }
@@ -1409,6 +1703,77 @@ class _PlayerTabState extends State<PlayerTab>
     _positionUpdateTimer = Timer.periodic(Duration(seconds: 5), (timer) {
       _updatePlayPosition(widget.openfile);
     });
+  }
+
+  Future<void> _extractRestAss(String uri, String directoryPath,
+      String fileName, String subtitleTracksJson) async {
+    await Future.delayed(Duration(milliseconds: 1000));
+    try {
+      print("[ffprobe] subtitleTracksJson: $subtitleTracksJson");
+
+      final subtitles =
+          parseSubtitleTracks(subtitleTracksJson, useOriginalIndices: false);
+      final copilotSubtitleNum = await _settingsService.getSubtitleMany();
+
+      // Skip the first subtitle and prepare tasks
+      bool first = true;
+      final tasks = <Map<String, dynamic>>[];
+      int i = 0;
+
+      for (var entry in subtitles.entries) {
+        if (first) {
+          first = false;
+          continue;
+        }
+        if (i >= copilotSubtitleNum && copilotSubtitleNum != -1) {
+          break;
+        }
+        tasks.add({
+          'key': entry.key,
+          'value': entry.value,
+        });
+        i++;
+      }
+      await Future.delayed(Duration(milliseconds: 1000));
+      if (tasks.isNotEmpty) {
+        // Process tasks one by one, but without blocking the UI
+        await _processTasksNonBlocking(uri, directoryPath, fileName, tasks);
+      }
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  Future<void> _processTasksNonBlocking(String uri, String directoryPath,
+      String fileName, List<Map<String, dynamic>> tasks) async {
+    final _platform = MethodChannel('samples.flutter.dev/ffmpegplugin');
+
+    // Process each task with a small delay to allow the UI to update
+    for (var task in tasks) {
+      // Use compute or a microtask to yield to the main thread
+      await Future.microtask(() async {
+        try {
+          // 如果path.join(directoryPath, fileName + "_内置_" + task['value']+".ass")存在那么就不做了
+          if (File(path.join(
+                  directoryPath, fileName + "_内置_" + task['value'] + ".ass"))
+              .existsSync()) {
+            return;
+          }
+          await _platform.invokeMethod<String>('getasstrack', {
+            "path": uri,
+            "type": "ass",
+            "output":
+                path.join(directoryPath, fileName + "_内置_" + task['value']),
+            "track": "${task['key']}"
+          });
+        } catch (e) {
+          print("Error processing track ${task['key']}: $e");
+        }
+      });
+
+      // Short delay to avoid UI freezes
+      await Future.delayed(Duration(milliseconds: 1000));
+    }
   }
 
   Future<void> _openUri(String uri, {bool wantFirst = false}) async {
@@ -1578,35 +1943,96 @@ class _PlayerTabState extends State<PlayerTab>
         _ffmpegExample?.controller?.sendMessageToOhosView(
             "newPlay", convertUriToPath(widget.openfile));
       }
-      _getPlaylist(originalUri);
-      _recordPlayStart(originalUri, originalUri);
-      _setupPositionUpdateTimer();
-      String fileName = originalUri.split('/').last;
-      final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
-      final cacheDir = await getTemporaryDirectory();
-      final directoryPath = cacheDir.path; // 缓存目录路径
+      // 立即启动必要的初始化
 
-      // getAudioTrack(uri, path.join(directoryPath, fileName), 0);
-      if (await _settingsService.getAutoLoadSubtitle() == true) {
-        // 调用原生方法
-        await _platform.invokeMethod<String>('getassold', {
-          "path": uri,
-          "type": "srt",
-          "output": path.join(directoryPath, fileName)
-        });
-        await _platform.invokeMethod<String>('getass', {
-          "path": uri,
-          "type": "ass",
-          "output": path.join(directoryPath, fileName)
-        });
-        readFileWithRetry(uri);
-      }
-      final metadata = readMetadata(File(uri), getImage: true);
-      coverData = metadata.pictures[0].bytes;
+      // 使用Future.microtask来安排其他初始化任务
+      Future.microtask(() {
+        _initializePlayer(originalUri, uri);
+      });
     }
     // await audioHandler.setLoopingSilence();
     // await audioHandler.play();
     Wakelock.enable();
+  }
+
+// 将耗时操作移到单独的方法中
+  Future<void> _initializePlayer(String originalUri, String uri) async {
+    _getPlaylist(originalUri);
+
+    final isAudio = (uri.split('.').last.toLowerCase() == 'mp3' ||
+        uri.split('.').last.toLowerCase() == 'flac' ||
+        uri.split('.').last.toLowerCase() == 'wav' ||
+        uri.split('.').last.toLowerCase() == 'm4a' ||
+        uri.split('.').last.toLowerCase() == 'aac' ||
+        uri.split('.').last.toLowerCase() == 'ogg');
+
+    _recordPlayStart(originalUri, originalUri, isVideo: !isAudio);
+    _setupPositionUpdateTimer();
+    String fileName = originalUri.split('/').last;
+    final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
+    final cacheDir = await getTemporaryDirectory();
+    final directoryPath = cacheDir.path;
+
+    // 异步加载字幕
+    if (await _settingsService.getAutoLoadSubtitle() == true) {
+      _loadSubtitles(uri, directoryPath, fileName, _platform);
+    }
+
+    // 异步读取元数据
+    _loadMetadata(uri);
+  }
+
+// 拆分为更小的异步方法
+  Future<void> _loadSubtitles(String uri, String directoryPath, String fileName,
+      MethodChannel platform) async {
+    try {
+      // 调用原生方法获取字幕
+      await platform.invokeMethod<String>('getassold', {
+        "path": uri,
+        "type": "srt",
+        "output": path.join(directoryPath, fileName)
+      });
+
+      final subtitleTracksJson = await platform
+              .invokeMethod<String>('getSubtitleTracks', {'path': uri}) ??
+          '';
+      print("[ffprobe] subtitleTracksJson: $subtitleTracksJson");
+
+      final subtitles =
+          parseSubtitleTracks(subtitleTracksJson, useOriginalIndices: false);
+
+      for (var entry in subtitles.entries) {
+        var key = entry.key;
+        var value = entry.value;
+        await platform.invokeMethod<String>('getasstrack', {
+          "path": uri,
+          "type": "ass",
+          "output": path.join(directoryPath, fileName + "_内置_" + value),
+          "track": "$key"
+        });
+        break; // 只处理第一个
+      }
+
+      final ishdr = await _getHdr(File(uri));
+      ui.ImageFilter.setHdr(
+        hdr: ishdr ? 1 : 0,
+        is_image: true,
+      );
+
+      _extractRestAss(uri, directoryPath, fileName, subtitleTracksJson);
+    } catch (e) {
+      print(e);
+    }
+
+    readFileWithRetry(uri);
+  }
+
+  Future<void> _loadMetadata(String uri) async {
+    final metadata = readMetadata(File(uri), getImage: true);
+    setState(() {
+      coverData =
+          metadata.pictures.isNotEmpty ? metadata.pictures[0].bytes : null;
+    });
   }
 
   Future<void> getAudioTrack(
@@ -1992,7 +2418,7 @@ class _PlayerTabState extends State<PlayerTab>
 
       // 创建字幕数据对象
       SubtitleData subtitleData = SubtitleData(
-        name: file.name,
+        name: '[手动] ${file.name}',
         content: fileContent,
         extension: file.extension ?? 'srt', // 默认扩展名
       );
@@ -2079,147 +2505,194 @@ class _PlayerTabState extends State<PlayerTab>
   }
 
   Future<void> _selectSubtitle() async {
+    await reloadSubtitles(widget.openfile);
     if (_subtitles.isEmpty) {
       print('没有可用的字幕');
       Fluttertoast.showToast(msg: '没有可用的字幕');
       return;
     }
 
+    // 先对字幕列表进行排序，ASS字幕置顶
+    final sortedSubtitles = List<SubtitleData>.from(_subtitles);
+    sortedSubtitles.sort((a, b) {
+      if (a.assSubtitles != null && b.assSubtitles == null) return -1;
+      if (a.assSubtitles == null && b.assSubtitles != null) return 1;
+      return 0;
+    });
+
     // 显示字幕选择对话框
     int? selectedIndex = await showDialog<int>(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.black54,
       builder: (context) {
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+        final dialogBackgroundColor = isDarkMode
+            ? Colors.grey[900]!.withOpacity(0.85)
+            : Colors.white.withOpacity(0.85);
+        final textColor = isDarkMode ? Colors.white : Colors.black87;
+        final hintColor = isDarkMode ? Colors.grey[400]! : Colors.black54;
+
         return BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Dialog(
-            backgroundColor: Colors.white.withOpacity(0.85),
+            backgroundColor: Colors.transparent,
             elevation: 0,
-            shape: RoundedRectangleBorder(
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(20.0),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Center(
-                    child: Text(
-                      '选择字幕轨道',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: dialogBackgroundColor,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 20),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.4,
-                    ),
-                    child: _subtitles.isEmpty
-                        ? Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: Colors.amber.withOpacity(0.3)),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                '没有可用的字幕轨道',
-                                style: TextStyle(
-                                    color: Colors.amber, fontSize: 16),
-                              ),
-                            ),
-                          )
-                        : SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            child: Column(
-                              children: _subtitles
-                                  .asMap()
-                                  .entries
-                                  .map(
-                                    (entry) => Container(
-                                      margin: const EdgeInsets.only(bottom: 8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.purple.withOpacity(0.05),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: Colors.purple.withOpacity(0.2),
-                                        ),
-                                      ),
-                                      child: ListTile(
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 4,
-                                        ),
-                                        leading: const Icon(
-                                          Icons.subtitles,
-                                          color: Colors.purple,
-                                        ),
-                                        title: Text(
-                                          entry.value.name,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        trailing: const Icon(
-                                          Icons.chevron_right,
-                                          color: Colors.purple,
-                                        ),
-                                        shape: RoundedRectangleBorder(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Text(
+                          '选择字幕轨道',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.4,
+                        ),
+                        child: sortedSubtitles.isEmpty
+                            ? Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber
+                                      .withOpacity(isDarkMode ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: Colors.amber.withOpacity(0.3)),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '没有可用的字幕轨道',
+                                    style: TextStyle(
+                                        color: Colors.amber, fontSize: 16),
+                                  ),
+                                ),
+                              )
+                            : SingleChildScrollView(
+                                physics: const BouncingScrollPhysics(),
+                                child: Column(
+                                  children: sortedSubtitles.asMap().entries.map(
+                                    (entry) {
+                                      final isAss =
+                                          entry.value.assSubtitles != null;
+                                      final color =
+                                          isAss ? Colors.teal : Colors.purple;
+
+                                      return Container(
+                                        margin:
+                                            const EdgeInsets.only(bottom: 8),
+                                        decoration: BoxDecoration(
+                                          color: color.withOpacity(
+                                              isDarkMode ? 0.15 : 0.05),
                                           borderRadius:
                                               BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: color.withOpacity(
+                                                isDarkMode ? 0.3 : 0.2),
+                                          ),
                                         ),
-                                        onTap: () =>
-                                            Navigator.pop(context, entry.key),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
+                                        child: ListTile(
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 4,
+                                          ),
+                                          leading: Icon(
+                                            isAss
+                                                ? Icons.subtitles_outlined
+                                                : Icons.subtitles,
+                                            color: color,
+                                          ),
+                                          title: Text(
+                                            entry.value.name,
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                              color: textColor,
+                                            ),
+                                          ),
+                                          subtitle: isAss
+                                              ? Text(
+                                                  'ASS 字幕',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: color,
+                                                  ),
+                                                )
+                                              : null,
+                                          trailing: Icon(
+                                            Icons.chevron_right,
+                                            color: color,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                          onTap: () {
+                                            // 找到原始列表中的索引
+                                            int originalIndex = _subtitles
+                                                .indexWhere((subtitle) =>
+                                                    subtitle == entry.value);
+                                            Navigator.pop(
+                                                context, originalIndex);
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ).toList(),
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 15),
+                      Center(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: TextButton.styleFrom(
+                            backgroundColor: Colors.purple
+                                .withOpacity(isDarkMode ? 0.2 : 0.1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 24,
                             ),
                           ),
-                  ),
-                  const SizedBox(height: 15),
-                  Center(
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.purple.withOpacity(0.1),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 24,
+                          child: Text(
+                            '取消',
+                            style: TextStyle(
+                              color: Colors.purple,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
-                      child: const Text(
-                        '取消',
-                        style: TextStyle(
-                          color: Colors.purple,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -2276,6 +2749,10 @@ class _PlayerTabState extends State<PlayerTab>
 
   @override
   void dispose() {
+    ui.ImageFilter.setHdr(
+      hdr: 0,
+      is_image: true,
+    );
     _videoController?.removeListener(_updatePlaybackState);
     _videoController?.removeListener(_syncAudioTrack);
     _audioTrackController?.dispose();
@@ -2441,6 +2918,52 @@ class _PlayerTabState extends State<PlayerTab>
 
   @override
   Widget build(BuildContext context) {
+    return GalacticHotkeys<String>(
+      shortcuts: {
+        'Play': [
+          [LogicalKeyboardKey.space],
+        ],
+        'Rewind': [
+          [LogicalKeyboardKey.arrowLeft],
+        ],
+        'FastForward': [
+          [LogicalKeyboardKey.arrowRight],
+        ],
+        'VolumeUp': [
+          [LogicalKeyboardKey.arrowUp],
+        ],
+        'VolumeDown': [
+          [LogicalKeyboardKey.arrowDown],
+        ],
+        'Mute': [
+          [LogicalKeyboardKey.keyM],
+        ],
+        // Add more shortcuts as needed
+      },
+      onShortcutPressed:
+          (String identifier, List<LogicalKeyboardKey> pressedKeys) {
+        // Handle the shortcut press
+        if (identifier == 'Play') {
+          _togglePlayPause();
+        } else if (identifier == 'Rewind') {
+          _rewind10Seconds();
+        } else if (identifier == 'FastForward') {
+          _fastForward10Seconds();
+        } else if (identifier == 'VolumeUp') {
+          // _volumeUp();
+        } else if (identifier == 'VolumeDown') {
+          // _volumeDown();
+        } else if (identifier == 'Mute') {
+          // _mute();
+          _videoController
+              ?.setVolume(_videoController!.value.volume == 0 ? 1 : 0);
+        }
+      },
+      child: buildPlayerPage(context),
+    );
+  }
+
+  Widget buildPlayerPage(BuildContext context) {
     // super.build(context);
     return WillPopScope(
         onWillPop: _onWillPop,
@@ -2543,6 +3066,12 @@ class _PlayerTabState extends State<PlayerTab>
                             Container(
                               color: Colors.black,
                             ),
+                            // BackdropFilter(
+                            //     filter: ui.ImageFilter.setHdr(
+                            //       hdr: 2,
+                            //       is_image: true,
+                            //     ),
+                            //     child: Stack(children: [
                             // HDR 播放器
                             if (_useFfmpegForPlay == 2 && (_hdrExample != null))
                               Transform(
@@ -2568,13 +3097,8 @@ class _PlayerTabState extends State<PlayerTab>
                             if (_chewieController != null &&
                                 _videoController != null &&
                                 _videoController!.value.isInitialized)
-                              Transform(
-                                alignment: Alignment.center,
-                                transform: Matrix4.identity()
-                                  ..scale(
-                                      _isMirrored ? -1.0 : 1.0, 1.0), // 水平翻转
-                                child: Chewie(controller: _chewieController!),
-                              ),
+                              Chewie(controller: _chewieController!),
+                            // ])),
 
                             // 播放列表部分 - 覆盖在播放器右侧
                             if (_showPlaylist)

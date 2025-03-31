@@ -5,10 +5,10 @@ packages:
     dependency: transitive
     description:
       name: args
-      sha256: bf9f5caeea8d8fe6721a9c358dd8a5c1947b27f1cfaa18b39c301273594919e6
+      sha256: d0481093c50b1da8910eb0bb301626d4d8eb7284aa739614d2b394ee09e3ea04
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.6.0"
+    version: "2.7.0"
   asn1lib:
     dependency: transitive
     description:
@@ -38,8 +38,8 @@ packages:
     description:
       path: audio_service
       ref: HEAD
-      resolved-ref: eb61ceec16aef73dd967385af9ca6b425c60925f
-      url: "https://gitee.com/openharmony-sig/fluttertpc_audio_service.git"
+      resolved-ref: "1cda0cf67701e0dec3486ccc3f91eb1d7d5db5ea"
+      url: "https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git"
     source: git
     version: "0.18.13"
   audio_service_ohos:
@@ -47,8 +47,8 @@ packages:
     description:
       path: audio_service_ohos
       ref: HEAD
-      resolved-ref: eb61ceec16aef73dd967385af9ca6b425c60925f
-      url: "https://gitee.com/openharmony-sig/fluttertpc_audio_service.git"
+      resolved-ref: "1cda0cf67701e0dec3486ccc3f91eb1d7d5db5ea"
+      url: "https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git"
     source: git
     version: "0.18.15"
   audio_service_platform_interface:
@@ -73,7 +73,7 @@ packages:
       path: "."
       ref: HEAD
       resolved-ref: "1ce7e00ba1970d9bf40c48aaa9a5c8f585fa7995"
-      url: "https://gitee.com/openharmony-sig/flutter_audio_session.git"
+      url: "https://gitcode.com/openharmony-sig/flutter_audio_session.git"
     source: git
     version: "0.1.18"
   boolean_selector:
@@ -269,8 +269,8 @@ packages:
     description:
       path: "packages/file_selector/file_selector"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "1.0.0"
   file_selector_android:
@@ -310,8 +310,8 @@ packages:
     description:
       path: "packages/file_selector/file_selector_ohos"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "0.5.0+2"
   file_selector_platform_interface:
@@ -462,10 +462,18 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "5a752a422345c9223b60dd5e6a0c941ca03fdcbd"
-      url: "https://gitee.com/openharmony-sig/flutter_fluttertoast.git"
+      resolved-ref: b8293e8f29c2161c13ee54899ddf6d3953b2388c
+      url: "https://gitcode.com/openharmony-sig/flutter_fluttertoast.git"
     source: git
     version: "8.2.2"
+  galactic_hotkeys:
+    dependency: "direct main"
+    description:
+      name: galactic_hotkeys
+      sha256: "3a64ef561f016fbb110405cbaf9b903976a0a87fee5e165c08c6360bd7a28bc6"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.1.1"
   google_fonts:
     dependency: "direct main"
     description:
@@ -531,10 +539,10 @@ packages:
     dependency: transitive
     description:
       name: image_picker_linux
-      sha256: "4ed1d9bb36f7cd60aa6e6cd479779cc56a4cb4e4de8f49d487b1aaad831300fa"
+      sha256: "34a65f6740df08bbbeb0a1abd8e6d32107941fd4868f67a507b25601651022c9"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.2.1+1"
+    version: "0.2.1+2"
   image_picker_macos:
     dependency: transitive
     description:
@@ -586,8 +594,8 @@ packages:
     description:
       path: just_audio
       ref: HEAD
-      resolved-ref: "61efe47a8450a0e674d3f6fa53bf898d435ed73d"
-      url: "https://gitee.com/openharmony-sig/fluttertpc_just_audio.git"
+      resolved-ref: cf0ac7c1915641861bd48c678b0161c83bb0c4ad
+      url: "https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git"
     source: git
     version: "0.9.37"
   just_audio_background:
@@ -595,7 +603,7 @@ packages:
     description:
       path: just_audio_background
       ref: HEAD
-      resolved-ref: "61efe47a8450a0e674d3f6fa53bf898d435ed73d"
+      resolved-ref: cf0ac7c1915641861bd48c678b0161c83bb0c4ad
       url: "https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git"
     source: git
     version: "0.0.1-beta.11"
@@ -604,8 +612,8 @@ packages:
     description:
       path: "just_audio/ohos"
       ref: HEAD
-      resolved-ref: "61efe47a8450a0e674d3f6fa53bf898d435ed73d"
-      url: "https://gitee.com/openharmony-sig/fluttertpc_just_audio.git"
+      resolved-ref: cf0ac7c1915641861bd48c678b0161c83bb0c4ad
+      url: "https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git"
     source: git
     version: "1.0.0"
   just_audio_platform_interface:
@@ -709,7 +717,7 @@ packages:
       path: "."
       ref: HEAD
       resolved-ref: f5664d9ac9cc2f4628fa1b13741168f7661b012e
-      url: "https://gitee.com/openharmony-sig/fluttertpc_media_info.git"
+      url: "https://gitcode.com/openharmony-sig/fluttertpc_media_info.git"
     source: git
     version: "0.12.0+2"
   meta:
@@ -782,8 +790,8 @@ packages:
     description:
       path: "packages/path_provider/path_provider"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "2.1.0"
   path_provider_android:
@@ -815,8 +823,8 @@ packages:
     description:
       path: "packages/path_provider/path_provider_ohos"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "2.2.1"
   path_provider_platform_interface:
@@ -895,8 +903,8 @@ packages:
     description:
       path: "packages/share_plus/share_plus"
       ref: HEAD
-      resolved-ref: ff774d947bd15d9be08629e3ccfb29dda2e864bd
-      url: "https://gitee.com/openharmony-sig/flutter_plus_plugins.git"
+      resolved-ref: "92520544b3051a3bbff93f1365f14d67f31ce361"
+      url: "https://gitcode.com/openharmony-sig/flutter_plus_plugins.git"
     source: git
     version: "7.2.0"
   share_plus_platform_interface:
@@ -904,8 +912,8 @@ packages:
     description:
       path: "packages/share_plus/share_plus_platform_interface"
       ref: master
-      resolved-ref: ff774d947bd15d9be08629e3ccfb29dda2e864bd
-      url: "https://gitee.com/openharmony-sig/flutter_plus_plugins.git"
+      resolved-ref: "92520544b3051a3bbff93f1365f14d67f31ce361"
+      url: "https://gitcode.com/openharmony-sig/flutter_plus_plugins.git"
     source: git
     version: "3.3.0"
   shared_preferences:
@@ -913,8 +921,8 @@ packages:
     description:
       path: "packages/shared_preferences/shared_preferences"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "2.2.0"
   shared_preferences_android:
@@ -946,8 +954,8 @@ packages:
     description:
       path: "packages/shared_preferences/shared_preferences_ohos"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "2.2.0"
   shared_preferences_platform_interface:
@@ -1009,7 +1017,7 @@ packages:
       path: sqflite
       ref: HEAD
       resolved-ref: "64d1855cc1f8b4b362e08004b5faab1b9bfa88e0"
-      url: "https://gitee.com/openharmony-sig/flutter_sqflite.git"
+      url: "https://gitcode.com/openharmony-sig/flutter_sqflite.git"
     source: git
     version: "2.2.8+3"
   sqflite_common:
@@ -1090,8 +1098,8 @@ packages:
     description:
       path: "packages/url_launcher/url_launcher"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "6.1.12"
   url_launcher_android:
@@ -1131,8 +1139,8 @@ packages:
     description:
       path: "packages/url_launcher/url_launcher_ohos"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "6.0.38"
   url_launcher_platform_interface:
@@ -1224,8 +1232,8 @@ packages:
     description:
       path: ohos
       ref: HEAD
-      resolved-ref: c5645763de2bbe4cb299d3c0982d05d0b1d3a53d
-      url: "https://gitee.com/openharmony-sig/fluttertpc_video_thumbnail.git"
+      resolved-ref: "5f501d9f348b1afc046e6ff7f3f26e10683c7f74"
+      url: "https://gitcode.com/openharmony-sig/fluttertpc_video_thumbnail.git"
     source: git
     version: "1.0.0"
   vivysub_utils:
@@ -1250,7 +1258,7 @@ packages:
       path: wakelock
       ref: HEAD
       resolved-ref: "5e71f97a6e2eaa6042ec166f06348ee0ad333abf"
-      url: "https://gitee.com/openharmony-sig/flutter_wakelock.git"
+      url: "https://gitcode.com/openharmony-sig/flutter_wakelock.git"
     source: git
     version: "0.6.2"
   wakelock_macos:
@@ -1275,7 +1283,7 @@ packages:
       path: wakelock_plus
       ref: HEAD
       resolved-ref: "9c851dac1bfbe91d056b37cd480ba2f08dd44b77"
-      url: "https://gitee.com/openharmony-sig/fluttertpc_wakelock_plus.git"
+      url: "https://gitcode.com/openharmony-sig/fluttertpc_wakelock_plus.git"
     source: git
     version: "1.1.4"
   wakelock_plus_platform_interface:
@@ -1323,8 +1331,8 @@ packages:
     description:
       path: "packages/webview_flutter/webview_flutter"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "4.6.0"
   webview_flutter_android:
@@ -1341,8 +1349,8 @@ packages:
     description:
       path: "packages/webview_flutter/webview_flutter_ohos"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
-      url: "https://gitee.com/openharmony-sig/flutter_packages.git"
+      resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
+      url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "3.15.0"
   webview_flutter_platform_interface:

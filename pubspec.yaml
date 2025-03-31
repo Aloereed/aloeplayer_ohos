@@ -33,14 +33,15 @@ dependencies:
     path: ./castscreen-1.0.2
   dio: any
   smb_connect: ^0.0.9
+  galactic_hotkeys: ^1.1.1
 dependency_overrides:
   audio_service:
     git:
       path: audio_service
-      url: https://gitee.com/openharmony-sig/fluttertpc_audio_service.git
+      url: https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git
   audio_session:
     git:
-      url: https://gitee.com/openharmony-sig/flutter_audio_session.git
+      url: https://gitcode.com/openharmony-sig/flutter_audio_session.git
   dart_libass:
     path: ./dart_libass-main
   file_picker_ohos:
@@ -48,9 +49,9 @@ dependency_overrides:
   file_selector:
     git:
       path: packages/file_selector/file_selector
-      url: https://gitee.com/openharmony-sig/flutter_packages.git
+      url: https://gitcode.com/openharmony-sig/flutter_packages.git
   fluttertoast:
-    git: https://gitee.com/openharmony-sig/flutter_fluttertoast.git
+    git: https://gitcode.com/openharmony-sig/flutter_fluttertoast.git
   image_picker:
     path: ./image_picker/image_picker
   image_picker_platform_interface:
@@ -64,7 +65,7 @@ dependency_overrides:
   just_audio:
     git:
       path: just_audio
-      url: https://gitee.com/openharmony-sig/fluttertpc_just_audio.git
+      url: https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git
   just_audio_background:
     git:
       path: just_audio_background
@@ -72,33 +73,33 @@ dependency_overrides:
   just_audio_ohos:
     git:
       path: just_audio/ohos
-      url: https://gitee.com/openharmony-sig/fluttertpc_just_audio.git
+      url: https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git
   media_info:
     git:
-      url: https://gitee.com/openharmony-sig/fluttertpc_media_info.git
+      url: https://gitcode.com/openharmony-sig/fluttertpc_media_info.git
   mime: ^2.0.0
   path_provider:
     git:
       path: packages/path_provider/path_provider
-      url: https://gitee.com/openharmony-sig/flutter_packages.git
+      url: https://gitcode.com/openharmony-sig/flutter_packages.git
   screen:
     path: ./fluttertpc_screen/
   share_plus:
     git:
       path: packages/share_plus/share_plus
-      url: https://gitee.com/openharmony-sig/flutter_plus_plugins.git
+      url: https://gitcode.com/openharmony-sig/flutter_plus_plugins.git
   shared_preferences:
     git:
       path: packages/shared_preferences/shared_preferences
-      url: https://gitee.com/openharmony-sig/flutter_packages.git
+      url: https://gitcode.com/openharmony-sig/flutter_packages.git
   sqflite:
     git:
       path: sqflite
-      url: https://gitee.com/openharmony-sig/flutter_sqflite.git
+      url: https://gitcode.com/openharmony-sig/flutter_sqflite.git
   url_launcher:
     git:
       path: packages/url_launcher/url_launcher
-      url: https://gitee.com/openharmony-sig/flutter_packages.git
+      url: https://gitcode.com/openharmony-sig/flutter_packages.git
   video_player:
     path: ./video_player/video_player
   video_player_ohos:
@@ -110,19 +111,19 @@ dependency_overrides:
   video_thumbnail_ohos:
     git:
       path: ohos
-      url: https://gitee.com/openharmony-sig/fluttertpc_video_thumbnail.git
+      url: https://gitcode.com/openharmony-sig/fluttertpc_video_thumbnail.git
   wakelock:
     git:
       path: wakelock
-      url: https://gitee.com/openharmony-sig/flutter_wakelock.git
+      url: https://gitcode.com/openharmony-sig/flutter_wakelock.git
   wakelock_plus:
     git:
       path: wakelock_plus
-      url: https://gitee.com/openharmony-sig/fluttertpc_wakelock_plus.git
+      url: https://gitcode.com/openharmony-sig/fluttertpc_wakelock_plus.git
   webview_flutter:
     git:
       path: packages/webview_flutter/webview_flutter
-      url: https://gitee.com/openharmony-sig/flutter_packages.git
+      url: https://gitcode.com/openharmony-sig/flutter_packages.git
   win32: 5.5.4
   # media_kit:
   #   path: ../media-kit-ohos/media_kit
@@ -149,4 +150,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 2.0.4+27
+version: 2.0.6+30

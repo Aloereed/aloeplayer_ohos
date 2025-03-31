@@ -154,10 +154,10 @@ export class HdrView extends PlatformView implements MethodCallHandler {
           console.info('[hdr] AVPlayer state initialized called.');
           console.info(`[hdr] current surfaceid: ${surfaceID}`)
           avPlayer.surfaceId = surfaceID; // 设置显示画面，当播放的资源为纯音频时无需设置
-          let playStrategy: media.PlaybackStrategy = {
-            preferredHdr: true
-          };
-          avPlayer.setPlaybackStrategy(playStrategy);
+          // let playStrategy: media.PlaybackStrategy = {
+          //   preferredHdr: false
+          // };
+          // avPlayer.setPlaybackStrategy(playStrategy);
           avPlayer.prepare();
           break;
         case 'prepared': // prepare调用成功后上报该状态机
