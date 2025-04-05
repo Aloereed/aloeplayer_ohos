@@ -39,6 +39,7 @@ import { buffer } from '@kit.ArkTS';
 import media from "@ohos.multimedia.media"
 import fs from "@ohos.file.fs"
 import libAddon from 'libentry.so'
+import { fileUri } from '@kit.CoreFileKit';
 // import testNapi from 'libentry.so';
 import { FFMpegUtils, FFmpegCommandOptions } from './FFmpegUtils';
 
@@ -657,7 +658,7 @@ class FfmpegApi {
       result.error("UNAVAILABLE", "Failed to get video duration", error);
     }
   }
-  getVideoHDRInfo(result: MethodResult, path: string) {
+  getVideoHDRInfoFFmpeg(result: MethodResult, path: string) {
     console.error("[ffprobe] getVideoHDRInfo start");
     let hdrinfo = '';
     try {
@@ -670,6 +671,31 @@ class FfmpegApi {
       result.error("UNAVAILABLE", "Failed to get video hdr", error);
     }
   }
+  async getVideoHDRInfo(result: MethodResult, path: string) {
+    console.error("[ffprobe] getVideoHDRInfo system start");
+    let hdrinfo = '';
+    try {
+      let avMetadataExtractor: media.AVMetadataExtractor = await media.createAVMetadataExtractor()
+    let file = fs.openSync(fileUri.getUriFromPath(path));
+    avMetadataExtractor.fdSrc = file
+    avMetadataExtractor.fetchMetadata(async (_error: BusinessError, metadata: media.AVMetadata) => {
+      let hdrJson = `{"isHDR": ${metadata.hdrType ? 'true' : 'false'}}`;
+    
+    // 返回给 Dart 侧
+    result.success(hdrJson);
+
+      fs.closeSync(file)
+      avMetadataExtractor.release();
+      
+      // The rest of your original code can be removed or modified as needed
+      // since you're now handling the HDR check differently
+  });
+    } catch (error) {
+      console.error("[ffprobe] getVideoHDRInfo error");
+      result.error("UNAVAILABLE", "Failed to get video hdr", error);
+    } 
+  }
+  
   getSubtitleTracks(result: MethodResult, path: string) {
     let SubtitleTracks = '';
     try {

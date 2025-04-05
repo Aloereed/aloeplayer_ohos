@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-31 12:39:27
+ * @LastEditTime: 2025-04-02 17:45:58
  * @Description: file content
  */
 import 'dart:convert';
@@ -484,8 +484,8 @@ class SettingsService {
   static const String _subtitleFont = 'subtitle_font';
   static const String _hdrForHdr = 'hdr_for_hdr';
   static const String _subtitleMany = 'subtitle_many';
-  static const String _versionName = '2.0.6';
-  static const int _versionNumber = 30;
+  static const String _versionName = '2.0.7';
+  static const int _versionNumber = 31;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -1649,7 +1649,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   ),
                   ListTile(
-                    leading: Icon(Icons.high_quality, color: Colors.lightBlue),
+                    leading: Icon(Icons.hdr_auto_select_outlined, color: Colors.lightBlue),
                     title: Text('使用HDR播放器打开HDR视频'),
                     subtitle: Text('仅限从视频库中点击时'),
                     trailing: FutureBuilder<bool>(

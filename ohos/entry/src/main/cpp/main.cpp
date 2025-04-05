@@ -2,7 +2,7 @@
  * @Author:
  * @Date: 2025-01-21 20:39:36
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-25 20:30:46
+ * @LastEditTime: 2025-04-02 18:18:21
  * @Description: file content
  */
 #include "utils.hpp"
@@ -172,7 +172,13 @@ bool isHDRVideo(const char* filePath) {
 
 // 实现导出函数1：获取视频是否为HDR
 std::string GetVideoHDRInfo(const std::string& filePath) {
-    bool isHDR = isHDRVideo(filePath.c_str());
+    bool isHDR = false;
+    try{
+        isHDR = isHDRVideo(filePath.c_str());
+    }catch(...){
+        std::cerr << "Cannot find stream information" << std::endl;
+        return "{\"isHDR\": false}"; 
+    }
     
     // 构造JSON返回结果
     std::ostringstream json;
