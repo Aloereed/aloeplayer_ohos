@@ -92,6 +92,10 @@ export default class FfmpegPlugin implements FlutterPlugin {
             console.error("[ffprobe] getVideoHDRInfo start");
             that.api.getVideoHDRInfo(result, call.argument("path") as string);
             break;
+          case "getVideoHDRInfoFFmpeg":
+            console.error("[ffprobe] getVideoHDRInfoFF start");
+            that.api.getVideoHDRInfoFFmpeg(result, call.argument("path") as string);
+            break;
           case "getSubtitleTracks":
             that.api.getSubtitleTracks(result, call.argument("path") as string);
             break;

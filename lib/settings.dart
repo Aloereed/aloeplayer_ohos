@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-04-02 17:45:58
+ * @LastEditTime: 2025-04-14 20:55:50
  * @Description: file content
  */
 import 'dart:convert';
@@ -483,9 +483,10 @@ class SettingsService {
   static const String _disableThumbnail = 'disable_thumbnail';
   static const String _subtitleFont = 'subtitle_font';
   static const String _hdrForHdr = 'hdr_for_hdr';
+  static const String _hdrDetect = 'hdr_detect';
   static const String _subtitleMany = 'subtitle_many';
-  static const String _versionName = '2.0.7';
-  static const int _versionNumber = 31;
+  static const String _versionName = '2.0.8';
+  static const int _versionNumber = 32;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -673,6 +674,16 @@ class SettingsService {
   Future<bool> getHdrForHdr() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_hdrForHdr) ?? false; // 默认值为false
+  }
+
+  Future<void> saveHdrDetect(int hdrDetect) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_hdrDetect, hdrDetect);
+  }
+
+  Future<int> getHdrDetect() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_hdrDetect) ?? 0; // 默认值为0
   }
 
   Future<void> saveSubtitleMany(int subtitleMany) async {
@@ -1649,7 +1660,8 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   ),
                   ListTile(
-                    leading: Icon(Icons.hdr_auto_select_outlined, color: Colors.lightBlue),
+                    leading: Icon(Icons.hdr_auto_select_outlined,
+                        color: Colors.lightBlue),
                     title: Text('使用HDR播放器打开HDR视频'),
                     subtitle: Text('仅限从视频库中点击时'),
                     trailing: FutureBuilder<bool>(
@@ -1663,6 +1675,45 @@ class _SettingsTabState extends State<SettingsTab> {
                               setState(() {});
                             },
                             activeColor: Colors.lightBlue,
+                          );
+                        } else {
+                          return const CircularProgressIndicator();
+                        }
+                      },
+                    ),
+                  ),
+                  // 添加一个ListTile用于选择视频库检测HDR的方式，0为不检测，1为系统，2为ffmpeg
+                  ListTile(
+                    leading: Icon(Icons.hdr_enhanced_select,
+                        color: Colors.lightBlue),
+                    title: Text('视频库检测HDR方式'),
+                    subtitle: Text('0为不检测，1为系统，2为FFmpeg'),
+                    trailing: FutureBuilder<int>(
+                      future: _settingsService.getHdrDetect(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return DropdownButton<int>(
+                            value: snapshot.data!,
+                            items: [
+                              DropdownMenuItem<int>(
+                                value: 0,
+                                child: Text('不检测'),
+                              ),
+                              DropdownMenuItem<int>(
+                                value: 1,
+                                child: Text('系统检测'),
+                              ),
+                              DropdownMenuItem<int>(
+                                value: 2,
+                                child: Text('FFmpeg检测'),
+                              ),
+                            ],
+                            onChanged: (int? value) {
+                              if (value != null) {
+                                _settingsService.saveHdrDetect(value);
+                                setState(() {});
+                              }
+                            },
                           );
                         } else {
                           return const CircularProgressIndicator();

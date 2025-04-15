@@ -368,11 +368,23 @@ class _PlayerTabState extends State<PlayerTab>
         // 读取文件内容
         filePath = await file.readAsString();
       }
+
       final _ffmpegplatform =
           const MethodChannel('samples.flutter.dev/ffmpegplugin');
-      final String hdrJson = await _ffmpegplatform
-              .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
-          '';
+      int getHdrMethod = await _settingsService.getHdrDetect();
+      if (getHdrMethod == 0) {
+        return false;
+      }
+      String hdrJson = '';
+      if (getHdrMethod == 1) {
+        hdrJson = await _ffmpegplatform
+                .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
+            '';
+      } else if (getHdrMethod == 2) {
+        hdrJson = await _ffmpegplatform.invokeMethod<String>(
+                'getVideoHDRInfoFFmpeg', {'path': filePath}) ??
+            '';
+      }
 
       // 如果返回的JSON字符串为空，默认为非HDR
       if (hdrJson.isEmpty) {
@@ -1979,10 +1991,10 @@ class _PlayerTabState extends State<PlayerTab>
     }
 
     final ishdr = await _getHdr(File(uri));
-      // ui.SetHdr.enableHdr(enable_hdr:true); 
-      print("[Player] HDR enabled.");
-      // ui.SetHdr.setHdrMode(hdr: 1 ,is_image:true);
-      print("[Player] HDR set to 1.");
+    // ui.SetHdr.enableHdr(enable_hdr:true);
+    print("[Player] HDR enabled.");
+    // ui.SetHdr.setHdrMode(hdr: 1 ,is_image:true);
+    print("[Player] HDR set to 1.");
     // 异步读取元数据
 
     _loadMetadata(uri);
@@ -2018,10 +2030,6 @@ class _PlayerTabState extends State<PlayerTab>
         });
         break; // 只处理第一个
       }
-
-      
-      
-      
 
       _extractRestAss(uri, directoryPath, fileName, subtitleTracksJson);
     } catch (e) {
@@ -2757,7 +2765,7 @@ class _PlayerTabState extends State<PlayerTab>
     //   hdr: 0,
     //   is_image: true,
     // );
-    // ui.SetHdr.enableHdr(enable_hdr:false); 
+    // ui.SetHdr.enableHdr(enable_hdr:false);
     // ui.SetHdr.setHdrMode(hdr:  0 ,is_image:true);
     // print("[Dispose] HDR disabled.");
     _videoController?.removeListener(_updatePlaybackState);

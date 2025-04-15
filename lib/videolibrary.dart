@@ -1234,9 +1234,21 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       }
       final _ffmpegplatform =
           const MethodChannel('samples.flutter.dev/ffmpegplugin');
-      final String hdrJson = await _ffmpegplatform
-              .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
-          '';
+      int getHdrMethod = await _settingsService.getHdrDetect();
+      if (getHdrMethod == 0) {
+        _hdrCache[file.path] = false;
+        return false;
+      }
+      String hdrJson = '';
+      if (getHdrMethod == 1) {
+        hdrJson = await _ffmpegplatform
+                .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
+            '';
+      } else if (getHdrMethod == 2) {
+        hdrJson = await _ffmpegplatform.invokeMethod<String>(
+                'getVideoHDRInfoFFmpeg', {'path': filePath}) ??
+            '';
+      }
 
       // 如果返回的JSON字符串为空，默认为非HDR
       if (hdrJson.isEmpty) {
@@ -2166,24 +2178,22 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     _loadItems();
   }
 
-
-
   Widget _buildGridView() {
     DeviceInfo di = getDeviceInfo(context);
     final isTablet = di.isTablet;
     final isLandscape = di.isLandscape;
     int ncols = 5;
-    if(isTablet){
-      if(isLandscape){
-        ncols=5;
-      }else{
-        ncols=4;
+    if (isTablet) {
+      if (isLandscape) {
+        ncols = 5;
+      } else {
+        ncols = 4;
       }
-    }else{
-      if(isLandscape){
-        ncols=3;
-      }else{
-        ncols=2;
+    } else {
+      if (isLandscape) {
+        ncols = 3;
+      } else {
+        ncols = 2;
       }
     }
     return AnimatedSwitcher(

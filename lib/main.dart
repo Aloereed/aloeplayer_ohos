@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-26 16:31:39
+ * @LastEditTime: 2025-04-14 21:01:33
  * @Description: file content
  */
 /*
@@ -1199,9 +1199,21 @@ class _HomeScreenState extends State<HomeScreen>
       }
       final _ffmpegplatform =
           const MethodChannel('samples.flutter.dev/ffmpegplugin');
-      final String hdrJson = await _ffmpegplatform
-              .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
-          '';
+      int getHdrMethod = await _settingsService.getHdrDetect();
+      if (getHdrMethod == 0) {
+        return false;
+      }
+      String hdrJson = '';
+      if (getHdrMethod == 1) {
+        hdrJson = await _ffmpegplatform
+                .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
+            '';
+      } else if (getHdrMethod == 2) {
+        hdrJson = await _ffmpegplatform.invokeMethod<String>(
+                'getVideoHDRInfoFFmpeg', {'path': filePath}) ??
+            '';
+      }
+
 
       // 如果返回的JSON字符串为空，默认为非HDR
       if (hdrJson.isEmpty) {
