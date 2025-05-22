@@ -641,7 +641,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               extension != '.bmp' &&
               extension != '.aac' &&
               extension != '.pdf' &&
-              !item.path.contains('.ux_store')) {
+              !item.path.contains('.ux_store')
+              && !item.path.contains('.trashed')) {
             if (extension == '.lnk') {
               // 作为string读取lnk文件为uri
               String uri = await item.readAsString();

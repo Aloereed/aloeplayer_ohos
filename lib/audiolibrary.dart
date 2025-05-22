@@ -582,6 +582,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
               extension != '.lrc' &&
               extension != '.pdf' &&
               !item.path.contains('.ux_store') &&
+              !item.path.contains('.trashed') &&
               [
                 '.mp3',
                 '.flac',

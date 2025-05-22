@@ -29,7 +29,8 @@
     "sqflite": "file:../har/sqflite.har",
     "media_kit_libs_ohos_video": "file:../har/media_kit_libs_ohos_video.har",
     "media_kit_video": "file:../har/media_kit_video.har",
-    "@ohos/pinyin4js": "^2.0.1"
+    "@ohos/pinyin4js": "^2.0.1",
+    "@rte-xhs/redplayer": "^1.0.0"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

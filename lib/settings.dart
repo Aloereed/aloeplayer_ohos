@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-04-14 20:55:50
+ * @LastEditTime: 2025-05-16 19:48:00
  * @Description: file content
  */
 import 'dart:convert';
@@ -485,8 +485,8 @@ class SettingsService {
   static const String _hdrForHdr = 'hdr_for_hdr';
   static const String _hdrDetect = 'hdr_detect';
   static const String _subtitleMany = 'subtitle_many';
-  static const String _versionName = '2.0.8';
-  static const int _versionNumber = 32;
+  static const String _versionName = '2.0.9';
+  static const int _versionNumber = 33;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -1687,7 +1687,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     leading: Icon(Icons.hdr_enhanced_select,
                         color: Colors.lightBlue),
                     title: Text('视频库检测HDR方式'),
-                    subtitle: Text('0为不检测，1为系统，2为FFmpeg'),
+                    subtitle: Text('使用HDR检测可能导致卡顿'),
                     trailing: FutureBuilder<int>(
                       future: _settingsService.getHdrDetect(),
                       builder: (context, snapshot) {
