@@ -1294,313 +1294,328 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Scaffold(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? Color(0xFF121212)
-            : Color(0xFFF5F5F5),
-        // floatingActionButton: _buildSpeedDial(),
-        appBar: AppBar(
-          elevation: 0,
-          backgroundColor: Theme.of(context).brightness == Brightness.dark
-              ? Color(0xFF121212)
-              : Color(0xFFF5F5F5),
-          titleSpacing: 0,
-          title: AnimatedContainer(
-            duration: Duration(milliseconds: 300),
-            width: double.infinity,
-            height: 40,
-            margin: EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey[800]
-                  : Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 5,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Center(
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: '搜索音频...',
-                  border: InputBorder.none,
-                  prefixIcon: Icon(
-                    Icons.search,
-                    color: Theme.of(context).brightness != Brightness.dark
-                        ? Colors.grey[800]!.withOpacity(0.7)
-                        : Colors.white.withOpacity(0.7),
-                  ),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                  hintStyle: TextStyle(color: Colors.grey),
-                ),
-                style: TextStyle(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black87,
-                ),
-                onChanged: _filterItems,
-              ),
-            ),
-          ),
-          bottom: TabBar(
-            controller: _tabController,
-            isScrollable: false,
-            tabs: _tabTitles.map((title) => Tab(text: title)).toList(),
-            labelColor: Colors.lightBlue,
-            indicatorColor: Colors.lightBlue,
-            unselectedLabelColor: Colors.grey,
-          ),
-          actions: [
-            IconButton(
-              icon: Icon(Icons.folder_open,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black),
-              onPressed: () => _openFile(),
-            ),
-            AnimatedSwitcher(
-              duration: Duration(milliseconds: 300),
-              child: IconButton(
-                key: ValueKey<bool>(_isGridView),
-                icon: Icon(
-                  _isGridView ? Icons.list_rounded : Icons.grid_view_rounded,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black,
-                ),
-                tooltip: _isGridView ? "列表视图" : "网格视图",
-                onPressed: () {
-                  setState(() {
-                    _isGridView = !_isGridView;
-                  });
-                },
-              ),
-            ),
-            Visibility(
-              visible:
-                  _currentPath != _audioDirPath && _tabController.index == 0,
-              child: IconButton(
-                icon: Icon(Icons.arrow_upward,
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black),
-                onPressed: _navigateUp,
-              ),
-            ),
-            Visibility(
-              visible: (_selectedArtist != null || _selectedAlbum != null) &&
-                  (_tabController.index == 1 || _tabController.index == 2),
-              child: IconButton(
-                icon: Icon(Icons.arrow_back,
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black),
-                onPressed: _resetCategoryView,
-              ),
-            ),
-            PopupMenuButton<String>(
-              icon: Icon(
-                Icons.add_rounded,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white
-                    : Colors.black,
-              ),
-              tooltip: "添加音频",
+    return WillPopScope(
+        onWillPop: () async {
+          if (_audioDirPath != _currentPath) {
+            _navigateUp();
+            return false;
+          } else {
+            return true;
+          }
+        },
+        child: Scaffold(
+            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                ? Color(0xFF121212)
+                : Color(0xFFF5F5F5),
+            // floatingActionButton: _buildSpeedDial(),
+            appBar: AppBar(
               elevation: 0,
-              offset: const Offset(0, 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+              backgroundColor: Theme.of(context).brightness == Brightness.dark
+                  ? Color(0xFF121212)
+                  : Color(0xFFF5F5F5),
+              titleSpacing: 0,
+              title: AnimatedContainer(
+                duration: Duration(milliseconds: 300),
+                width: double.infinity,
+                height: 40,
+                margin: EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[800]
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 5,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: '搜索音频...',
+                      border: InputBorder.none,
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: Theme.of(context).brightness != Brightness.dark
+                            ? Colors.grey[800]!.withOpacity(0.7)
+                            : Colors.white.withOpacity(0.7),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                      hintStyle: TextStyle(color: Colors.grey),
+                    ),
+                    style: TextStyle(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black87,
+                    ),
+                    onChanged: _filterItems,
+                  ),
+                ),
               ),
-              color: Colors.transparent,
-              onSelected: (value) {
-                if (value == 'pick') {
-                  _pickAudioWithFilePicker();
-                } else if (value == 'folder') {
-                  _createNewFolder(context);
-                } else if (value == 'webdav') {
-                  _openWebDavFileManager(context);
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  padding: EdgeInsets.zero,
-                  value: null,
-                  enabled: false,
-                  child: ClipRRect(
+              bottom: TabBar(
+                controller: _tabController,
+                isScrollable: false,
+                tabs: _tabTitles.map((title) => Tab(text: title)).toList(),
+                labelColor: Colors.lightBlue,
+                indicatorColor: Colors.lightBlue,
+                unselectedLabelColor: Colors.grey,
+              ),
+              actions: [
+                IconButton(
+                  icon: Icon(Icons.folder_open,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black),
+                  onPressed: () => _openFile(),
+                ),
+                AnimatedSwitcher(
+                  duration: Duration(milliseconds: 300),
+                  child: IconButton(
+                    key: ValueKey<bool>(_isGridView),
+                    icon: Icon(
+                      _isGridView
+                          ? Icons.list_rounded
+                          : Icons.grid_view_rounded,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black,
+                    ),
+                    tooltip: _isGridView ? "列表视图" : "网格视图",
+                    onPressed: () {
+                      setState(() {
+                        _isGridView = !_isGridView;
+                      });
+                    },
+                  ),
+                ),
+                Visibility(
+                  visible: _currentPath != _audioDirPath &&
+                      _tabController.index == 0,
+                  child: IconButton(
+                    icon: Icon(Icons.arrow_upward,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.black),
+                    onPressed: _navigateUp,
+                  ),
+                ),
+                Visibility(
+                  visible: (_selectedArtist != null ||
+                          _selectedAlbum != null) &&
+                      (_tabController.index == 1 || _tabController.index == 2),
+                  child: IconButton(
+                    icon: Icon(Icons.arrow_back,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.black),
+                    onPressed: _resetCategoryView,
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.add_rounded,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                  ),
+                  tooltip: "添加音频",
+                  elevation: 0,
+                  offset: const Offset(0, 10),
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.black.withOpacity(0.6)
-                              : Colors.white.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
+                  ),
+                  color: Colors.transparent,
+                  onSelected: (value) {
+                    if (value == 'pick') {
+                      _pickAudioWithFilePicker();
+                    } else if (value == 'folder') {
+                      _createNewFolder(context);
+                    } else if (value == 'webdav') {
+                      _openWebDavFileManager(context);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      padding: EdgeInsets.zero,
+                      value: null,
+                      enabled: false,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.black.withOpacity(0.6)
+                                  : Colors.white.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
                                     ? Colors.white.withOpacity(0.2)
                                     : Colors.white.withOpacity(0.5),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Title
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16.0,
-                                  vertical: 8.0,
-                                ),
-                                child: Text(
-                                  '添加音频',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white
-                                        : Colors.black87,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 8.0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Title
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16.0,
+                                      vertical: 8.0,
+                                    ),
+                                    child: Text(
+                                      '添加音频',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? Colors.white
+                                            : Colors.black87,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              const Divider(height: 1, thickness: 1),
-                              // Add files from File Manager
-                              _buildActionMenuItem(
-                                context: context,
-                                title: '从文件管理器添加',
-                                icon: Icons.folder_open_rounded,
-                                iconColor: Colors.lightBlue,
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  _pickAudioWithFileManager(context);
-                                },
-                              ),
+                                  const Divider(height: 1, thickness: 1),
+                                  // Add files from File Manager
+                                  _buildActionMenuItem(
+                                    context: context,
+                                    title: '从文件管理器添加',
+                                    icon: Icons.folder_open_rounded,
+                                    iconColor: Colors.lightBlue,
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      _pickAudioWithFileManager(context);
+                                    },
+                                  ),
 
-                              // Add local video
-                              _buildActionMenuItem(
-                                context: context,
-                                title: '添加本地音频文件',
-                                icon: Icons.file_upload,
-                                iconColor: Colors.lightBlue,
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  _pickAudioWithFilePicker();
-                                },
-                              ),
+                                  // Add local video
+                                  _buildActionMenuItem(
+                                    context: context,
+                                    title: '添加本地音频文件',
+                                    icon: Icons.file_upload,
+                                    iconColor: Colors.lightBlue,
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      _pickAudioWithFilePicker();
+                                    },
+                                  ),
 
-                              // Create new folder
-                              _buildActionMenuItem(
-                                context: context,
-                                title: '新建文件夹',
-                                icon: Icons.create_new_folder,
-                                iconColor: Colors.lightBlue,
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  _createNewFolder(context);
-                                },
-                              ),
+                                  // Create new folder
+                                  _buildActionMenuItem(
+                                    context: context,
+                                    title: '新建文件夹',
+                                    icon: Icons.create_new_folder,
+                                    iconColor: Colors.lightBlue,
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      _createNewFolder(context);
+                                    },
+                                  ),
 
-                              // WebDAV download
-                              _buildActionMenuItem(
-                                context: context,
-                                title: '从WebDAV下载',
-                                icon: Icons.cloud_upload_rounded,
-                                iconColor: Colors.lightBlue,
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  _openWebDavFileManager(context);
-                                },
+                                  // WebDAV download
+                                  _buildActionMenuItem(
+                                    context: context,
+                                    title: '从WebDAV下载',
+                                    icon: Icons.cloud_upload_rounded,
+                                    iconColor: Colors.lightBlue,
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      _openWebDavFileManager(context);
+                                    },
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
+                // IconButton(
+                //   icon: Icon(Icons.webhook),
+                //   onPressed: () => _openWebDavFileManager(context),
+                // ),
+                // IconButton(
+                //   icon: Icon(Icons.refresh,
+                //       color: Theme.of(context).brightness == Brightness.dark
+                //           ? Colors.white
+                //           : Colors.black),
+                //   onPressed: _loadItems,
+                // ),
               ],
             ),
-            // IconButton(
-            //   icon: Icon(Icons.webhook),
-            //   onPressed: () => _openWebDavFileManager(context),
-            // ),
-            // IconButton(
-            //   icon: Icon(Icons.refresh,
-            //       color: Theme.of(context).brightness == Brightness.dark
-            //           ? Colors.white
-            //           : Colors.black),
-            //   onPressed: _loadItems,
-            // ),
-          ],
-        ),
-        body: _isLoading
-            ? Center(child: CircularProgressIndicator())
-            : Column(children: [
-                Expanded(
-                    child: Container(
-                        decoration: BoxDecoration(
-                          border: null, // 移除 TabBar 和 TabBarView 之间的分割线
-                        ),
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            // Tab 1: Files view (existing functionality)
-                            _buildFilesView(),
+            body: _isLoading
+                ? Center(child: CircularProgressIndicator())
+                : Column(children: [
+                    Expanded(
+                        child: Container(
+                            decoration: BoxDecoration(
+                              border: null, // 移除 TabBar 和 TabBarView 之间的分割线
+                            ),
+                            child: TabBarView(
+                              controller: _tabController,
+                              children: [
+                                // Tab 1: Files view (existing functionality)
+                                _buildFilesView(),
 
-                            // Tab 2: Artists view
-                            _buildArtistsView(),
+                                // Tab 2: Artists view
+                                _buildArtistsView(),
 
-                            // Tab 3: Albums view
-                            _buildAlbumsView(),
+                                // Tab 3: Albums view
+                                _buildAlbumsView(),
 
-                            // Tab 4: Songs view
-                            _buildSongsView(),
-                          ],
-                        ))),
-                MiniPlayer(
-                  onTap: () {
-                    final audioService = AudioPlayerService();
-                    if (audioService.currentFilePath != null) {
-                      Navigator.push(
-                        context,
-                        PageRouteBuilder(
-                          pageBuilder:
-                              (context, animation, secondaryAnimation) =>
-                                  MusicPlayerPage(
-                            filePath: audioService.currentFilePath!,
-                            controller: audioService.controller,
-                          ),
-                          transitionsBuilder:
-                              (context, animation, secondaryAnimation, child) {
-                            const begin = Offset(0.0, 1.0); // 从底部开始
-                            const end = Offset.zero;
-                            const curve = Curves.easeOut;
+                                // Tab 4: Songs view
+                                _buildSongsView(),
+                              ],
+                            ))),
+                    MiniPlayer(
+                      onTap: () {
+                        final audioService = AudioPlayerService();
+                        if (audioService.currentFilePath != null) {
+                          Navigator.push(
+                            context,
+                            PageRouteBuilder(
+                              pageBuilder:
+                                  (context, animation, secondaryAnimation) =>
+                                      MusicPlayerPage(
+                                filePath: audioService.currentFilePath!,
+                                controller: audioService.controller,
+                              ),
+                              transitionsBuilder: (context, animation,
+                                  secondaryAnimation, child) {
+                                const begin = Offset(0.0, 1.0); // 从底部开始
+                                const end = Offset.zero;
+                                const curve = Curves.easeOut;
 
-                            var tween = Tween(begin: begin, end: end)
-                                .chain(CurveTween(curve: curve));
-                            var offsetAnimation = animation.drive(tween);
+                                var tween = Tween(begin: begin, end: end)
+                                    .chain(CurveTween(curve: curve));
+                                var offsetAnimation = animation.drive(tween);
 
-                            return SlideTransition(
-                              position: offsetAnimation,
-                              child: child,
-                            );
-                          },
-                          transitionDuration: const Duration(milliseconds: 300),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ]));
+                                return SlideTransition(
+                                  position: offsetAnimation,
+                                  child: child,
+                                );
+                              },
+                              transitionDuration:
+                                  const Duration(milliseconds: 300),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ])));
   }
 
   Widget _buildFilesView() {

@@ -1533,7 +1533,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         onWillPop: () async {
           if (_videoDirPath != _currentPath) {
             _navigateUp();
-            return true;
+            return false;
           } else {
             return true;
           }
@@ -1795,7 +1795,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                                     // Add local video link
                                     _buildActionMenuItem(
                                       context: context,
-                                      title: '添加本地视频文件链接',
+                                      title: '添加视频文件快捷方式(不复制)',
                                       icon: Icons.dataset_linked_rounded,
                                       iconColor: Colors.lightBlue,
                                       onTap: () {

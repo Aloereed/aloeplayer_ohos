@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-04-14 21:01:33
+ * @LastEditTime: 2025-08-17 21:00:07
  * @Description: file content
  */
 /*
@@ -24,7 +24,6 @@ import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
-import 'package:just_audio_ohos/just_audio_ohos.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/chewie.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart';
@@ -54,7 +53,7 @@ import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:dart_libass/dart_libass.dart';
 import 'package:aloeplayer/player.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'package:aloeplayer/smb_browser_page.dart';
 
 // late MyAudioHandler audioHandler;
 void main() async {
@@ -70,11 +69,6 @@ void main() async {
   // 初始化音频会话
   // final session = await AudioSession.instance;
   // await session.configure(AudioSessionConfiguration.music());
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.aloereed.aloeplayer.channel.audio',
-    androidNotificationChannelName: 'Audio playback',
-    androidNotificationOngoing: true,
-  );
   ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
     return Container(
       color: Colors.black,
@@ -1352,6 +1346,7 @@ class _HomeScreenState extends State<HomeScreen>
               //   getopenfile: _getopenfile,
               //   startPlayerPage: startPlayerPage,
               // ),
+              // SmbBrowserPage(),
               SettingsTab(),
             ],
           ),

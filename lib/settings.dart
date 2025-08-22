@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-05-16 19:48:00
+ * @LastEditTime: 2025-08-17 19:45:07
  * @Description: file content
  */
 import 'dart:convert';
@@ -485,8 +485,8 @@ class SettingsService {
   static const String _hdrForHdr = 'hdr_for_hdr';
   static const String _hdrDetect = 'hdr_detect';
   static const String _subtitleMany = 'subtitle_many';
-  static const String _versionName = '2.0.9';
-  static const int _versionNumber = 33;
+  static const String _versionName = '2.1.0';
+  static const int _versionNumber = 35;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -1355,7 +1355,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     subtitle: Text('ASS字幕为比例调整'),
                     trailing: DropdownButton<int>(
                       value: _subtitleFontSize.toInt(),
-                      items: List.generate(20, (index) {
+                      items: List.generate(30, (index) {
                         return DropdownMenuItem<int>(
                           value: 18 + 3 * index,
                           child: Text('${18 + 3 * index}'),

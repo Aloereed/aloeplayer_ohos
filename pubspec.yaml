@@ -23,7 +23,7 @@ dependencies:
       url: https://github.com/xiaoyaocz/flutter_ns_danmaku.git
   path: null
   provider: ^6.0.5
-  rxdart: ^0.27.7
+  rxdart: '>=0.26.0 <0.29.0'
   simple_gesture_detector: ^0.2.1
   vivysub_utils: ^0.2.0
   webdav_client: null
@@ -34,14 +34,16 @@ dependencies:
   dio: any
   smb_connect: ^0.0.9
   galactic_hotkeys: ^1.1.1
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
 dependency_overrides:
   audio_service:
     git:
       path: audio_service
       url: https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git
-  audio_session:
+  audio_session: 
     git:
-      url: https://gitcode.com/openharmony-sig/flutter_audio_session.git
+      url: "https://gitcode.com/openharmony-sig/flutter_audio_session.git"
   dart_libass:
     path: ./dart_libass-main
   file_picker_ohos:
@@ -62,18 +64,16 @@ dependency_overrides:
     path: ./image_picker/image_picker_android
   image_picker_ios:
     path: ./image_picker/image_picker_ios
-  just_audio:
-    git:
-      path: just_audio
-      url: https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git
-  just_audio_background:
-    git:
-      path: just_audio_background
-      url: https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git
-  just_audio_ohos:
-    git:
-      path: just_audio/ohos
-      url: https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git
+  # just_audio:
+  #   git:
+  #     path: just_audio
+  #     url: https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git
+  #     ref: br_v0.10.4_ohos
+  # just_audio_background:
+  #   git:
+  #     path: just_audio_background
+  #     url: https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git
+  #     ref: br_v0.10.4_ohos
   media_info:
     git:
       url: https://gitcode.com/openharmony-sig/fluttertpc_media_info.git
@@ -108,6 +108,8 @@ dependency_overrides:
     path: ./video_player/video_player_platform_interface
   video_player_avfoundation:
     path: ./video_player/video_player_avfoundation
+  video_player_android: 2.7.1
+
   video_thumbnail_ohos:
     git:
       path: ohos
@@ -150,4 +152,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 2.0.9+33
+version: 2.1.0+35

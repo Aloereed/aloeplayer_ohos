@@ -9,7 +9,6 @@
     "file_selector_ohos": "file:../har/file_selector_ohos.har",
     "image_picker_ohos": "file:../har/image_picker_ohos.har",
     "path_provider_ohos": "file:../har/path_provider_ohos.har",
-    "video_player_ohos": "file:../har/video_player_ohos.har",
     "media_info": "file:../har/media_info.har",
     "fluttertoast": "file:../har/fluttertoast.har",
     "wakelock": "file:../har/wakelock.har",
@@ -17,7 +16,6 @@
     "url_launcher_ohos": "file:../har/url_launcher_ohos.har",
     "audio_session": "file:../har/audio_session.har",
     "audio_service_ohos": "file:../har/audio_service_ohos.har",
-    "just_audio_ohos": "file:../har/just_audio_ohos.har",
     "share_plus": "file:../har/share_plus.har",
     "file_picker_ohos": "file:../har/file_picker_ohos.har",
     "video_thumbnail_ohos": "file:../har/video_thumbnail_ohos.har",
@@ -30,7 +28,9 @@
     "media_kit_libs_ohos_video": "file:../har/media_kit_libs_ohos_video.har",
     "media_kit_video": "file:../har/media_kit_video.har",
     "@ohos/pinyin4js": "^2.0.1",
-    "@rte-xhs/redplayer": "^1.0.0"
+    "@ohos/flutter_ohos": "har/flutter.har",
+    "just_audio": "file:../har/just_audio.har",
+    "video_player_ohos": "file:../har/video_player_ohos.har"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

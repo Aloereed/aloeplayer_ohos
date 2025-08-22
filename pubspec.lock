@@ -13,10 +13,10 @@ packages:
     dependency: transitive
     description:
       name: asn1lib
-      sha256: "4bae5ae63e6d6dd17c4aac8086f3dec26c0236f6a0f03416c6c19d830c367cf5"
+      sha256: "9a8f69025044eb466b9b60ef3bc3ac99b4dc6c158ae9c56d25eeccf5bc56d024"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.5.8"
+    version: "1.6.5"
   async:
     dependency: transitive
     description:
@@ -29,16 +29,16 @@ packages:
     dependency: "direct main"
     description:
       name: audio_metadata_reader
-      sha256: "9f05d016a3277357308eb6d2f283cd1229c7fae62d6943ee6ab95b374e265222"
+      sha256: b7cecf78178075c8f8281ae184ae81d137eb6e751f5d193334984eb732662ee0
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.1.0"
+    version: "1.4.2"
   audio_service:
     dependency: "direct overridden"
     description:
       path: audio_service
       ref: HEAD
-      resolved-ref: "1cda0cf67701e0dec3486ccc3f91eb1d7d5db5ea"
+      resolved-ref: "43be9f21aa33cde5a7855691a00ce52aa06014a7"
       url: "https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git"
     source: git
     version: "0.18.13"
@@ -47,7 +47,7 @@ packages:
     description:
       path: audio_service_ohos
       ref: HEAD
-      resolved-ref: "1cda0cf67701e0dec3486ccc3f91eb1d7d5db5ea"
+      resolved-ref: "43be9f21aa33cde5a7855691a00ce52aa06014a7"
       url: "https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git"
     source: git
     version: "0.18.15"
@@ -72,7 +72,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "1ce7e00ba1970d9bf40c48aaa9a5c8f585fa7995"
+      resolved-ref: d2ff09dfe4df3b366c19cca27562bdb413de20c7
       url: "https://gitcode.com/openharmony-sig/flutter_audio_session.git"
     source: git
     version: "0.1.18"
@@ -88,10 +88,10 @@ packages:
     dependency: "direct main"
     description:
       name: canvas_danmaku
-      sha256: a6761973c72328c3872fa288d0a943bf3675238a30913cf9cd0155d9b7cea9ca
+      sha256: "98fd90f257ffe93bd6a0bd857d92f40172767fc77ffb48b2379ac692e62150eb"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.2.6"
+    version: "0.2.7"
   castscreen:
     dependency: "direct main"
     description:
@@ -134,10 +134,10 @@ packages:
     dependency: transitive
     description:
       name: collection
-      sha256: ee67cb0715911d28db6bf4af1026078bd6f0128b07a5f66fb2ed94ec6783c09a
+      sha256: a1ace0a119f20aabc852d165077c036cd864315bd99b7eaa10a60100341941bf
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.18.0"
+    version: "1.19.0"
   convert:
     dependency: transitive
     description:
@@ -213,10 +213,10 @@ packages:
     dependency: "direct main"
     description:
       name: dio
-      sha256: "253a18bbd4851fecba42f7343a1df3a9a4c1d31a2c1b37e221086b4fa8c8dbc9"
+      sha256: d90ee57923d1828ac14e492ca49440f65477f4bb1263575900be731a3dac66a9
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "5.8.0+1"
+    version: "5.9.0"
   dio_web_adapter:
     dependency: transitive
     description:
@@ -395,10 +395,10 @@ packages:
     dependency: transitive
     description:
       name: flutter_secure_storage_linux
-      sha256: bf7404619d7ab5c0a1151d7c4e802edad8f33535abfbeff2f9e1fe1274e2d705
+      sha256: be76c1d24a97d0b98f8b54bce6b481a380a6590df992d0098f868ad54dc8f688
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.2.2"
+    version: "1.2.3"
   flutter_secure_storage_macos:
     dependency: transitive
     description:
@@ -443,10 +443,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_subtitle
-      sha256: f9e361096df4c8df6df964ac42071f3ead79e89055cb285b160d2a532cb49b08
+      sha256: ec06bb0bdf9ef60cd7368acf7cf5217bcb8c4a9111fe7352ee5220da9ee85be5
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.0.5"
+    version: "0.0.6"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -462,7 +462,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: b8293e8f29c2161c13ee54899ddf6d3953b2388c
+      resolved-ref: b904d5000b30d31d0d67fbd96ac53e3320d2e222
       url: "https://gitcode.com/openharmony-sig/flutter_fluttertoast.git"
     source: git
     version: "8.2.2"
@@ -478,26 +478,34 @@ packages:
     dependency: "direct main"
     description:
       name: google_fonts
-      sha256: b1ac0fe2832c9cc95e5e88b57d627c5e68c223b9657f4b96e1487aa9098c7b82
+      sha256: df9763500dadba0155373e9cb44e202ce21bd9ed5de6bdbd05c5854e86839cb8
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "6.2.1"
+    version: "6.3.0"
   html:
     dependency: transitive
     description:
       name: html
-      sha256: "1fc58edeaec4307368c60d59b7e15b9d658b57d7f3125098b6294153c75337ec"
+      sha256: "6d1264f2dffa1b1101c25a91dff0dc2daee4c18e87cd8538729773c073dbf602"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.15.5"
+    version: "0.15.6"
   http:
     dependency: "direct main"
     description:
       name: http
-      sha256: fe7ab022b76f3034adc518fb6ea04a82387620e19977665ea18d30a1cf43442f
+      sha256: bb2ce4590bc2667c96f318d68cac1b5a7987ec819351d32b1c987239a815e007
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.3.0"
+    version: "1.5.0"
+  http_methods:
+    dependency: transitive
+    description:
+      name: http_methods
+      sha256: "6bccce8f1ec7b5d701e7921dca35e202d425b57e317ba1a37f2638590e29e566"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.1.1"
   http_parser:
     dependency: transitive
     description:
@@ -577,10 +585,10 @@ packages:
     dependency: "direct main"
     description:
       name: intl
-      sha256: d6f56758b7d3014a48af9701c085700aac781a92a87a62b1333b46d8879661cf
+      sha256: "3df61194eb431efc39c4ceba583b95633a403f46c9fd341e550ce0bfa50e9aa5"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.19.0"
+    version: "0.20.2"
   js:
     dependency: transitive
     description:
@@ -589,65 +597,22 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.6.7"
-  just_audio:
-    dependency: "direct overridden"
-    description:
-      path: just_audio
-      ref: HEAD
-      resolved-ref: cf0ac7c1915641861bd48c678b0161c83bb0c4ad
-      url: "https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git"
-    source: git
-    version: "0.9.37"
-  just_audio_background:
-    dependency: "direct overridden"
-    description:
-      path: just_audio_background
-      ref: HEAD
-      resolved-ref: cf0ac7c1915641861bd48c678b0161c83bb0c4ad
-      url: "https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git"
-    source: git
-    version: "0.0.1-beta.11"
-  just_audio_ohos:
-    dependency: "direct overridden"
-    description:
-      path: "just_audio/ohos"
-      ref: HEAD
-      resolved-ref: cf0ac7c1915641861bd48c678b0161c83bb0c4ad
-      url: "https://gitcode.com/openharmony-sig/fluttertpc_just_audio.git"
-    source: git
-    version: "1.0.0"
-  just_audio_platform_interface:
-    dependency: transitive
-    description:
-      name: just_audio_platform_interface
-      sha256: "271b93b484c6f494ecd72a107fffbdb26b425f170c665b9777a0a24a726f2f24"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "4.4.0"
-  just_audio_web:
-    dependency: transitive
-    description:
-      name: just_audio_web
-      sha256: "58915be64509a7683c44bf11cd1a23c15a48de104927bee116e3c63c8eeea0d4"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.4.14"
   leak_tracker:
     dependency: transitive
     description:
       name: leak_tracker
-      sha256: "7f0df31977cb2c0b88585095d168e689669a2cc9b97c309665e3386f3e9d341a"
+      sha256: "7bb2830ebd849694d1ec25bf1f44582d6ac531a57a365a803a6034ff751d2d06"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "10.0.4"
+    version: "10.0.7"
   leak_tracker_flutter_testing:
     dependency: transitive
     description:
       name: leak_tracker_flutter_testing
-      sha256: "06e98f569d004c1315b991ded39924b21af84cf14cc94791b8aea337d25b57f8"
+      sha256: "9491a714cca3667b60b5c420da8217e6de0d1ba7a5ec322fab01758f6998f379"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.0.3"
+    version: "3.0.8"
   leak_tracker_testing:
     dependency: transitive
     description:
@@ -707,16 +672,16 @@ packages:
     dependency: transitive
     description:
       name: material_color_utilities
-      sha256: "0e0a020085b65b6083975e499759762399b4475f766c21668c4ecca34ea74e5a"
+      sha256: f7142bb1154231d7ea5f96bc7bde4bda2a0945d2806bb11670e30b850d56bdec
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.8.0"
+    version: "0.11.1"
   media_info:
     dependency: "direct overridden"
     description:
       path: "."
       ref: HEAD
-      resolved-ref: f5664d9ac9cc2f4628fa1b13741168f7661b012e
+      resolved-ref: f8f07cb816537a65a7812bc1f6b2fc44180771fb
       url: "https://gitcode.com/openharmony-sig/fluttertpc_media_info.git"
     source: git
     version: "0.12.0+2"
@@ -724,10 +689,10 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: "7687075e408b093f36e6bbf6c91878cc0d4cd10f409506f7bc996f68220b9136"
+      sha256: bdb68674043280c3428e9ec998512fb681678676b3c54e773629ffe74419f8c7
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.12.0"
+    version: "1.15.0"
   mime:
     dependency: "direct overridden"
     description:
@@ -879,10 +844,10 @@ packages:
     dependency: "direct main"
     description:
       name: provider
-      sha256: c8a055ee5ce3fd98d6fc872478b03823ffdb448699c6ebdbbc71d59b596fd48c
+      sha256: "4abbd070a04e9ddc287673bf5a030c7ca8b685ff70218720abab8b092f53dd84"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "6.1.2"
+    version: "6.1.5"
   rxdart:
     dependency: "direct main"
     description:
@@ -903,7 +868,7 @@ packages:
     description:
       path: "packages/share_plus/share_plus"
       ref: HEAD
-      resolved-ref: "92520544b3051a3bbff93f1365f14d67f31ce361"
+      resolved-ref: "03507cc39ab148fe9f5827cd991b3e04aed2bcc3"
       url: "https://gitcode.com/openharmony-sig/flutter_plus_plugins.git"
     source: git
     version: "7.2.0"
@@ -912,7 +877,7 @@ packages:
     description:
       path: "packages/share_plus/share_plus_platform_interface"
       ref: master
-      resolved-ref: "92520544b3051a3bbff93f1365f14d67f31ce361"
+      resolved-ref: "03507cc39ab148fe9f5827cd991b3e04aed2bcc3"
       url: "https://gitcode.com/openharmony-sig/flutter_plus_plugins.git"
     source: git
     version: "3.3.0"
@@ -982,6 +947,22 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.4.1"
+  shelf:
+    dependency: "direct main"
+    description:
+      name: shelf
+      sha256: ad29c505aee705f41a4d8963641f91ac4cee3c8fad5947e033390a7bd8180fa4
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.4.1"
+  shelf_router:
+    dependency: "direct main"
+    description:
+      name: shelf_router
+      sha256: f5e5d492440a7fb165fe1e2e1a623f31f734d3370900070b2b1e0d0428d59864
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.1.4"
   simple_gesture_detector:
     dependency: "direct main"
     description:
@@ -994,7 +975,7 @@ packages:
     dependency: transitive
     description: flutter
     source: sdk
-    version: "0.0.99"
+    version: "0.0.0"
   smb_connect:
     dependency: "direct main"
     description:
@@ -1016,7 +997,7 @@ packages:
     description:
       path: sqflite
       ref: HEAD
-      resolved-ref: "64d1855cc1f8b4b362e08004b5faab1b9bfa88e0"
+      resolved-ref: "8c8971886957e6b1b0761507cc048b01f3a6cc15"
       url: "https://gitcode.com/openharmony-sig/flutter_sqflite.git"
     source: git
     version: "2.2.8+3"
@@ -1025,18 +1006,18 @@ packages:
     description:
       path: sqflite_common
       ref: HEAD
-      resolved-ref: "64d1855cc1f8b4b362e08004b5faab1b9bfa88e0"
-      url: "https://gitee.com/openharmony-sig/flutter_sqflite.git"
+      resolved-ref: "8c8971886957e6b1b0761507cc048b01f3a6cc15"
+      url: "https://gitcode.com/openharmony-sig/flutter_sqflite.git"
     source: git
     version: "2.4.5+1"
   stack_trace:
     dependency: transitive
     description:
       name: stack_trace
-      sha256: "73713990125a6d93122541237550ee3352a2d84baad52d375a4cad2eb9b7ce0b"
+      sha256: "9f47fd3630d76be3ab26f0ee06d213679aa425996925ff3feffdec504931c377"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.11.1"
+    version: "1.12.0"
   stream_channel:
     dependency: transitive
     description:
@@ -1049,10 +1030,10 @@ packages:
     dependency: transitive
     description:
       name: string_scanner
-      sha256: "556692adab6cfa87322a115640c11f13cb77b3f076ddcc5d6ae3c20242bedcde"
+      sha256: "688af5ed3402a4bde5b3a6c15fd768dbf2621a614950b17f04626c431ab3c4c3"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.2.0"
+    version: "1.3.0"
   synchronized:
     dependency: transitive
     description:
@@ -1073,10 +1054,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "9955ae474176f7ac8ee4e989dadfb411a58c30415bcfb648fa04b2b8a03afa7f"
+      sha256: "664d3a9a64782fcdeb83ce9c6b39e78fd2971d4e37827b9b06c3aa1edc5e760c"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.7.0"
+    version: "0.7.3"
   typed_data:
     dependency: transitive
     description:
@@ -1114,10 +1095,10 @@ packages:
     dependency: transitive
     description:
       name: url_launcher_ios
-      sha256: "16a513b6c12bb419304e72ea0ae2ab4fed569920d1c7cb850263fe3acc824626"
+      sha256: "7f2022359d4c099eea7df3fdf739f7d3d3b9faf3166fb1dd390775176e0b76cb"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "6.3.2"
+    version: "6.3.3"
   url_launcher_linux:
     dependency: transitive
     description:
@@ -1191,7 +1172,7 @@ packages:
     source: path
     version: "2.7.1"
   video_player_android:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: video_player_android
       sha256: e343701aa890b74a863fa460f5c0e628127ed06a975d7d9af6b697133fb25bdf
@@ -1223,16 +1204,16 @@ packages:
     dependency: transitive
     description:
       name: video_player_web
-      sha256: "3ef40ea6d72434edbfdba4624b90fd3a80a0740d260667d91e7ecd2d79e13476"
+      sha256: e8bba2e5d1e159d5048c9a491bb2a7b29c535c612bb7d10c1e21107f5bd365ba
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.3.4"
+    version: "2.3.5"
   video_thumbnail_ohos:
     dependency: "direct overridden"
     description:
       path: ohos
       ref: HEAD
-      resolved-ref: "5f501d9f348b1afc046e6ff7f3f26e10683c7f74"
+      resolved-ref: e6d1946e70ed7e458ce8893e18845b2cfd88cab7
       url: "https://gitcode.com/openharmony-sig/fluttertpc_video_thumbnail.git"
     source: git
     version: "1.0.0"
@@ -1248,16 +1229,16 @@ packages:
     dependency: transitive
     description:
       name: vm_service
-      sha256: "3923c89304b715fb1eb6423f017651664a03bf5f4b29983627c4da791f74a4ec"
+      sha256: f6be3ed8bd01289b34d679c2b62226f63c0e69f9fd2e50a6b3c1c729a961041b
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "14.2.1"
+    version: "14.3.0"
   wakelock:
     dependency: "direct overridden"
     description:
       path: wakelock
       ref: HEAD
-      resolved-ref: "5e71f97a6e2eaa6042ec166f06348ee0ad333abf"
+      resolved-ref: afa07411c3d1660371a0585d041913b64adb34cc
       url: "https://gitcode.com/openharmony-sig/flutter_wakelock.git"
     source: git
     version: "0.6.2"
@@ -1282,7 +1263,7 @@ packages:
     description:
       path: wakelock_plus
       ref: HEAD
-      resolved-ref: "9c851dac1bfbe91d056b37cd480ba2f08dd44b77"
+      resolved-ref: "8c5a6083fb4d832ca5166dfa385a56a25d211dc1"
       url: "https://gitcode.com/openharmony-sig/fluttertpc_wakelock_plus.git"
     source: git
     version: "1.1.4"
@@ -1290,10 +1271,10 @@ packages:
     dependency: transitive
     description:
       name: wakelock_plus_platform_interface
-      sha256: "70e780bc99796e1db82fe764b1e7dcb89a86f1e5b3afb1db354de50f2e41eb7a"
+      sha256: e10444072e50dbc4999d7316fd303f7ea53d31c824aa5eb05d7ccbdd98985207
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.2.2"
+    version: "1.2.3"
   wakelock_web:
     dependency: transitive
     description:
@@ -1340,7 +1321,7 @@ packages:
     description:
       path: "packages/webview_flutter/webview_flutter_android"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
+      resolved-ref: "35fb467533e174411a117b2a030c15d2a3a9687c"
       url: "https://gitee.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "3.15.0"
@@ -1358,7 +1339,7 @@ packages:
     description:
       path: "packages/webview_flutter/webview_flutter_platform_interface"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
+      resolved-ref: "35fb467533e174411a117b2a030c15d2a3a9687c"
       url: "https://gitee.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "2.10.0"
@@ -1367,7 +1348,7 @@ packages:
     description:
       path: "packages/webview_flutter/webview_flutter_wkwebview"
       ref: HEAD
-      resolved-ref: "056bced4b677ed4f168b245823570c40fe55bddb"
+      resolved-ref: "35fb467533e174411a117b2a030c15d2a3a9687c"
       url: "https://gitee.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "3.12.0"

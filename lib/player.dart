@@ -169,6 +169,10 @@ class _PlayerTabState extends State<PlayerTab>
   String? subtitleFontFamily;
   SortType _sortType = SortType.name; // 默认按名称排序
   SortOrder _sortOrder = SortOrder.ascending; // 默认升序
+  Duration? _abLoopStart;
+  Duration? _abLoopEnd;
+  bool _isABLoopActive = false;
+  Timer? _abLoopTimer; // 添加AB循环定时器
   final _historyService = HistoryService();
   Timer? _positionUpdateTimer;
   final EventChannel _eventChannel2 = EventChannel('com.example.app/events');
@@ -1136,6 +1140,11 @@ class _PlayerTabState extends State<PlayerTab>
               title: '缩放和宽高比',
             ),
           OptionItem(
+            onTap: () => _showABLoopDialog(context),
+            iconData: Icons.repeat_on,
+            title: 'AB循环',
+          ),
+          OptionItem(
             onTap: () => _openSRT(),
             iconData: Icons.subtitles,
             title: '打开字幕文件',
@@ -1184,6 +1193,7 @@ class _PlayerTabState extends State<PlayerTab>
                 // 更新视频控制器的循环模式
                 _videoController
                     ?.setLooping(_isLooping == 2); // 只有单曲循环时设置为 true
+                Navigator.of(context).pop(); // 关闭菜单
               });
             },
             iconData: _isLooping == 0
@@ -1223,6 +1233,153 @@ class _PlayerTabState extends State<PlayerTab>
       },
     );
     _chewieController?.setVolume(_useFfmpegForPlay != 0 ? 0.0 : 1.0);
+  }
+
+  // 实现AB循环对话框
+ void _showABLoopDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        // 使用StatefulBuilder实现对话框内部状态更新
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: Text('AB循环设置', style: Theme.of(context).textTheme.titleLarge),
+            backgroundColor: Theme.of(context).dialogBackgroundColor,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 当前AB点状态显示
+                Text(
+                  _isABLoopActive
+                      ? '当前循环: ${_formatDuration(_abLoopStart!)} - ${_formatDuration(_abLoopEnd!)}'
+                      : '未启用循环或未设置循环区间',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                SizedBox(height: 16),
+                // 时间点控制按钮
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.abc),
+                      label: Text('设置A点'),
+                      onPressed: () {
+                        final currentPosition = _videoController!.value.position;
+                        setState(() {
+                          _abLoopStart = currentPosition;
+                        });
+                        // 同时更新外部状态
+                        this.setState(() {});
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.abc),
+                      label: Text('设置B点'),
+                      onPressed: () {
+                        final currentPosition = _videoController!.value.position;
+                        setState(() {
+                          _abLoopEnd = currentPosition;
+                        });
+                        // 同时更新外部状态
+                        this.setState(() {});
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              if (_isABLoopActive)
+                TextButton(
+                  child: Text('清除', style: TextStyle(color: Colors.red)),
+                  onPressed: () {
+                    _clearABLoop(dialogContext);
+                    setState(() {}); // 更新对话框UI
+                  },
+                ),
+              TextButton(
+                child: Text('取消'),
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+              ElevatedButton(
+                child: Text(_isABLoopActive ? '关闭循环' : '启用循环'),
+                onPressed: () {
+                  _toggleABLoop(dialogContext);
+                  setState(() {}); // 更新对话框UI
+                },
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  void _setABLoopPoint(BuildContext dialogContext, {required bool isStart}) {
+    final currentPosition = _videoController!.value.position;
+    setState(() {
+      if (isStart) {
+        _abLoopStart = currentPosition;
+      } else {
+        _abLoopEnd = currentPosition;
+      }
+    });
+  }
+
+  void _toggleABLoop(BuildContext dialogContext) {
+    setState(() {
+      _isABLoopActive = !_isABLoopActive;
+      if (_isABLoopActive) {
+        // 如果没有设置A/B点，默认使用当前位置作为A点，视频总时长作为B点
+        _abLoopStart ??= _videoController!.value.position;
+        _abLoopEnd ??= _videoController!.value.duration;
+        _startABLoopTimer(); // 启动定时器
+      } else {
+        _stopABLoopTimer(); // 停止定时器
+      }
+    });
+    Navigator.pop(dialogContext);
+  }
+
+  void _startABLoopTimer() {
+    // 先停止任何现有定时器
+    _stopABLoopTimer();
+    // 创建新定时器，每100ms检查一次
+    _abLoopTimer = Timer.periodic(Duration(milliseconds: 100), (timer) {
+      if (!_isABLoopActive || _videoController == null) {
+        _stopABLoopTimer();
+        return;
+      }
+
+      final currentPosition = _videoController!.value.position;
+      // 检查是否达到B点
+      if (_abLoopEnd != null && currentPosition >= _abLoopEnd!) {
+        // 跳转到A点
+        _videoController!.seekTo(_abLoopStart!);
+      }
+    });
+  }
+
+  void _stopABLoopTimer() {
+    if (_abLoopTimer != null) {
+      _abLoopTimer!.cancel();
+      _abLoopTimer = null;
+    }
+  }
+
+  void _clearABLoop(BuildContext dialogContext) {
+    setState(() {
+      _abLoopStart = null;
+      _abLoopEnd = null;
+      _isABLoopActive = false;
+      _stopABLoopTimer(); // 停止定时器
+    });
   }
 
   String convertPathToOhosUri(String path) {
@@ -2768,6 +2925,7 @@ class _PlayerTabState extends State<PlayerTab>
     // ui.SetHdr.enableHdr(enable_hdr:false);
     // ui.SetHdr.setHdrMode(hdr:  0 ,is_image:true);
     // print("[Dispose] HDR disabled.");
+    _stopABLoopTimer(); // 组件销毁时停止定时器
     _videoController?.removeListener(_updatePlaybackState);
     _videoController?.removeListener(_syncAudioTrack);
     _audioTrackController?.dispose();

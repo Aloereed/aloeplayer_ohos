@@ -32,32 +32,30 @@
         skills: [
           {
             entities: [
-              "entity.system.home"
+              "entity.system.home",
+              "entity.system.browsable",
             ],
             actions: [
               "action.system.home",
               "ohos.want.action.sendData",
-              "ohos.want.action.viewData"
             ],
             uris: [
               {
-                scheme: "file",
-                type: "general.audio",
+                "scheme": "file",
+                "type": "video/*",
                 "linkFeature": "FileOpen",
-              },
-              {
-                scheme: "file",
-                type: "general.video",
-                "linkFeature": "FileOpen",
-              },
-              {
-                scheme: "file",
-                type: "general.audio",
                 "maxFileSupported": 1
               },
               {
-                scheme: "file",
-                type: "general.video",
+                "scheme": "file",
+                "type": "audio/*",
+                "linkFeature": "FileOpen",
+                "maxFileSupported": 1
+              },
+              {
+                "scheme": "file",
+                "utd": "general.audio",
+                "linkFeature": "FileOpen",
                 "maxFileSupported": 1
               },
             ],
