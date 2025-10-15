@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-08-17 19:45:07
+ * @LastEditTime: 2025-10-15 20:51:47
  * @Description: file content
  */
 import 'dart:convert';
@@ -485,8 +485,8 @@ class SettingsService {
   static const String _hdrForHdr = 'hdr_for_hdr';
   static const String _hdrDetect = 'hdr_detect';
   static const String _subtitleMany = 'subtitle_many';
-  static const String _versionName = '2.1.0';
-  static const int _versionNumber = 35;
+  static const String _versionName = '2.1.1';
+  static const int _versionNumber = 36;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -2026,7 +2026,7 @@ class _SettingsTabState extends State<SettingsTab> {
                       _buildLinkButton(
                           context, '官网', 'https://ohos.aloereed.com'),
                       _buildLinkButton(context, '更新日志',
-                          'https://ohos.aloereed.com/index.php/2025/01/08/aloeplayer/'),
+                          'https://ohos.aloereed.com/index.php/2025/10/15/aloeplayer-%e6%9b%b4%e6%96%b0%e6%97%a5%e5%bf%97/'),
                       _buildLinkButton(context, '隐私政策',
                           'https://aloereed.com/aloeplayer/privacy-statement.html'),
                       _buildLinkButton(context, '沪ICP备2025110508号-2A',
