@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-10-15 20:51:47
+ * @LastEditTime: 2025-11-09 13:12:17
  * @Description: file content
  */
 import 'dart:convert';
@@ -485,8 +485,8 @@ class SettingsService {
   static const String _hdrForHdr = 'hdr_for_hdr';
   static const String _hdrDetect = 'hdr_detect';
   static const String _subtitleMany = 'subtitle_many';
-  static const String _versionName = '2.1.1';
-  static const int _versionNumber = 36;
+  static const String _versionName = '2.1.2';
+  static const int _versionNumber = 37;
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');

@@ -56,6 +56,7 @@ class ChewieState extends State<Chewie> {
     super.initState();
     widget.controller.addListener(listener);
     notifier = PlayerNotifier.init();
+    widget.controller.valueNotifier = notifier;
   }
 
   @override
@@ -481,6 +482,9 @@ class ChewieController extends ChangeNotifier {
   final bool showOptions;
   bool isMirrored = false;
   int ffmpeg = 0;
+
+  PlayerNotifier? valueNotifier;
+
 
   double scale = 1.0;
   Offset position = Offset.zero;

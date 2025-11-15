@@ -100,6 +100,7 @@ export class VideoPlayer {
         this.url = url
         // 如果url以“mp3”、“flac”、“wav”等结尾，设置媒体类型为“audio”
         if (
+            true || 
            url?.endsWith("mp3") ||
            url?.endsWith("flac") ||
            url?.endsWith("m4a") ||

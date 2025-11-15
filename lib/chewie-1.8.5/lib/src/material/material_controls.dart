@@ -83,6 +83,7 @@ class _MaterialControlsState extends State<MaterialControls>
   void initState() {
     super.initState();
     notifier = Provider.of<PlayerNotifier>(context, listen: false);
+    // chewieController?.valueNotifier = notifier;
   }
 
   // 在你的State类中添加这个计算方法

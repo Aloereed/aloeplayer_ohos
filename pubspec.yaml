@@ -36,6 +36,7 @@ dependencies:
   galactic_hotkeys: ^1.1.1
   shelf: ^1.4.1
   shelf_router: ^1.1.4
+  screenshot: ^3.0.0
 dependency_overrides:
   audio_service:
     git:
@@ -127,14 +128,10 @@ dependency_overrides:
       path: packages/webview_flutter/webview_flutter
       url: https://gitcode.com/openharmony-sig/flutter_packages.git
   win32: 5.5.4
-  # media_kit:
-  #   path: ../media-kit-ohos/media_kit
-  # media_kit_video:
-  #   path: ../media-kit-ohos/media_kit_video
-  # media_kit_libs_video:
-  #   path: ../media-kit-ohos/libs/universal/media_kit_libs_video
-  # media_kit_libs_ohos_video:
-  #   path: ../media-kit-ohos/libs/ohos/media_kit_libs_ohos_video
+  media_kit:
+    path: ../media-kit/media_kit
+  media_kit_video:
+    path: ../media-kit/media_kit_video
 description: A new Flutter project.
 dev_dependencies:
   flutter_lints: ^3.0.0
@@ -152,4 +149,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 2.1.1+36
+version: 2.1.2+37

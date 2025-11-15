@@ -11,7 +11,7 @@ endif()
 set(AKI_ROOT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules/@ohos/aki) # 设置AKI根路径
 
 set(CMAKE_MODULE_PATH ${AKI_ROOT_PATH})
-find_package(Aki REQUIRED)
+find_package(AKI REQUIRED)
 include_directories(${NATIVERENDER_ROOT_PATH}
                     ${NATIVERENDER_ROOT_PATH}/include
                     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/taglib/arm64-v8a/include)
@@ -259,3 +259,13 @@ target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/zix/a
 target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/zlib/arm64-v8a/lib/libz.so.1)
 target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/zstd/arm64-v8a/lib/libzstd.so.1)
 
+add_library(loader SHARED loader.cpp)
+
+# 链接 dl 库（动态加载功能）
+find_library(DL_LIB dl)
+if (DL_LIB)
+    target_link_libraries(loader PRIVATE ${DL_LIB})
+else()
+    # Harmony / musl 通常直接包含 dl 函数
+    target_link_libraries(loader PRIVATE -ldl)
+endif()

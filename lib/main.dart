@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-08-17 21:00:07
+ * @LastEditTime: 2025-11-09 12:53:28
  * @Description: file content
  */
 /*
@@ -54,7 +54,7 @@ import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:dart_libass/dart_libass.dart';
 import 'package:aloeplayer/player.dart';
 import 'package:aloeplayer/smb_browser_page.dart';
-
+import 'mpvplayer.dart';
 // late MyAudioHandler audioHandler;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1236,6 +1236,20 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void startPlayerPage(BuildContext context, {bool forceHdr = false}) async {
+    // Navigator.of(context).push(
+    //     PageRouteBuilder(
+    //       pageBuilder: (context, animation, secondaryAnimation) =>
+    //           FadeTransition(
+    //         opacity: animation,
+    //         // 使用 PlayerTab 本身负责显示加载状态
+    //         child: MPVPlayer(
+    //           filePath: _openfile,
+    //         ),
+    //       ),
+    //       transitionDuration: const Duration(milliseconds: 300),
+    //     ),
+    //   );
+    // return;
     final hdrForHdr = await _settingsService.getHdrForHdr();
     bool isHdr = false;
     try {

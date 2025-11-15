@@ -16,6 +16,7 @@ import FilePickerPlugin from 'file_picker_ohos';
 import ScreenPlugin from 'screen';
 import ImagePickerPlugin from 'image_picker_ohos';
 import VideoPlayerPlugin from 'video_player_ohos';
+import MediaKitVideoPlugin from 'media_kit_video';
 
 /**
  * Generated file. Do not edit.
@@ -46,6 +47,7 @@ export class GeneratedPluginRegistrant {
       flutterEngine.getPlugins()?.add(new ScreenPlugin());
       flutterEngine.getPlugins()?.add(new ImagePickerPlugin());
       flutterEngine.getPlugins()?.add(new VideoPlayerPlugin());
+      flutterEngine.getPlugins()?.add(new MediaKitVideoPlugin());
     } catch (e) {
       Log.e(
         TAG,
