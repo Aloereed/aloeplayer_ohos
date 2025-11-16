@@ -13,6 +13,9 @@ import 'audio_player_service.dart';
 import 'package:flutter_lyric/lyrics_reader.dart';
 import 'package:share_plus/share_plus.dart';
 import 'lyrics_page.dart';
+import 'package:path/path.dart' as path;
+import 'audio_metadata.dart';
+
 // enum LoopMode { off, all, one }
 
 class BlurredIconButton extends StatelessWidget {
@@ -304,6 +307,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
     _loadSettings();
     _usePlaylist = await _settingsService.getUsePlaylist();
     _getPlaylist(widget.filePath);
+    // 初始化 AudioHandler
+    await _audioService.initAudioHandler();
     _initPlayer();
     // 订阅控制器变更通知
     _controllerChangeSubscription =
@@ -562,6 +567,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
         }
       });
       _audioService.externalAddListener();
+      _audioService.updateMediaItem();
+
+
 
       _play();
       _audioService.firstPlay = false;

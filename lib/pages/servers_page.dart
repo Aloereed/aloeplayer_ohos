@@ -148,7 +148,7 @@ class _ServersPageState extends State<ServersPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '支持 SMB 和 WebDAV 协议',
+            '支持 SMB 和 WebDAV 协议(推荐WebDAV)',
             style: TextStyle(fontSize: 14, color: Colors.grey[500]),
           ),
         ],

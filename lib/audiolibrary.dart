@@ -28,7 +28,11 @@ import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'mini_player.dart';
 import 'audio_player_service.dart';
 import 'screens/cast_screen_page.dart';
-
+// MediaKit 播放器导入
+import 'mediakit_miniplayer.dart';
+import 'mediakit_musicplayer.dart';
+import 'mediakit_audio_service.dart';
+import 'audio_metadata.dart' ;
 String pathToUri(String path) {
   if (path.contains(':')) {
     return Uri.parse(path).toString();
@@ -513,6 +517,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   bool _isLoading = false;
   String? _selectedArtist;
   String? _selectedAlbum;
+  bool _useMediaKit = false; // 是否使用 MediaKit 播放器
 
   @override
   void initState() async {
@@ -521,6 +526,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     _tabController.addListener(_handleTabChange);
     _ensureAudioDirectoryExists();
     _isGridView = !(await _settingsService.getDefaultListmode());
+    _useMediaKit = (await _settingsService.getUseFfmpegForPlay()==2);
     _loadItems();
   }
 
@@ -1256,7 +1262,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => MusicPlayerPage(filePath: file.path!),
+          builder: (context) => _useMediaKit
+              ? MediaKitMusicPlayerPage(filePath: file.path!)
+              : MusicPlayerPage(filePath: file.path!),
         ),
       );
     } else {
@@ -1593,41 +1601,79 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                                 _buildSongsView(),
                               ],
                             ))),
-                    MiniPlayer(
-                      onTap: () {
-                        final audioService = AudioPlayerService();
-                        if (audioService.currentFilePath != null) {
-                          Navigator.push(
-                            context,
-                            PageRouteBuilder(
-                              pageBuilder:
-                                  (context, animation, secondaryAnimation) =>
-                                      MusicPlayerPage(
-                                filePath: audioService.currentFilePath!,
-                                controller: audioService.controller,
-                              ),
-                              transitionsBuilder: (context, animation,
-                                  secondaryAnimation, child) {
-                                const begin = Offset(0.0, 1.0); // 从底部开始
-                                const end = Offset.zero;
-                                const curve = Curves.easeOut;
+                    _useMediaKit
+                        ? MediaKitMiniPlayer(
+                            onTap: () {
+                              final audioService = MediaKitAudioService();
+                              if (audioService.currentFilePath != null) {
+                                Navigator.push(
+                                  context,
+                                  PageRouteBuilder(
+                                    pageBuilder: (context, animation,
+                                            secondaryAnimation) =>
+                                        MediaKitMusicPlayerPage(
+                                      filePath: audioService.currentFilePath!,
+                                      player: audioService.player,
+                                    ),
+                                    transitionsBuilder: (context, animation,
+                                        secondaryAnimation, child) {
+                                      const begin = Offset(0.0, 1.0);
+                                      const end = Offset.zero;
+                                      const curve = Curves.easeOut;
 
-                                var tween = Tween(begin: begin, end: end)
-                                    .chain(CurveTween(curve: curve));
-                                var offsetAnimation = animation.drive(tween);
+                                      var tween = Tween(begin: begin, end: end)
+                                          .chain(CurveTween(curve: curve));
+                                      var offsetAnimation =
+                                          animation.drive(tween);
 
-                                return SlideTransition(
-                                  position: offsetAnimation,
-                                  child: child,
+                                      return SlideTransition(
+                                        position: offsetAnimation,
+                                        child: child,
+                                      );
+                                    },
+                                    transitionDuration:
+                                        const Duration(milliseconds: 300),
+                                  ),
                                 );
-                              },
-                              transitionDuration:
-                                  const Duration(milliseconds: 300),
-                            ),
-                          );
-                        }
-                      },
-                    ),
+                              }
+                            },
+                          )
+                        : MiniPlayer(
+                            onTap: () {
+                              final audioService = AudioPlayerService();
+                              if (audioService.currentFilePath != null) {
+                                Navigator.push(
+                                  context,
+                                  PageRouteBuilder(
+                                    pageBuilder: (context, animation,
+                                            secondaryAnimation) =>
+                                        MusicPlayerPage(
+                                      filePath: audioService.currentFilePath!,
+                                      controller: audioService.controller,
+                                    ),
+                                    transitionsBuilder: (context, animation,
+                                        secondaryAnimation, child) {
+                                      const begin = Offset(0.0, 1.0);
+                                      const end = Offset.zero;
+                                      const curve = Curves.easeOut;
+
+                                      var tween = Tween(begin: begin, end: end)
+                                          .chain(CurveTween(curve: curve));
+                                      var offsetAnimation =
+                                          animation.drive(tween);
+
+                                      return SlideTransition(
+                                        position: offsetAnimation,
+                                        child: child,
+                                      );
+                                    },
+                                    transitionDuration:
+                                        const Duration(milliseconds: 300),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
                   ])));
   }
 
@@ -1749,8 +1795,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) =>
-                              MusicPlayerPage(filePath: songs[0].filePath),
+                          builder: (context) => _useMediaKit
+                              ? MediaKitMusicPlayerPage(filePath: songs[0].filePath)
+                              : MusicPlayerPage(filePath: songs[0].filePath),
                         ),
                       );
                     }
@@ -1769,25 +1816,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                   itemCount: songs.length,
                   itemBuilder: (context, index) {
                     final song = songs[index];
-                    return ListTile(
-                      leading: song.albumArt != null
-                          ? Image.memory(song.albumArt!, width: 50, height: 50)
-                          : Icon(Icons.music_note, size: 40),
-                      title: Text(song.title),
-                      subtitle: Text(song.album),
-                      onTap: () {
-                        // widget.getopenfile(song.filePath);
-                        // widget.changeTab(0);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                MusicPlayerPage(filePath: song.filePath),
-                          ),
-                        );
-                      },
-                      trailing: _buildSongPopupMenu(song),
-                    );
+                    return _buildSongListItem(song);
                   },
                 )),
           ),
@@ -1837,12 +1866,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                   final artistName = item['name'];
                   final artistSongs = item['items'];
 
-                  return ListTile(
-                    leading: Icon(Icons.person),
-                    title: Text(artistName),
-                    subtitle: Text('${artistSongs.length} 首歌曲'),
-                    onTap: () => _viewArtistSongs(artistName),
-                  );
+                  return _buildArtistListItem(artistName, artistSongs);
                 }).toList(),
               ],
             );
@@ -1970,8 +1994,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) =>
-                                  MusicPlayerPage(filePath: songs[0].filePath),
+                              builder: (context) => _useMediaKit
+                                  ? MediaKitMusicPlayerPage(filePath: songs[0].filePath)
+                                  : MusicPlayerPage(filePath: songs[0].filePath),
                             ),
                           );
                         }
@@ -1992,27 +2017,75 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                   itemCount: songs.length,
                   itemBuilder: (context, index) {
                     final song = songs[index];
-                    return ListTile(
-                      leading: Text(
-                        song.trackNumber > 0
-                            ? song.trackNumber.toString()
-                            : '-',
-                        style: TextStyle(fontSize: 18),
-                      ),
-                      title: Text(song.title),
-                      subtitle: Text(song.artist),
-                      onTap: () {
-                        // widget.getopenfile(song.filePath);
-                        // widget.changeTab(0);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                MusicPlayerPage(filePath: song.filePath),
+                    return Container(
+                      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: Theme.of(context).brightness == Brightness.dark
+                              ? [Colors.grey[850]!.withOpacity(0.6), Colors.grey[900]!.withOpacity(0.6)]
+                              : [Colors.white.withOpacity(0.8), Colors.grey[50]!.withOpacity(0.8)],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
                           ),
-                        );
-                      },
-                      trailing: _buildSongPopupMenu(song),
+                        ],
+                      ),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        leading: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Color(0xFF667eea).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Text(
+                              song.trackNumber > 0 ? song.trackNumber.toString() : '-',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF667eea),
+                              ),
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          song.title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            song.artist,
+                            style: TextStyle(fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => _useMediaKit
+                                  ? MediaKitMusicPlayerPage(filePath: song.filePath)
+                                  : MusicPlayerPage(filePath: song.filePath),
+                            ),
+                          );
+                        },
+                        trailing: _buildSongPopupMenu(song),
+                      ),
                     );
                   },
                 )),
@@ -2092,56 +2165,10 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                               albumArt = albumSongs[0].albumArt;
                             }
 
-                            return GestureDetector(
-                              onTap: () => _viewAlbumSongs(albumName),
-                              child: Card(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: albumArt != null
-                                          ? Image.memory(albumArt,
-                                              fit: BoxFit.cover,
-                                              width: double.infinity)
-                                          : Container(
-                                              color: Colors.grey[300],
-                                              child: Center(
-                                                  child: Icon(Icons.album,
-                                                      size: 50)),
-                                            ),
-                                    ),
-                                    Padding(
-                                      padding: EdgeInsets.all(8),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            albumName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold),
-                                          ),
-                                          if (albumSongs.isNotEmpty)
-                                            Text(
-                                              albumSongs[0].artist,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(fontSize: 12),
-                                            ),
-                                          Text(
-                                            '${albumSongs.length} 首歌曲',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            return _buildAlbumGridCard(
+                              albumName: albumName,
+                              albumSongs: albumSongs,
+                              albumArt: albumArt,
                             );
                           },
                         ),
@@ -2198,14 +2225,10 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                           albumArt = albumSongs[0].albumArt;
                         }
 
-                        return ListTile(
-                          leading: albumArt != null
-                              ? Image.memory(albumArt,
-                                  width: 50, height: 50, fit: BoxFit.cover)
-                              : Icon(Icons.album, size: 40),
-                          title: Text(albumName),
-                          subtitle: Text('${albumSongs.length} 首歌曲'),
-                          onTap: () => _viewAlbumSongs(albumName),
+                        return _buildAlbumListItem(
+                          albumName: albumName,
+                          albumSongs: albumSongs,
+                          albumArt: albumArt,
                         );
                       }).toList(),
                     ],
@@ -2257,26 +2280,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
 
                   return Column(
                     children: songs.map<Widget>((song) {
-                      return ListTile(
-                        leading: song.albumArt != null
-                            ? Image.memory(song.albumArt!,
-                                width: 50, height: 50)
-                            : Icon(Icons.music_note, size: 40),
-                        title: Text(song.title),
-                        subtitle: Text('${song.artist} • ${song.album}'),
-                        onTap: () {
-                          // widget.getopenfile(song.filePath);
-                          // widget.changeTab(0);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  MusicPlayerPage(filePath: song.filePath),
-                            ),
-                          );
-                        },
-                        trailing: _buildSongPopupMenu(song),
-                      );
+                      return _buildSongListItem(song);
                     }).toList(),
                   );
                 }).toList(),
@@ -2832,133 +2836,312 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   }
 
   Widget _buildAudioCard(File file, {bool isListView = false}) {
-    // Existing audio card building code...
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MusicPlayerPage(filePath: file.path),
+            builder: (context) => _useMediaKit
+                ? MediaKitMusicPlayerPage(filePath: file.path)
+                : MusicPlayerPage(filePath: file.path),
           ),
         );
       },
       onLongPress: () {
         _showAudioOptions(file);
       },
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        child: isListView
-            ? ListTile(
-                leading: FutureBuilder<Uint8List?>(
-                  future: _getAudioThumbnail(file),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return CircularProgressIndicator();
-                    }
-                    if (snapshot.hasError || snapshot.data == null) {
-                      return Icon(Icons.music_note,
-                          size: 40, color: Colors.blue);
-                    }
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: Image.memory(snapshot.data!,
-                          fit: BoxFit.cover, width: 50, height: 50),
-                    );
-                  },
+      child: isListView
+          ? _buildAudioListItem(file, isDarkMode)
+          : _buildAudioGridItem(file, isDarkMode),
+    );
+  }
+
+  Widget _buildAudioListItem(File file, bool isDarkMode) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDarkMode
+              ? [Colors.grey[850]!.withOpacity(0.8), Colors.grey[900]!]
+              : [Colors.white, Colors.grey[50]!],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.3)
+                : Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: ListTile(
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          leading: FutureBuilder<Uint8List?>(
+            future: _getAudioThumbnail(file),
+            builder: (context, snapshot) {
+              return Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF667eea).withOpacity(0.8),
+                      Color(0xFF764ba2).withOpacity(0.8),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0xFF667eea).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
                 ),
-                title: Text(
-                  path.basename(file.path),
-                  style: TextStyle(fontSize: 14),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: snapshot.connectionState == ConnectionState.waiting
+                      ? Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                        )
+                      : snapshot.hasError || snapshot.data == null
+                          ? Icon(Icons.music_note, size: 32, color: Colors.white)
+                          : Image.memory(snapshot.data!, fit: BoxFit.cover),
                 ),
-                subtitle: FutureBuilder<Duration?>(
-                  future: _getAudioDuration(file),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Text('加载中...');
-                    }
-                    if (snapshot.hasError || snapshot.data == null) {
-                      return Text('未知时长 • ${_getFileSize(file)}');
-                    }
-                    final duration = snapshot.data!;
-                    return Text(
-                      '${duration.inMinutes}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')} • ${_getFileSize(file)}',
-                      style: TextStyle(fontSize: 12),
-                    );
-                  },
+              );
+            },
+          ),
+          title: Text(
+            path.basenameWithoutExtension(file.path),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: isDarkMode ? Colors.white : Colors.black87,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: FutureBuilder<Duration?>(
+            future: _getAudioDuration(file),
+            builder: (context, snapshot) {
+              final duration = snapshot.data;
+              final durationText = duration != null
+                  ? '${duration.inMinutes}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}'
+                  : '--:--';
+              return Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.access_time_rounded,
+                      size: 14,
+                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      durationText,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(
+                      Icons.insert_drive_file_rounded,
+                      size: 14,
+                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      _getFileSize(file),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                  ],
                 ),
-                trailing: IconButton(
-                  icon: Icon(Icons.more_vert),
-                  onPressed: () => _showAudioOptions(file),
-                ),
-              )
-            : Column(
-                children: [
-                  Expanded(
-                    child: FutureBuilder<Uint8List?>(
-                      future: _getAudioThumbnail(file),
+              );
+            },
+          ),
+          trailing: Container(
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: IconButton(
+              icon: Icon(
+                Icons.more_vert_rounded,
+                color: isDarkMode ? Colors.white70 : Colors.black54,
+              ),
+              onPressed: () => _showAudioOptions(file),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioGridItem(File file, bool isDarkMode) {
+    return Container(
+      margin: EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDarkMode
+              ? [Colors.grey[850]!.withOpacity(0.8), Colors.grey[900]!]
+              : [Colors.white, Colors.grey[50]!],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.4)
+                : Colors.black.withOpacity(0.1),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 3,
+              child: FutureBuilder<Uint8List?>(
+                future: _getAudioThumbnail(file),
+                builder: (context, snapshot) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFF667eea).withOpacity(0.8),
+                          Color(0xFF764ba2).withOpacity(0.8),
+                        ],
+                      ),
+                    ),
+                    child: snapshot.connectionState == ConnectionState.waiting
+                        ? Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : snapshot.hasError || snapshot.data == null
+                            ? Icon(Icons.music_note, size: 50, color: Colors.white)
+                            : Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Image.memory(snapshot.data!, fit: BoxFit.cover),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withOpacity(0.3),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                  );
+                },
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      path.basenameWithoutExtension(file.path),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    FutureBuilder<Duration?>(
+                      future: _getAudioDuration(file),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return Center(child: CircularProgressIndicator());
-                        }
-                        if (snapshot.hasError || snapshot.data == null) {
-                          return Center(
-                              child: Icon(Icons.music_note,
-                                  size: 50, color: Colors.blue));
-                        }
-                        return ClipRRect(
-                          borderRadius:
-                              BorderRadius.vertical(top: Radius.circular(8)),
-                          child: Image.memory(snapshot.data!,
-                              fit: BoxFit.cover, width: double.infinity),
+                        final duration = snapshot.data;
+                        final durationText = duration != null
+                            ? '${duration.inMinutes}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}'
+                            : '--:--';
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.access_time_rounded,
+                                  size: 12,
+                                  color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  durationText,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Color(0xFF667eea).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Icon(
+                                Icons.play_arrow_rounded,
+                                size: 16,
+                                color: Color(0xFF667eea),
+                              ),
+                            ),
+                          ],
                         );
                       },
                     ),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          path.basename(file.path),
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: 4),
-                        FutureBuilder<Duration?>(
-                          future: _getAudioDuration(file),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return Text('加载中...',
-                                  style: TextStyle(fontSize: 10));
-                            }
-                            if (snapshot.hasError || snapshot.data == null) {
-                              return Text(
-                                _getFileSize(file),
-                                style:
-                                    TextStyle(fontSize: 10, color: Colors.grey),
-                              );
-                            }
-                            final duration = snapshot.data!;
-                            return Text(
-                              '${duration.inMinutes}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')} • ${_getFileSize(file)}',
-                              style:
-                                  TextStyle(fontSize: 10, color: Colors.grey),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3031,8 +3214,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) =>
-                              MusicPlayerPage(filePath: file.path),
+                          builder: (context) => _useMediaKit
+                              ? MediaKitMusicPlayerPage(filePath: file.path)
+                              : MusicPlayerPage(filePath: file.path),
                         ),
                       );
                     },
@@ -3191,6 +3375,441 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           ],
         );
       },
+    );
+  }
+
+  // 专辑网格卡片组件
+  Widget _buildAlbumGridCard({
+    required String albumName,
+    required List<AudioMetadataLite> albumSongs,
+    Uint8List? albumArt,
+  }) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: () => _viewAlbumSongs(albumName),
+      child: Container(
+        margin: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDarkMode
+                ? [Colors.grey[850]!.withOpacity(0.8), Colors.grey[900]!]
+                : [Colors.white, Colors.grey[50]!],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDarkMode
+                  ? Colors.black.withOpacity(0.4)
+                  : Colors.black.withOpacity(0.12),
+              blurRadius: 16,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 4,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFFf093fb).withOpacity(0.8),
+                            Color(0xFFf5576c).withOpacity(0.8),
+                          ],
+                        ),
+                      ),
+                      child: albumArt != null
+                          ? Image.memory(albumArt, fit: BoxFit.cover)
+                          : Icon(Icons.album, size: 64, color: Colors.white),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.5),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            albumName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: isDarkMode ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          if (albumSongs.isNotEmpty)
+                            Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Text(
+                                albumSongs[0].artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDarkMode
+                                      ? Colors.grey[400]
+                                      : Colors.grey[600],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.music_note_rounded,
+                                size: 14,
+                                color: isDarkMode
+                                    ? Colors.grey[400]
+                                    : Colors.grey[600],
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                '${albumSongs.length} 首',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDarkMode
+                                      ? Colors.grey[400]
+                                      : Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Color(0xFFf093fb).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.play_arrow_rounded,
+                              size: 16,
+                              color: Color(0xFFf093fb),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 艺术家列表项组件
+  Widget _buildArtistListItem(String artistName, List<AudioMetadataLite> artistSongs) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final albumArt = artistSongs.isNotEmpty && artistSongs[0].albumArt != null
+        ? artistSongs[0].albumArt
+        : null;
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDarkMode
+              ? [Colors.grey[850]!.withOpacity(0.6), Colors.grey[900]!.withOpacity(0.6)]
+              : [Colors.white.withOpacity(0.8), Colors.grey[50]!.withOpacity(0.8)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ListTile(
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF4facfe),
+                Color(0xFF00f2fe),
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0xFF4facfe).withOpacity(0.3),
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: albumArt != null
+                ? Image.memory(albumArt, fit: BoxFit.cover)
+                : Icon(Icons.person, color: Colors.white, size: 28),
+          ),
+        ),
+        title: Text(
+          artistName,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Row(
+            children: [
+              Icon(
+                Icons.music_note_rounded,
+                size: 14,
+                color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+              ),
+              SizedBox(width: 4),
+              Text(
+                '${artistSongs.length} 首歌曲',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+        trailing: Icon(
+          Icons.chevron_right_rounded,
+          color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+        ),
+        onTap: () => _viewArtistSongs(artistName),
+      ),
+    );
+  }
+
+  // 歌曲列表项组件
+  Widget _buildSongListItem(AudioMetadataLite song) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDarkMode
+              ? [Colors.grey[850]!.withOpacity(0.6), Colors.grey[900]!.withOpacity(0.6)]
+              : [Colors.white.withOpacity(0.8), Colors.grey[50]!.withOpacity(0.8)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ListTile(
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFFfa709a).withOpacity(0.8),
+                Color(0xFFfee140).withOpacity(0.8),
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0xFFfa709a).withOpacity(0.3),
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: song.albumArt != null
+                ? Image.memory(song.albumArt!, fit: BoxFit.cover)
+                : Icon(Icons.music_note, size: 28, color: Colors.white),
+          ),
+        ),
+        title: Text(
+          song.title,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Text(
+            '${song.artist} • ${song.album}',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        trailing: _buildSongPopupMenu(song),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => _useMediaKit
+                  ? MediaKitMusicPlayerPage(filePath: song.filePath)
+                  : MusicPlayerPage(filePath: song.filePath),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // 专辑列表项组件
+  Widget _buildAlbumListItem({
+    required String albumName,
+    required List<AudioMetadataLite> albumSongs,
+    Uint8List? albumArt,
+  }) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDarkMode
+              ? [Colors.grey[850]!.withOpacity(0.6), Colors.grey[900]!.withOpacity(0.6)]
+              : [Colors.white.withOpacity(0.8), Colors.grey[50]!.withOpacity(0.8)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ListTile(
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFFf093fb).withOpacity(0.8),
+                Color(0xFFf5576c).withOpacity(0.8),
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0xFFf093fb).withOpacity(0.3),
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: albumArt != null
+                ? Image.memory(albumArt, fit: BoxFit.cover)
+                : Icon(Icons.album, size: 28, color: Colors.white),
+          ),
+        ),
+        title: Text(
+          albumName,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Row(
+            children: [
+              Icon(
+                Icons.music_note_rounded,
+                size: 14,
+                color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+              ),
+              SizedBox(width: 4),
+              Text(
+                '${albumSongs.length} 首歌曲',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+        trailing: Icon(
+          Icons.chevron_right_rounded,
+          color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+        ),
+        onTap: () => _viewAlbumSongs(albumName),
+      ),
     );
   }
 

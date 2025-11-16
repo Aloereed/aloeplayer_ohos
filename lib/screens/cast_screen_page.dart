@@ -40,10 +40,10 @@ class _CastScreenPageState extends State<CastScreenPage> {
   @override
   void initState() async {
     super.initState();
-    VideoPlayerController videoPlayerController =
-        VideoPlayerController.network('');
-    await videoPlayerController.closeLatestAVSession();
-    videoPlayerController.dispose();
+    // VideoPlayerController videoPlayerController =
+    //     VideoPlayerController.network('');
+    // await videoPlayerController.closeLatestAVSession();
+    // videoPlayerController.dispose();
     _serverAddress = await _castService.startLocalServer(widget.mediaPath);
     _castExample = CastExample(
         initUri: pathToUri(widget.mediaPath) + '|||' + _serverAddress!,

@@ -761,6 +761,18 @@ class _MPVPlayerState extends State<MPVPlayer>
       '.3gp',
       '.rm',
       '.ts',
+      '.vob',
+      '.mpg',
+      '.mpeg',
+      '.f4v',
+      '.divx',
+      '.m2ts',
+      '.mts',
+      '.ogv',
+      '.asf',
+      '.m2v',
+      '.qt',
+      '.y4m',
       // Audio formats
       '.mp3',
       '.flac',
@@ -776,6 +788,13 @@ class _MPVPlayerState extends State<MPVPlayer>
       '.tta',
       '.dts',
       '.ac3',
+      '.tak',
+      '.mpc',
+      '.spx',
+      '.caf',
+      '.aiff',
+      '.dsd',
+      '.dsf',
       // Link files
       '.lnk' // Add .lnk extension to include them in playlist
     ];
@@ -898,6 +917,85 @@ class _MPVPlayerState extends State<MPVPlayer>
 
     // 更新 Audio Service 的媒体信息
     _updateMediaItem();
+
+    // 自动检测并载入字幕文件（仅对特定目录下的本地文件）
+    if (!isHttpUrl) {
+      _autoLoadSubtitle(resolvedPath);
+    }
+  }
+
+  // 自动检测并载入字幕文件
+  void _autoLoadSubtitle(String filePath) async {
+    // 检查文件是否位于指定目录及其子孙文件夹下
+    const targetBasePath = '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/';
+    if (!filePath.startsWith(targetBasePath)) {
+      return;
+    }
+
+    try {
+      final directory = Directory(path.dirname(filePath));
+      final fileBasename = path.basenameWithoutExtension(filePath);
+
+      // 支持的字幕扩展名
+      final subtitleExtensions = ['.srt', '.ass', '.ssa', '.vtt'];
+
+      // 列出目录中的所有文件
+      final files = directory.listSync();
+
+      // 查找匹配的字幕文件
+      File? matchedSubtitle;
+      for (final entity in files) {
+        if (entity is File) {
+          final entityBasename = path.basenameWithoutExtension(entity.path);
+          final entityExtension = path.extension(entity.path).toLowerCase();
+
+          // 检查文件名是否以视频文件的 basename 开头，且扩展名是字幕格式
+          if (entityBasename.startsWith(fileBasename) &&
+              subtitleExtensions.contains(entityExtension)) {
+            matchedSubtitle = entity;
+            break; // 找到第一个匹配的字幕文件就停止
+          }
+        }
+      }
+
+      // 如果找到匹配的字幕文件，自动载入
+      if (matchedSubtitle != null) {
+        // 延迟一点时间确保播放器已经加载完成
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (mounted) {
+            final subtitlePath = matchedSubtitle!.path;
+
+            // 根据字幕类型选择加载方式
+            if (subtitlePath.toLowerCase().endsWith('.ass') ||
+                subtitlePath.toLowerCase().endsWith('.ssa')) {
+              // ASS/SSA 字幕使用 libass 渲染
+              player.setSubtitleTrack(
+                SubtitleTrack.uri(
+                  subtitlePath,
+                  title: path.basenameWithoutExtension(subtitlePath),
+                  language: 'auto',
+                ),
+              );
+            } else {
+              // SRT/VTT 等其他格式
+              player.setSubtitleTrack(SubtitleTrack.uri(subtitlePath));
+            }
+
+            print('自动载入字幕: ${path.basename(subtitlePath)}');
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('已自动载入字幕: ${path.basename(subtitlePath)}'),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        });
+      }
+    } catch (e) {
+      print('自动检测字幕时发生错误: $e');
+      // 静默处理错误，不影响播放
+    }
   }
 
   void _restorePlaybackPosition(String filePath) async {

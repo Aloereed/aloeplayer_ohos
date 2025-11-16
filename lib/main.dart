@@ -56,9 +56,18 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:aloeplayer/player.dart';
 import 'package:aloeplayer/pages/servers_page.dart';
 import 'mpvplayer.dart';
+import 'widgets/animated_bottom_nav_bar.dart';
+import 'widgets/onboarding_screen.dart';
+import 'widgets/empty_state_widget.dart';
+import 'widgets/splash_screen.dart';
+import 'widgets/animated_widgets.dart';
+
 // late MyAudioHandler audioHandler;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 初始化 MediaKit
+  MediaKit.ensureInitialized();
 
   // audioHandler = await AudioService.init(
   //   builder: () => MyAudioHandler(),
@@ -178,11 +187,53 @@ void main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _showSplash = true;
+  bool _showOnboarding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFirstLaunch();
+  }
+
+  Future<void> _checkFirstLaunch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
+    setState(() {
+      _showOnboarding = !hasSeenOnboarding;
+    });
+  }
+
+  void _completeSplash() {
+    setState(() {
+      _showSplash = false;
+    });
+  }
+
+  Future<void> _completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('has_seen_onboarding', true);
+    setState(() {
+      _showOnboarding = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     Wakelock.enable();
+
+    // 构建主界面
+    final homeScreen = _showOnboarding
+        ? OnboardingScreen(onComplete: _completeOnboarding)
+        : HomeScreen();
 
     // 自定义浅蓝色主题
     // final lightTheme = ThemeData(
@@ -952,7 +1003,15 @@ class MyApp extends StatelessWidget {
       theme: lightTheme, // 使用自定义的浅蓝色主题
       darkTheme: darkTheme,
       themeMode: themeProvider.themeMode,
-      home: HomeScreen(),
+      home: Stack(
+        children: [
+          // 主界面 - 始终存在，在后台预加载
+          homeScreen,
+          // Splash 屏幕 - 覆盖在上面
+          if (_showSplash)
+            SplashScreen(onComplete: _completeSplash),
+        ],
+      ),
     );
   }
 }
@@ -977,7 +1036,12 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     MediaKit.ensureInitialized();
-    _settingsService.loadAllFonts();
+
+    // 延迟加载字体，避免阻塞 UI 初始化
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _settingsService.loadAllFonts();
+    });
+
     _checkPrivacyPolicyStatus();
     _checkAndOpenUriFile();
     _eventChannel2
@@ -1408,7 +1472,7 @@ class _HomeScreenState extends State<HomeScreen>
           ),
           bottomNavigationBar: _isFullScreen
               ? null
-              : BottomNavigationBar(
+              : AnimatedBottomNavBar(
                   currentIndex: _selectedIndex,
                   onTap: (index) {
                     setState(() {
@@ -1420,29 +1484,24 @@ class _HomeScreenState extends State<HomeScreen>
                       curve: Curves.easeInOut,
                     );
                   },
-                  items: [
-                    // BottomNavigationBarItem(
-                    //   icon: Icon(Icons.play_arrow),
-                    //   label: '播放器',
-                    // ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.video_library),
+                  items: const [
+                    BottomNavItem(
+                      icon: Icons.video_library,
                       label: '视频库',
                     ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.library_music),
+                    BottomNavItem(
+                      icon: Icons.library_music,
                       label: '音频库',
                     ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.library_books),
-                      label: '网络媒体库'
+                    BottomNavItem(
+                      icon: Icons.library_books,
+                      label: '网络媒体库',
                     ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.settings),
+                    BottomNavItem(
+                      icon: Icons.settings,
                       label: '设置',
                     ),
                   ],
-                  type: BottomNavigationBarType.fixed,
                 ),
         ));
   }
@@ -1454,8 +1513,46 @@ class PlayerSelectionDialog extends StatefulWidget {
   _PlayerSelectionDialogState createState() => _PlayerSelectionDialogState();
 }
 
-class _PlayerSelectionDialogState extends State<PlayerSelectionDialog> {
+class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
+    with SingleTickerProviderStateMixin {
   int _selectedPlayer = 2; // 默认选择MPV
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeOutBack,
+      ),
+    );
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _closeDialog(int? result) async {
+    await _animationController.reverse();
+    Navigator.of(context).pop(result);
+  }
 
   @override
   Widget build(BuildContext context) {
