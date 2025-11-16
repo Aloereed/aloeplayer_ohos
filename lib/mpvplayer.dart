@@ -724,10 +724,24 @@ class _MPVPlayerState extends State<MPVPlayer>
     return nextVolume;
   }
 
+  String convertUriToPath(String uri) {
+    // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
+    if (uri.startsWith('file://media')) {
+      uri = Uri.decodeFull(uri.substring(12));
+    }
+
+    // 删除file://docs并解析unicode码
+    if (uri.startsWith('file://docs')) {
+      uri = Uri.decodeFull(uri.substring(11));
+    }
+
+    return uri;
+  }
+
   void _loadPlaylist() async {
     // 检查是否为HTTP/HTTPS URL
     final isHttpUrl = widget.filePath.startsWith('http://') ||
-                      widget.filePath.startsWith('https://');
+        widget.filePath.startsWith('https://');
 
     // 如果是HTTP URL或未启用播放列表导入，只创建当前文件的播放列表
     if (isHttpUrl || !_usePlaylist) {
@@ -867,15 +881,21 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   void _openMedia(String filePath) async {
     // 检查是否为HTTP/HTTPS URL
-    final isHttpUrl = filePath.startsWith('http://') ||
-                      filePath.startsWith('https://');
+    final isHttpUrl =
+        filePath.startsWith('http://') || filePath.startsWith('https://');
+
+    final isFileUrl = filePath.startsWith('file://');
 
     // 根据是否为HTTP URL选择不同的处理方式
     String resolvedPath;
     if (isHttpUrl) {
       // HTTP URL直接使用，不需要解析.lnk
       resolvedPath = filePath;
-    } else {
+    } else if (isFileUrl) {
+      // 处理file:// URI
+      filePath = convertUriToPath(filePath);
+      resolvedPath = await resolveLnkFile(filePath);
+    } else{
       // 本地文件需要解析.lnk
       resolvedPath = await resolveLnkFile(filePath);
     }
@@ -887,7 +907,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
     // 创建播放列表
     final List<Media> mediaList = [];
-    if (isHttpUrl) {
+    if (isHttpUrl || isFileUrl) {
       // HTTP URL直接创建单个媒体项
       mediaList.add(Media(resolvedPath));
     } else {
@@ -906,12 +926,12 @@ class _MPVPlayerState extends State<MPVPlayer>
     _hasRestoredPosition = false;
 
     // 尝试恢复历史播放位置 (只对本地文件)
-    if (!isHttpUrl) {
+    if (!isHttpUrl && !isFileUrl) {
       _restorePlaybackPosition(resolvedPath);
     }
 
     // 记录到历史 (只对本地文件)
-    if (!isHttpUrl) {
+    if (!isHttpUrl && !isFileUrl) {
       _recordToHistory(resolvedPath);
     }
 
@@ -919,7 +939,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     _updateMediaItem();
 
     // 自动检测并载入字幕文件（仅对特定目录下的本地文件）
-    if (!isHttpUrl) {
+    if (!isHttpUrl && !isFileUrl) {
       _autoLoadSubtitle(resolvedPath);
     }
   }
@@ -927,7 +947,8 @@ class _MPVPlayerState extends State<MPVPlayer>
   // 自动检测并载入字幕文件
   void _autoLoadSubtitle(String filePath) async {
     // 检查文件是否位于指定目录及其子孙文件夹下
-    const targetBasePath = '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/';
+    const targetBasePath =
+        '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/';
     if (!filePath.startsWith(targetBasePath)) {
       return;
     }

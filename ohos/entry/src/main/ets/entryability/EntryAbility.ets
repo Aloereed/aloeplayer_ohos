@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-02-17 13:28:54
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-03-22 11:07:08
+ * @LastEditTime: 2025-11-16 22:43:10
  * @Description: file content
  */
 /*
@@ -31,6 +31,8 @@ import FfmpegPlugin from "./FfmpegPlugin"
 import HdrPlugin from "./HdrPlugin"
 import CastPlugin from "./CastPlugin"
 import { window } from '@kit.ArkUI';
+import { systemShare } from '@kit.ShareKit';
+import { BusinessError, systemDateTime } from '@kit.BasicServicesKit';
 let wantInfo: Want
 
 function createFile(openuri: string): void {
@@ -58,9 +60,10 @@ function createFile(openuri: string): void {
     fs.closeSync(file)
 }
 
+
 export default class EntryAbility extends FlutterAbility {
     private myDownloadPlugin?: DownloadPlugin
-
+    private _wantUri: string = "";
     configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         GeneratedPluginRegistrant.registerWith(flutterEngine)
@@ -71,32 +74,69 @@ export default class EntryAbility extends FlutterAbility {
         this.addPlugin(new HdrPlugin())
         this.addPlugin(new CastPlugin())
     }
-    onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam) {
+    async onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam) {
         let uri = want.uri
-        if (uri == null || uri == undefined) {
-            console.info("The length of str")
-            return
+        console.info("[1]The uri is: " + uri)
+        if (uri == null || uri == undefined || uri == '') {
+            await this.getSystemShareWant(want)
+            uri = this._wantUri;
+            console.info("[2]The uri is: " + uri)
+            if(uri == null || uri == undefined || uri == ''){
+                console.info("The length of str is 0")
+                return
+            }
+            this.myDownloadPlugin?.sendWant(uri)
         } else {
             // createFile(uri)
+            console.info("[3]The uri is: " + uri)
             this.myDownloadPlugin?.sendWant(uri)
         }
     }
     async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam) {
         super.onCreate(want, launchParam)
         let uri = want.uri
-        if (uri == null || uri == undefined) {
-            console.info("The length of str")
-            return
+        console.info("[4]The uri is: " + uri)
+        if (uri == null || uri == undefined || uri == '') {
+            await this.getSystemShareWant(want)
+            uri = this._wantUri;
+            console.info("[5]The uri is: " + uri)
+            if(uri == null || uri == undefined || uri == ''){
+                console.info("The length of str is 0")
+                return
+            }
+            createFile(uri)
+            this.myDownloadPlugin?.sendWant(uri)
         } else {
+            console.info("[6]The uri is: " + uri)
             createFile(uri)
             this.myDownloadPlugin?.sendWant(uri)
         }
     }
 
+    async getSystemShareWant(want: Want) {
+        try {
+            if (canIUse("SystemCapability.Collaboration.SystemShare")) {
+                const data = await systemShare.getSharedData(want);
+                const records = data.getRecords();
+                for (const record of records) {
+                    if (record.uri) {
+                        this._wantUri = record.uri;
+                        break;
+                    }
+                }
+            } else {
+
+            }
+        } catch (error) {
+            const businessError = error as BusinessError;
+            console.error(`Failed: Code ${businessError.code}, ${businessError.message}`);
+        }
+    }
+
     onWindowStageCreate(windowStage: window.WindowStage) {
         super.onWindowStageCreate(windowStage);
-      
+
         // 给Index页面传递windowStage
         AppStorage.setOrCreate('windowStage2', windowStage);
-      }
+    }
 }

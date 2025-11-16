@@ -1690,7 +1690,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
             ? GridView.builder(
                 padding: EdgeInsets.all(8),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                  crossAxisCount: _getGridCrossAxisCount(context),
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
                   childAspectRatio: 0.8,
@@ -3811,6 +3811,25 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
         onTap: () => _viewAlbumSongs(albumName),
       ),
     );
+  }
+
+  // 根据屏幕大小和方向动态计算网格列数
+  int _getGridCrossAxisCount(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final size = mediaQuery.size;
+    final orientation = mediaQuery.orientation;
+    final shortestSide = size.shortestSide;
+
+    // 判断是否为平板（最短边大于600dp通常认为是平板）
+    final isTablet = shortestSide >= 600;
+
+    if (isTablet) {
+      // 平板：竖向4列，横向5列
+      return orientation == Orientation.portrait ? 4 : 5;
+    } else {
+      // 手机：竖向2列，横向3列
+      return orientation == Orientation.portrait ? 2 : 3;
+    }
   }
 
   // The existing helper methods for file operations
