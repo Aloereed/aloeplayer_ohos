@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-11-16 17:28:28
+ * @LastEditTime: 2025-11-16 23:32:04
  * @Description: file content
  */
 /*
@@ -1008,8 +1008,7 @@ class _MyAppState extends State<MyApp> {
           // 主界面 - 始终存在，在后台预加载
           homeScreen,
           // Splash 屏幕 - 覆盖在上面
-          if (_showSplash)
-            SplashScreen(onComplete: _completeSplash),
+          if (_showSplash) SplashScreen(onComplete: _completeSplash),
         ],
       ),
     );
@@ -1162,21 +1161,25 @@ class _HomeScreenState extends State<HomeScreen>
     SharedPreferences prefs = await SharedPreferences.getInstance();
     bool? isAccepted = prefs.getBool('privacy_policy_accepted');
 
+    final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
+// 调用方法 getBatteryLevel
+    final result =
+        await _platform.invokeMethod<String>('getDownloadPermission');
     // 如果尚未接受隐私政策，显示对话框
     if (isAccepted == null || !isAccepted) {
       Future.delayed(Duration.zero, () {
-        _showPrivacyPolicyDialog();
+        // _showPrivacyPolicyDialog();
       });
     } else {
       setState(() {
         _isPolicyAccepted = true;
       });
       // 创建实例
-      final _platform =
-          const MethodChannel('samples.flutter.dev/downloadplugin');
-// 调用方法 getBatteryLevel
-      final result =
-          await _platform.invokeMethod<String>('getDownloadPermission');
+//       final _platform =
+//           const MethodChannel('samples.flutter.dev/downloadplugin');
+// // 调用方法 getBatteryLevel
+//       final result =
+//           await _platform.invokeMethod<String>('getDownloadPermission');
       // final result2 = await _platform.invokeMethod<String>('startBgTask');
     }
   }
@@ -1274,7 +1277,6 @@ class _HomeScreenState extends State<HomeScreen>
             '';
       }
 
-
       // 如果返回的JSON字符串为空，默认为非HDR
       if (hdrJson.isEmpty) {
         print('获取HDR信息失败：返回空JSON');
@@ -1320,7 +1322,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     // 检查是否使用MPV播放器
     final useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
-    
+
     // 如果选择的是MPV（value=2），则使用MPVPlayer
     if (useFfmpegForPlay == 2) {
       Navigator.of(context).push(
@@ -1337,7 +1339,7 @@ class _HomeScreenState extends State<HomeScreen>
       );
       return;
     }
-    
+
     final hdrForHdr = await _settingsService.getHdrForHdr();
     bool isHdr = false;
     try {
@@ -1558,7 +1560,7 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final screenSize = MediaQuery.of(context).size;
-    
+
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -1572,12 +1574,12 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
             maxHeight: screenSize.height * 0.8,
           ),
           decoration: BoxDecoration(
-            color: isDarkMode 
+            color: isDarkMode
                 ? Colors.black.withOpacity(0.85)
                 : Colors.white.withOpacity(0.95),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: isDarkMode 
+              color: isDarkMode
                   ? Colors.white.withOpacity(0.1)
                   : Colors.black.withOpacity(0.1),
               width: 1,
@@ -1638,7 +1640,7 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
                   ],
                 ),
               ),
-              
+
               // 播放器选项
               Flexible(
                 child: SingleChildScrollView(
@@ -1673,12 +1675,11 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
                         isDarkMode: isDarkMode,
                         description: '专门为HDR视频优化，提供最佳的高动态范围显示效果',
                       ),
-                      
                     ],
                   ),
                 ),
               ),
-              
+
               // 底部按钮
               Container(
                 padding: EdgeInsets.all(24),
@@ -1758,7 +1759,7 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
     bool isRecommended = false,
   }) {
     final isSelected = _selectedPlayer == value;
-    
+
     return Container(
       margin: EdgeInsets.only(bottom: 16),
       child: InkWell(
@@ -1772,13 +1773,19 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
           padding: EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: isSelected
-                ? (isDarkMode ? Colors.lightBlue.withOpacity(0.2) : Colors.lightBlue.withOpacity(0.1))
-                : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                ? (isDarkMode
+                    ? Colors.lightBlue.withOpacity(0.2)
+                    : Colors.lightBlue.withOpacity(0.1))
+                : (isDarkMode
+                    ? Colors.white10
+                    : Colors.black.withOpacity(0.05)),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isSelected
                   ? Colors.lightBlue
-                  : (isDarkMode ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.1)),
+                  : (isDarkMode
+                      ? Colors.white.withOpacity(0.2)
+                      : Colors.black.withOpacity(0.1)),
               width: isSelected ? 2 : 1,
             ),
           ),
@@ -1791,7 +1798,9 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
                 decoration: BoxDecoration(
                   color: isSelected
                       ? Colors.lightBlue
-                      : (isDarkMode ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.1)),
+                      : (isDarkMode
+                          ? Colors.white.withOpacity(0.2)
+                          : Colors.black.withOpacity(0.1)),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -1823,7 +1832,8 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
                         if (isRecommended) ...[
                           SizedBox(width: 8),
                           Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: Colors.orange,
                               borderRadius: BorderRadius.circular(12),
@@ -1856,7 +1866,9 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
                         description!,
                         style: TextStyle(
                           fontSize: 13,
-                          color: isDarkMode ? Colors.white.withOpacity(0.5) : Colors.black.withOpacity(0.45),
+                          color: isDarkMode
+                              ? Colors.white.withOpacity(0.5)
+                              : Colors.black.withOpacity(0.45),
                           height: 1.4,
                         ),
                       ),

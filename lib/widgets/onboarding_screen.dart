@@ -28,7 +28,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     OnboardingPage(
       icon: Icons.video_library,
       title: '强大的视频播放',
-      description: '支持多种视频格式，流畅播放4K/8K高清视频，完美支持HDR内容',
+      description: '支持多种视频格式，流畅播放高清视频',
       gradient: [Colors.blue.shade400, Colors.blue.shade600],
     ),
     OnboardingPage(
