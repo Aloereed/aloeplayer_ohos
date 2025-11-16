@@ -37,11 +37,13 @@ dependencies:
   shelf: ^1.4.1
   shelf_router: ^1.1.4
   screenshot: ^3.0.0
+  uuid: ^3.0.6
 dependency_overrides:
   audio_service:
     git:
       path: audio_service
       url: https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git
+      ref: br_v0.18.18_ohos
   audio_session: 
     git:
       url: "https://gitcode.com/openharmony-sig/flutter_audio_session.git"
@@ -65,6 +67,11 @@ dependency_overrides:
     path: ./image_picker/image_picker_android
   image_picker_ios:
     path: ./image_picker/image_picker_ios
+  # in_app_purchase:
+  #   git:
+  #     path: packages/in_app_purchase/in_app_purchase
+  #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
+  in_app_purchase: any
   # just_audio:
   #   git:
   #     path: just_audio
@@ -149,4 +156,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 2.1.2+37
+version: 3.0.0+38

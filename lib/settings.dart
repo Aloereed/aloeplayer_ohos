@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-11-09 13:12:17
+ * @LastEditTime: 2025-11-16 12:15:59
  * @Description: file content
  */
 import 'dart:convert';
@@ -22,6 +22,7 @@ import 'dart:ui' as ui;
 import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import 'services/membership_service.dart';
 
 enum SortType { none, name, modifiedDate }
 
@@ -485,8 +486,10 @@ class SettingsService {
   static const String _hdrForHdr = 'hdr_for_hdr';
   static const String _hdrDetect = 'hdr_detect';
   static const String _subtitleMany = 'subtitle_many';
-  static const String _versionName = '2.1.2';
-  static const int _versionNumber = 37;
+  static const String _versionName = '3.0.0';
+  static const int _versionNumber = 38;
+  static const String _firstLaunchKey = 'first_launch_completed';
+  static const String _playerSelectionShownKey = 'player_selection_shown';
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -696,6 +699,30 @@ class SettingsService {
     return prefs.getInt(_subtitleMany) ?? 0; // 默认值为0
   }
 
+   // 检查是否是首次启动
+  Future<bool> isFirstLaunch() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_firstLaunchKey) ?? true;
+  }
+
+  // 标记首次启动已完成
+  Future<void> markFirstLaunchCompleted() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_firstLaunchKey, false);
+  }
+
+  // 检查是否已显示过播放器选择弹窗
+  Future<bool> hasShownPlayerSelection() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_playerSelectionShownKey) ?? false;
+  }
+
+  // 标记已显示过播放器选择弹窗
+  Future<void> markPlayerSelectionShown() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_playerSelectionShownKey, true);
+  }
+
   // 清除缓存 递归删除“/data/storage/el2/base/haps/entry/cache/”下的所有文件
 
   Future<void> deleteCacheDirectory(String path) async {
@@ -832,12 +859,14 @@ class _SettingsTabState extends State<SettingsTab> {
   double _subtitleFontSize = 18.0;
   late Future<bool> _backgroundPlayFuture;
   final SettingsService _settingsService = SettingsService();
+  final MembershipService _membershipService = MembershipService();
 
   @override
   void initState() {
     super.initState();
     _loadSubtitleFontSize();
     _backgroundPlayFuture = _settingsService.getBackgroundPlay();
+    _membershipService.initialize();
   }
 
   Future<void> _loadSubtitleFontSize() async {
@@ -1255,7 +1284,7 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-// 获取字幕文本样式的辅助方法
+  // 获取字幕文本样式的辅助方法
   Future<TextStyle> getSubtitleTextStyle([TextStyle? baseStyle]) async {
     final fontPath = await _settingsService.getSubtitleFont();
     if (fontPath.isEmpty) {
@@ -1273,6 +1302,293 @@ class _SettingsTabState extends State<SettingsTab> {
     return (baseStyle ?? TextStyle()).copyWith(fontFamily: fontFamily);
   }
 
+  // 显示购买会员对话框
+  void _showPurchaseDialog(BuildContext context) {
+    final products = _membershipService.getProductInfo();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          child: Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '升级会员',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '解锁全部高级功能，享受无限制的媒体体验',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  ...products.map((product) => Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      product['name'],
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    if (product['badge'] != null)
+                                      Container(
+                                        margin: EdgeInsets.only(top: 4),
+                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          product['badge'],
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                Text(
+                                  product['price'],
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              product['description'],
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  Navigator.of(context).pop();
+                                  await _purchaseProduct(product['id']);
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Theme.of(context).primaryColor,
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: Text(
+                                  '购买${product['duration']}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )).toList(),
+                  SizedBox(height: 16),
+                  Text(
+                    '• 支持多种支付方式\n• 购买后立即生效\n• 可随时取消订阅',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 显示恢复购买对话框
+  void _showRestoreDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.refresh,
+                  size: 48,
+                  color: Theme.of(context).primaryColor,
+                ),
+                SizedBox(height: 16),
+                Text(
+                  '恢复购买',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  '如果您之前购买过会员，可以点击下方按钮恢复购买记录。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      child: Text('取消'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        await _restorePurchases();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text('恢复购买'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 购买产品
+  Future<void> _purchaseProduct(String productId) async {
+    try {
+      final success = await _membershipService.purchaseProduct(productId);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('购买请求已提交,正在处理...'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+        setState(() {}); // 刷新UI
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('购买失败,请重试'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('购买出错:$e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // 恢复购买
+  Future<void> _restorePurchases() async {
+    try {
+      final success = await _membershipService.restorePurchases();
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('购买记录已恢复'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        setState(() {}); // 刷新UI
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('未找到购买记录'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('恢复失败：$e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -1286,6 +1602,197 @@ class _SettingsTabState extends State<SettingsTab> {
       body: ListView(
         padding: EdgeInsets.all(16),
         children: [
+          // 会员功能部分
+          Card(
+            elevation: 3,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.purple.shade400,
+                    Colors.blue.shade400,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.diamond,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          '会员中心',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '会员状态',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              FutureBuilder<String>(
+                                future: Future.value(_membershipService.getMembershipStatusDescription()),
+                                builder: (context, snapshot) {
+                                  return Text(
+                                    snapshot.data ?? '加载中...',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '到期时间',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              FutureBuilder<String>(
+                                future: Future.value(_membershipService.getFormattedExpiryDate()),
+                                builder: (context, snapshot) {
+                                  return Text(
+                                    snapshot.data ?? '无',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            // onPressed: () => _showPurchaseDialog(context),
+                            // 显示为禁用
+                            onPressed: null,
+                            icon: Icon(Icons.shopping_cart, color: Colors.white),
+                            label: Text(
+                              '购买会员[禁用]',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.2),
+                              foregroundColor: Colors.white,
+                              side: BorderSide(color: Colors.white.withOpacity(0.5)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showRestoreDialog(context),
+                            icon: Icon(Icons.refresh, color: Colors.white),
+                            label: Text(
+                              '恢复购买',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.2),
+                              foregroundColor: Colors.white,
+                              side: BorderSide(color: Colors.white.withOpacity(0.5)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // 续费提示
+                    FutureBuilder<bool>(
+                      future: Future.value(_membershipService.shouldShowRenewalPrompt()),
+                      builder: (context, snapshot) {
+                        if (snapshot.data == true) {
+                          return Container(
+                            margin: EdgeInsets.only(top: 12),
+                            padding: EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.warning,
+                                  color: Colors.orange.shade200,
+                                  size: 16,
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '您的会员即将到期，请及时续费以免影响使用',
+                                    style: TextStyle(
+                                      color: Colors.orange.shade200,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return SizedBox.shrink();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          
+          SizedBox(height: 16),
           // 主题设置部分
           Card(
             elevation: 2,
@@ -1335,172 +1842,9 @@ class _SettingsTabState extends State<SettingsTab> {
               ),
             ),
           ),
+          
           SizedBox(height: 16),
-
-          // 字幕设置部分
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('字幕设置',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  ListTile(
-                    leading: Icon(Icons.text_fields, color: Colors.lightBlue),
-                    title: Text('字幕字体大小'),
-                    subtitle: Text('ASS字幕为比例调整'),
-                    trailing: DropdownButton<int>(
-                      value: _subtitleFontSize.toInt(),
-                      items: List.generate(30, (index) {
-                        return DropdownMenuItem<int>(
-                          value: 18 + 3 * index,
-                          child: Text('${18 + 3 * index}'),
-                        );
-                      }),
-                      onChanged: (int? value) {
-                        if (value != null) {
-                          setState(() {
-                            _subtitleFontSize = value * 1.0;
-                          });
-                          _settingsService
-                              .saveSubtitleFontSize(value.toDouble());
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.subtitles, color: Colors.lightBlue),
-                    title: Text('自动尝试加载内挂和同级外挂字幕'),
-                    subtitle: Text('打开视频闪退可尝试关闭此项'),
-                    trailing: FutureBuilder<bool>(
-                      future: _settingsService.getAutoLoadSubtitle(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: (value) {
-                              _settingsService.saveAutoLoadSubtitle(value);
-                              setState(() {});
-                            },
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  FutureBuilder<bool>(
-                    future: _settingsService.getAutoLoadSubtitle(),
-                    builder: (context, snapshot) {
-                      if (snapshot.hasData && snapshot.data!) {
-                        return ListTile(
-                          leading: Icon(Icons.subtitles_outlined,
-                              color: Colors.lightBlue),
-                          title: Text('自动提取字幕副轨道数量'),
-                          subtitle: Text('提取副轨道可能导致闪退和卡顿'),
-                          trailing: FutureBuilder<int>(
-                            future: _settingsService.getSubtitleMany(),
-                            builder: (context, subtitleManySnapshot) {
-                              if (subtitleManySnapshot.hasData) {
-                                final value = subtitleManySnapshot.data!;
-                                return DropdownButton<int>(
-                                  value: value,
-                                  onChanged: (newValue) {
-                                    if (newValue != null) {
-                                      _settingsService
-                                          .saveSubtitleMany(newValue);
-                                      setState(() {});
-                                    }
-                                  },
-                                  items: [
-                                    DropdownMenuItem<int>(
-                                      value: 0,
-                                      child: Text('不提取'),
-                                    ),
-                                    DropdownMenuItem<int>(
-                                      value: 1,
-                                      child: Text('1个'),
-                                    ),
-                                    DropdownMenuItem<int>(
-                                      value: 2,
-                                      child: Text('2个'),
-                                    ),
-                                    DropdownMenuItem<int>(
-                                      value: 3,
-                                      child: Text('3个'),
-                                    ),
-                                    DropdownMenuItem<int>(
-                                      value: -1,
-                                      child: Text('不限制'),
-                                    ),
-                                  ],
-                                );
-                              } else {
-                                return const CircularProgressIndicator();
-                              }
-                            },
-                          ),
-                        );
-                      } else {
-                        return Container(); // Return empty container when auto load subtitle is false
-                      }
-                    },
-                  ),
-                  ListTile(
-                    leading:
-                        Icon(Icons.subtitles_outlined, color: Colors.lightBlue),
-                    title: Text('库内抽取ASS字幕'),
-                    subtitle: Text('不选中则抽取SRT文本字幕'),
-                    trailing: FutureBuilder<bool>(
-                      future: _settingsService.getExtractAssSubtitle(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: (value) {
-                              _settingsService.saveExtractAssSubtitle(value);
-                              setState(() {});
-                            },
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.font_download_outlined,
-                        color: Colors.lightBlue),
-                    title: Text('字幕字体'),
-                    subtitle: FutureBuilder<String>(
-                      future: _settingsService.getSubtitleFont(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Text(snapshot.data!.isEmpty
-                              ? '系统默认'
-                              : getDisplayFontName(snapshot.data!));
-                        } else {
-                          return const Text('加载中...');
-                        }
-                      },
-                    ),
-                    onTap: () {
-                      _showFontSelectionDialog(context);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: 16),
-
-          // 播放设置部分
+ // 播放设置部分
           Card(
             elevation: 2,
             child: Padding(
@@ -1568,7 +1912,7 @@ class _SettingsTabState extends State<SettingsTab> {
                               final options = [
                                 {
                                   'value': 0,
-                                  'label': '系统播放能力(推荐)',
+                                  'label': '系统硬解(高码率)',
                                   'icon': Icons.phone_android
                                 },
                                 {
@@ -1578,8 +1922,8 @@ class _SettingsTabState extends State<SettingsTab> {
                                 },
                                 {
                                   'value': 2,
-                                  'label': '系统播放(PlatformView)',
-                                  'icon': Icons.view_module
+                                  'label': '全新MPV(推荐)',
+                                  'icon': Icons.play_circle_outline
                                 },
                                 {
                                   'value': 3,
@@ -1831,6 +2175,169 @@ class _SettingsTabState extends State<SettingsTab> {
             ),
           ),
           SizedBox(height: 16),
+          // 字幕设置部分
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('字幕设置',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  ListTile(
+                    leading: Icon(Icons.text_fields, color: Colors.lightBlue),
+                    title: Text('字幕字体大小'),
+                    subtitle: Text('ASS字幕为比例调整'),
+                    trailing: DropdownButton<int>(
+                      value: _subtitleFontSize.toInt(),
+                      items: List.generate(30, (index) {
+                        return DropdownMenuItem<int>(
+                          value: 18 + 3 * index,
+                          child: Text('${18 + 3 * index}'),
+                        );
+                      }),
+                      onChanged: (int? value) {
+                        if (value != null) {
+                          setState(() {
+                            _subtitleFontSize = value * 1.0;
+                          });
+                          _settingsService
+                              .saveSubtitleFontSize(value.toDouble());
+                        }
+                      },
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.subtitles, color: Colors.lightBlue),
+                    title: Text('自动尝试加载内挂和同级外挂字幕'),
+                    subtitle: Text('打开视频闪退可尝试关闭此项'),
+                    trailing: FutureBuilder<bool>(
+                      future: _settingsService.getAutoLoadSubtitle(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return Switch(
+                            value: snapshot.data!,
+                            onChanged: (value) {
+                              _settingsService.saveAutoLoadSubtitle(value);
+                              setState(() {});
+                            },
+                            activeColor: Colors.lightBlue,
+                          );
+                        } else {
+                          return const CircularProgressIndicator();
+                        }
+                      },
+                    ),
+                  ),
+                  FutureBuilder<bool>(
+                    future: _settingsService.getAutoLoadSubtitle(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData && snapshot.data!) {
+                        return ListTile(
+                          leading: Icon(Icons.subtitles_outlined,
+                              color: Colors.lightBlue),
+                          title: Text('自动提取字幕副轨道数量'),
+                          subtitle: Text('提取副轨道可能导致闪退和卡顿'),
+                          trailing: FutureBuilder<int>(
+                            future: _settingsService.getSubtitleMany(),
+                            builder: (context, subtitleManySnapshot) {
+                              if (subtitleManySnapshot.hasData) {
+                                final value = subtitleManySnapshot.data!;
+                                return DropdownButton<int>(
+                                  value: value,
+                                  onChanged: (newValue) {
+                                    if (newValue != null) {
+                                      _settingsService
+                                          .saveSubtitleMany(newValue);
+                                      setState(() {});
+                                    }
+                                  },
+                                  items: [
+                                    DropdownMenuItem<int>(
+                                      value: 0,
+                                      child: Text('不提取'),
+                                    ),
+                                    DropdownMenuItem<int>(
+                                      value: 1,
+                                      child: Text('1个'),
+                                    ),
+                                    DropdownMenuItem<int>(
+                                      value: 2,
+                                      child: Text('2个'),
+                                    ),
+                                    DropdownMenuItem<int>(
+                                      value: 3,
+                                      child: Text('3个'),
+                                    ),
+                                    DropdownMenuItem<int>(
+                                      value: -1,
+                                      child: Text('不限制'),
+                                    ),
+                                  ],
+                                );
+                              } else {
+                                return const CircularProgressIndicator();
+                              }
+                            },
+                          ),
+                        );
+                      } else {
+                        return Container(); // Return empty container when auto load subtitle is false
+                      }
+                    },
+                  ),
+                  ListTile(
+                    leading:
+                        Icon(Icons.subtitles_outlined, color: Colors.lightBlue),
+                    title: Text('库内抽取ASS字幕'),
+                    subtitle: Text('不选中则抽取SRT文本字幕'),
+                    trailing: FutureBuilder<bool>(
+                      future: _settingsService.getExtractAssSubtitle(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return Switch(
+                            value: snapshot.data!,
+                            onChanged: (value) {
+                              _settingsService.saveExtractAssSubtitle(value);
+                              setState(() {});
+                            },
+                            activeColor: Colors.lightBlue,
+                          );
+                        } else {
+                          return const CircularProgressIndicator();
+                        }
+                      },
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.font_download_outlined,
+                        color: Colors.lightBlue),
+                    title: Text('字幕字体'),
+                    subtitle: FutureBuilder<String>(
+                      future: _settingsService.getSubtitleFont(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return Text(snapshot.data!.isEmpty
+                              ? '系统默认'
+                              : getDisplayFontName(snapshot.data!));
+                        } else {
+                          return const Text('加载中...');
+                        }
+                      },
+                    ),
+                    onTap: () {
+                      _showFontSelectionDialog(context);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: 16),
+
 
           // 清除缓存部分
           Card(

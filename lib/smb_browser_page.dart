@@ -84,6 +84,10 @@ class _SmbBrowserPageState extends State<SmbBrowserPage> {
         }
 
         setState(() => _isConnected = true);
+
+        // 将SMB服务实例传递给HTTP服务
+        _httpService.setSmbService(_smbService);
+
         await _loadFiles('/Bangumi');
         _showSuccess('连接成功');
       } else {

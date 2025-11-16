@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-11-09 12:53:28
+ * @LastEditTime: 2025-11-16 13:40:38
  * @Description: file content
  */
 /*
@@ -38,7 +38,6 @@ import 'package:flutter_subtitle/flutter_subtitle.dart' hide Subtitle;
 import 'package:path/path.dart' as path;
 import 'videolibrary.dart';
 import 'audiolibrary.dart';
-import 'smblibrary.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:vivysub_utils/vivysub_utils.dart';
@@ -53,7 +52,7 @@ import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:dart_libass/dart_libass.dart';
 import 'package:aloeplayer/player.dart';
-import 'package:aloeplayer/smb_browser_page.dart';
+import 'package:aloeplayer/pages/servers_page.dart';
 import 'mpvplayer.dart';
 // late MyAudioHandler audioHandler;
 void main() async {
@@ -1111,7 +1110,7 @@ class _HomeScreenState extends State<HomeScreen>
 // 调用方法 getBatteryLevel
       final result =
           await _platform.invokeMethod<String>('getDownloadPermission');
-      final result2 = await _platform.invokeMethod<String>('startBgTask');
+      // final result2 = await _platform.invokeMethod<String>('startBgTask');
     }
   }
 
@@ -1236,20 +1235,42 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void startPlayerPage(BuildContext context, {bool forceHdr = false}) async {
-    // Navigator.of(context).push(
-    //     PageRouteBuilder(
-    //       pageBuilder: (context, animation, secondaryAnimation) =>
-    //           FadeTransition(
-    //         opacity: animation,
-    //         // 使用 PlayerTab 本身负责显示加载状态
-    //         child: MPVPlayer(
-    //           filePath: _openfile,
-    //         ),
-    //       ),
-    //       transitionDuration: const Duration(milliseconds: 300),
-    //     ),
-    //   );
-    // return;
+    // 检查是否需要显示播放器选择弹窗
+    final shouldShowPlayerSelection = await _shouldShowPlayerSelectionDialog();
+    if (shouldShowPlayerSelection) {
+      final selected = await _showPlayerSelectionDialog(context);
+      if (selected != null) {
+        await _settingsService.saveUseFfmpegForPlay(selected);
+        await _settingsService.markPlayerSelectionShown();
+        await _settingsService.markFirstLaunchCompleted();
+      } else {
+        // 用户取消了选择，使用默认MPV
+        await _settingsService.saveUseFfmpegForPlay(2);
+        await _settingsService.markPlayerSelectionShown();
+        await _settingsService.markFirstLaunchCompleted();
+      }
+    }
+
+    // 检查是否使用MPV播放器
+    final useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
+    
+    // 如果选择的是MPV（value=2），则使用MPVPlayer
+    if (useFfmpegForPlay == 2) {
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              FadeTransition(
+            opacity: animation,
+            child: MPVPlayer(
+              filePath: _openfile,
+            ),
+          ),
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+      );
+      return;
+    }
+    
     final hdrForHdr = await _settingsService.getHdrForHdr();
     bool isHdr = false;
     try {
@@ -1303,6 +1324,24 @@ class _HomeScreenState extends State<HomeScreen>
         'uris': await getPlaylist(waitToStart)
       });
     }
+  }
+
+  // 检查是否需要显示播放器选择弹窗
+  Future<bool> _shouldShowPlayerSelectionDialog() async {
+    final isFirstLaunch = await _settingsService.isFirstLaunch();
+    final hasShownSelection = await _settingsService.hasShownPlayerSelection();
+    return isFirstLaunch && !hasShownSelection;
+  }
+
+  // 显示播放器选择弹窗
+  Future<int?> _showPlayerSelectionDialog(BuildContext context) async {
+    return showDialog<int>(
+      context: context,
+      barrierDismissible: false, // 禁止点击外部关闭
+      builder: (BuildContext context) {
+        return PlayerSelectionDialog();
+      },
+    );
   }
 
   @override
@@ -1360,7 +1399,7 @@ class _HomeScreenState extends State<HomeScreen>
               //   getopenfile: _getopenfile,
               //   startPlayerPage: startPlayerPage,
               // ),
-              // SmbBrowserPage(),
+              ServersPage(),
               SettingsTab(),
             ],
           ),
@@ -1391,10 +1430,10 @@ class _HomeScreenState extends State<HomeScreen>
                       icon: Icon(Icons.library_music),
                       label: '音频库',
                     ),
-                    // BottomNavigationBarItem(
-                    //   icon: Icon(Icons.library_books),
-                    //   label: '网络媒体库'
-                    // ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.library_books),
+                      label: '网络媒体库'
+                    ),
                     BottomNavigationBarItem(
                       icon: Icon(Icons.settings),
                       label: '设置',
@@ -1403,5 +1442,339 @@ class _HomeScreenState extends State<HomeScreen>
                   type: BottomNavigationBarType.fixed,
                 ),
         ));
+  }
+}
+
+// 播放器选择弹窗组件
+class PlayerSelectionDialog extends StatefulWidget {
+  @override
+  _PlayerSelectionDialogState createState() => _PlayerSelectionDialogState();
+}
+
+class _PlayerSelectionDialogState extends State<PlayerSelectionDialog> {
+  int _selectedPlayer = 2; // 默认选择MPV
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final screenSize = MediaQuery.of(context).size;
+    
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: EdgeInsets.zero,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: screenSize.width * 0.9,
+          constraints: BoxConstraints(
+            maxWidth: 500,
+            maxHeight: screenSize.height * 0.8,
+          ),
+          decoration: BoxDecoration(
+            color: isDarkMode 
+                ? Colors.black.withOpacity(0.85)
+                : Colors.white.withOpacity(0.95),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isDarkMode 
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.1),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 头部图标和标题
+              Container(
+                padding: EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+                child: Column(
+                  children: [
+                    // 应用图标
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.lightBlue.withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Image.asset(
+                          'Assets/icon.png',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 24),
+                    // 标题
+                    Text(
+                      '选择您的视频播放器',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    // 副标题
+                    Text(
+                      '不同的播放器适用于不同的场景',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: isDarkMode ? Colors.white70 : Colors.black54,
+                        fontWeight: FontWeight.normal,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              
+              // 播放器选项
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    children: [
+                      _buildPlayerOption(
+                        context,
+                        value: 2,
+                        title: 'MPV播放器',
+                        subtitle: '推荐选择',
+                        icon: Icons.play_circle_outline,
+                        isDarkMode: isDarkMode,
+                        isRecommended: true,
+                        description: '完全渲染特效字幕、支持更多音轨格式以及无极速度调整',
+                      ),
+                      _buildPlayerOption(
+                        context,
+                        value: 0,
+                        title: '系统硬解',
+                        subtitle: '适用于极高码率视频',
+                        icon: Icons.phone_android,
+                        isDarkMode: isDarkMode,
+                        description: '使用系统硬件解码，性能强劲，适合播放4K/8K高码率视频',
+                      ),
+                      _buildPlayerOption(
+                        context,
+                        value: 4,
+                        title: 'HDR视频',
+                        subtitle: '适用于HDR视频',
+                        icon: Icons.hdr_strong,
+                        isDarkMode: isDarkMode,
+                        description: '专门为HDR视频优化，提供最佳的高动态范围显示效果',
+                      ),
+                      
+                    ],
+                  ),
+                ),
+              ),
+              
+              // 底部按钮
+              Container(
+                padding: EdgeInsets.all(24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // 取消按钮
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop(); // 用户取消，返回null
+                        },
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          side: BorderSide(
+                            color: isDarkMode ? Colors.white30 : Colors.black26,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          '稍后选择',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: isDarkMode ? Colors.white70 : Colors.black54,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    // 确认按钮
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop(_selectedPlayer);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.lightBlue,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          '开始播放',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlayerOption(
+    BuildContext context, {
+    required int value,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isDarkMode,
+    String? description,
+    bool isRecommended = false,
+  }) {
+    final isSelected = _selectedPlayer == value;
+    
+    return Container(
+      margin: EdgeInsets.only(bottom: 16),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedPlayer = value;
+          });
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (isDarkMode ? Colors.lightBlue.withOpacity(0.2) : Colors.lightBlue.withOpacity(0.1))
+                : (isDarkMode ? Colors.white10 : Colors.black.withOpacity(0.05)),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected
+                  ? Colors.lightBlue
+                  : (isDarkMode ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.1)),
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              // 图标
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.lightBlue
+                      : (isDarkMode ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.1)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  size: 24,
+                  color: isSelected
+                      ? Colors.white
+                      : (isDarkMode ? Colors.white70 : Colors.black54),
+                ),
+              ),
+              SizedBox(width: 16),
+              // 文字内容
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected
+                                ? Colors.lightBlue
+                                : (isDarkMode ? Colors.white : Colors.black87),
+                          ),
+                        ),
+                        if (isRecommended) ...[
+                          SizedBox(width: 8),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '推荐',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isSelected
+                            ? Colors.lightBlue
+                            : (isDarkMode ? Colors.white60 : Colors.black54),
+                      ),
+                    ),
+                    if (description != null) ...[
+                      SizedBox(height: 8),
+                      Text(
+                        description!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDarkMode ? Colors.white.withOpacity(0.5) : Colors.black.withOpacity(0.45),
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // 选中指示器
+              if (isSelected)
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.lightBlue,
+                  size: 24,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

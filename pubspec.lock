@@ -45,20 +45,11 @@ packages:
     dependency: "direct overridden"
     description:
       path: audio_service
-      ref: HEAD
-      resolved-ref: "43be9f21aa33cde5a7855691a00ce52aa06014a7"
+      ref: "br_v0.18.18_ohos"
+      resolved-ref: "64156e83e3dfd45a7535894f06d90f7779cff7dc"
       url: "https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git"
     source: git
-    version: "0.18.13"
-  audio_service_ohos:
-    dependency: transitive
-    description:
-      path: audio_service_ohos
-      ref: HEAD
-      resolved-ref: "43be9f21aa33cde5a7855691a00ce52aa06014a7"
-      url: "https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git"
-    source: git
-    version: "0.18.15"
+    version: "0.18.18"
   audio_service_platform_interface:
     dependency: transitive
     description:
@@ -597,6 +588,38 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.2.1+1"
+  in_app_purchase:
+    dependency: "direct overridden"
+    description:
+      name: in_app_purchase
+      sha256: "5cddd7f463f3bddb1d37a72b95066e840d5822d66291331d7f8f05ce32c24b6c"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "3.2.3"
+  in_app_purchase_android:
+    dependency: transitive
+    description:
+      name: in_app_purchase_android
+      sha256: "9f320659b13e34529cd7d53508f7ead500f03b42e7a2435bd4efce5210546051"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.4.0+3"
+  in_app_purchase_platform_interface:
+    dependency: transitive
+    description:
+      name: in_app_purchase_platform_interface
+      sha256: "1d353d38251da5b9fea6635c0ebfc6bb17a2d28d0e86ea5e083bf64244f1fb4c"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.4.0"
+  in_app_purchase_storekit:
+    dependency: transitive
+    description:
+      name: in_app_purchase_storekit
+      sha256: aedbeea5beae10af3e5c380b65049842715b2bb014983e2a48b9006473f33cd9
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.4.4"
   intl:
     dependency: "direct main"
     description:
@@ -613,6 +636,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.6.7"
+  json_annotation:
+    dependency: transitive
+    description:
+      name: json_annotation
+      sha256: "1ce844379ca14835a50d2f019a3099f419082cfdd231cd86a142af94dd5c6bb1"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "4.9.0"
   leak_tracker:
     dependency: transitive
     description:
@@ -1235,7 +1266,7 @@ packages:
     source: hosted
     version: "3.1.4"
   uuid:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: uuid
       sha256: "648e103079f7c64a36dc7d39369cabb358d377078a051d6ae2ad3aa539519313"
@@ -1471,5 +1502,5 @@ packages:
     source: hosted
     version: "6.5.0"
 sdks:
-  dart: ">=3.4.0 <4.0.0"
-  flutter: ">=3.22.0"
+  dart: ">=3.6.0 <4.0.0"
+  flutter: ">=3.27.0"

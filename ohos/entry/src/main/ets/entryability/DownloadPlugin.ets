@@ -34,6 +34,7 @@ import { common, Want } from '@kit.AbilityKit';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { wantAgent, WantAgent } from '@kit.AbilityKit';
 import { fileShare } from '@kit.CoreFileKit';
+import hilog from '@ohos.hilog';
 const TAG = "DownloadPluginTag";
 
 export default class DownloadPlugin implements FlutterPlugin {
@@ -69,6 +70,12 @@ export default class DownloadPlugin implements FlutterPlugin {
           case "activatePermission":
             that.api.activatePermission(call.argument("uri") as string,result);
             break
+          case "startContinuousTask":
+            that.api.startContinuousTask(result);
+            break;
+          case "stopContinuousTask":
+            that.api.stopContinuousTask(result);
+            break;
           case "callEvent":
             that.eventSink?.success("Success at " + new Date());
             break;
@@ -156,6 +163,36 @@ class DownloadApi {
       result.error("UNAVAILABLE", "Download level not available.", null)
     }
     Log.i(TAG, "openFileManager finish");
+  }
+  startContinuousTask(result: MethodResult) {
+    let context = getContext(this) as common.UIAbilityContext;
+    let wantAgentInfo: wantAgent.WantAgentInfo = {
+      wants: [
+        ({
+          bundleName: context.abilityInfo.bundleName,
+          abilityName: "EntryAbility"
+        })
+      ],
+      actionType: wantAgent.OperationType.START_ABILITY,
+      requestCode: 114514,
+      actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+    };
+    wantAgent.getWantAgent(wantAgentInfo).then((wantAgentObj: Object) => {
+      try {
+        backgroundTaskManager.startBackgroundRunning(context,
+          backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK, wantAgentObj).then(() => {
+        }).catch((error: BusinessError) => {
+          hilog.error(777, 'testFlag', 'background play failed BusinessError: ' + JSON.stringify(error))
+        });
+      } catch (error) {
+        hilog.error(777, 'testFlag', 'background play failed: ' + JSON.stringify(error))
+      }
+    });
+  }
+
+  stopContinuousTask(result: MethodResult) {
+    let context = getContext(this) as common.UIAbilityContext;
+    backgroundTaskManager.stopBackgroundRunning(context)
   }
   startBgTask(result: MethodResult) {
     let context = getContext(this) as common.UIAbilityContext;

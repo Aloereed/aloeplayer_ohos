@@ -9,7 +9,7 @@ import WebViewFlutterPlugin from 'webview_flutter_ohos';
 import SharePlusOhosPlugin from 'share_plus';
 import SqflitePlugin from 'sqflite';
 import WakelockPlugin from 'wakelock';
-import AudioServicePlugin from 'audio_service_ohos';
+import AudioServicePlugin from 'audio_service';
 import FlutterPluginMediaInfoPlugin from 'media_info';
 import VideoThumbnailOhosPlugin from 'video_thumbnail_ohos';
 import FilePickerPlugin from 'file_picker_ohos';

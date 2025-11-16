@@ -1,4 +1,5 @@
 // lib/services/http_service.dart
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:shelf/shelf.dart';
@@ -6,6 +7,8 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:path/path.dart' as path;
 import 'smb_service.dart';
+import 'webdav_service.dart';
+import 'file_service.dart';
 import 'package:smb_connect/smb_connect.dart';
 
 class HttpService {
@@ -14,12 +17,75 @@ class HttpService {
   HttpService._();
 
   HttpServer? _server;
-  final SmbService _smbService = SmbService();
+  SmbService? _smbService;
+  WebDavService? _webdavService;
   int _port = 8080;
   String? _localIp;
 
   bool get isRunning => _server != null;
   String get baseUrl => 'http://${_localIp ?? 'localhost'}:$_port';
+
+  // 文件信息缓存，避免重复获取元数据
+  final Map<String, _FileInfoCache> _fileInfoCache = {};
+
+  // 请求去重，避免并发的重复请求
+  final Map<String, Future<Response>> _pendingRequests = {};
+
+  // 设置SMB服务实例
+  void setSmbService(SmbService service) {
+    _smbService = service;
+    _webdavService = null;
+    _clearCache(); // 切换服务时清除缓存
+  }
+
+  // 设置WebDAV服务实例
+  void setWebDavService(WebDavService service) {
+    _webdavService = service;
+    _smbService = null;
+    _clearCache(); // 切换服务时清除缓存
+  }
+
+  // 清除缓存
+  void _clearCache() {
+    _fileInfoCache.clear();
+    _pendingRequests.clear();
+  }
+
+  // 获取缓存的SMB文件信息
+  Future<SmbFile?> _getCachedSmbFile(String filePath) async {
+    final cacheKey = 'smb:$filePath';
+    final cached = _fileInfoCache[cacheKey];
+
+    // 缓存有效期5分钟
+    if (cached != null &&
+        DateTime.now().difference(cached.timestamp).inMinutes < 5) {
+      return cached.smbFile;
+    }
+
+    final file = await _smbService!.getFile(filePath);
+    if (file.isExists) {
+      _fileInfoCache[cacheKey] = _FileInfoCache(smbFile: file);
+    }
+    return file;
+  }
+
+  // 获取缓存的WebDAV文件信息
+  Future<WebDavFile?> _getCachedWebDavFile(String filePath) async {
+    final cacheKey = 'webdav:$filePath';
+    final cached = _fileInfoCache[cacheKey];
+
+    // 缓存有效期5分钟
+    if (cached != null &&
+        DateTime.now().difference(cached.timestamp).inMinutes < 5) {
+      return cached.webdavFile;
+    }
+
+    final file = await _webdavService!.getFileInfo(filePath);
+    if (file != null) {
+      _fileInfoCache[cacheKey] = _FileInfoCache(webdavFile: file);
+    }
+    return file;
+  }
 
   // 获取本机局域网IP地址
   Future<String?> _getLocalIpAddress() async {
@@ -111,15 +177,45 @@ class HttpService {
   // 处理文件请求
   Future<Response> _handleFileRequest(Request request) async {
     try {
-      final filePath = '/${request.params['path']}';
-      
-      if (!_smbService.isConnected) {
-        return Response.notFound('SMB未连接');
+      // 获取并解码URL路径（处理中文和特殊字符）
+      final encodedPath = request.params['path'] ?? '';
+      final decodedPath = Uri.decodeComponent(encodedPath);
+      final filePath = '/$decodedPath';
+
+      // 直接处理请求，不使用去重机制（避免阻塞Range请求）
+      return await _handleFileRequestInternal(filePath, request);
+    } catch (e) {
+      return Response.internalServerError(body: '服务器错误: $e');
+    }
+  }
+
+  // 内部文件请求处理
+  Future<Response> _handleFileRequestInternal(String filePath, Request request) async {
+    try {
+      // 检查是否有可用的文件服务
+      if (_smbService == null && _webdavService == null) {
+        return Response.notFound('未连接到任何文件服务器');
       }
 
-      final file = await _smbService.getFile(filePath);
-      if (!file.isExists) {
-        return Response.notFound('文件不存在');
+      if (_smbService != null && _smbService!.isConnected) {
+        return await _handleSmbFileRequest(filePath, request);
+      } else if (_webdavService != null && _webdavService!.isConnected) {
+        return await _handleWebDavFileRequest(filePath, request);
+      } else {
+        return Response.notFound('文件服务器未连接');
+      }
+    } catch (e) {
+      return Response.internalServerError(body: '服务器错误: $e');
+    }
+  }
+
+  // 处理SMB文件请求
+  Future<Response> _handleSmbFileRequest(String filePath, Request request) async {
+    try {
+      // 使用缓存获取文件信息
+      final file = await _getCachedSmbFile(filePath);
+      if (file == null || !file.isExists) {
+        return Response.notFound('文件不存在: $filePath');
       }
 
       // 获取文件扩展名确定MIME类型
@@ -129,38 +225,77 @@ class HttpService {
       // 处理Range请求（支持视频播放等）
       final rangeHeader = request.headers['range'];
       if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
-        return await _handleRangeRequest(request, file, mimeType, rangeHeader);
+        return await _handleSmbRangeRequest(request, file, mimeType, rangeHeader);
       }
 
-      // 创建文件流
-      final stream = _smbService.getFileStream(filePath);
-      
+      // 创建文件流 - 需要await
+      final stream = await _smbService!.getFileStream(filePath);
+
       return Response.ok(
         stream,
         headers: {
-          'Content-Type': mimeType,
+          'Content-Type': '$mimeType; charset=utf-8',
           'Content-Length': file.size.toString(),
           'Accept-Ranges': 'bytes',
           'Cache-Control': 'public, max-age=3600',
           'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+          // 添加Content-Disposition支持中文文件名下载
+          'Content-Disposition': 'inline; filename*=UTF-8\'\'${Uri.encodeComponent(path.basename(filePath))}',
         },
       );
     } catch (e) {
-      print('文件请求处理失败: $e');
       return Response.internalServerError(body: '服务器错误: $e');
     }
   }
 
-  // 处理Range请求（支持断点续传和流媒体）
-  Future<Response> _handleRangeRequest(
-    Request request, 
-    SmbFile file, 
-    String mimeType, 
+  // 处理WebDAV文件请求
+  Future<Response> _handleWebDavFileRequest(String filePath, Request request) async {
+    try {
+      // 使用缓存获取文件信息
+      final fileInfo = await _getCachedWebDavFile(filePath);
+      if (fileInfo == null) {
+        return Response.notFound('文件不存在: $filePath');
+      }
+
+      // 获取文件扩展名确定MIME类型
+      final ext = path.extension(filePath).toLowerCase();
+      final mimeType = _getMimeType(ext);
+
+      // 处理Range请求（支持视频播放等）
+      final rangeHeader = request.headers['range'];
+      if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+        return await _handleWebDavRangeRequest(request, fileInfo, mimeType, rangeHeader);
+      }
+
+      // 创建文件流
+      final stream = await _webdavService!.getFileStream(filePath);
+
+      return Response.ok(
+        stream,
+        headers: {
+          'Content-Type': '$mimeType; charset=utf-8',
+          'Content-Length': fileInfo.size.toString(),
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=3600',
+          'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+          'Content-Disposition': 'inline; filename*=UTF-8\'\'${Uri.encodeComponent(path.basename(filePath))}',
+        },
+      );
+    } catch (e) {
+      return Response.internalServerError(body: '服务器错误: $e');
+    }
+  }
+
+  // 处理SMB Range请求（支持断点续传和流媒体）
+  Future<Response> _handleSmbRangeRequest(
+    Request request,
+    SmbFile file,
+    String mimeType,
     String rangeHeader
   ) async {
     try {
       final fileSize = file.size;
-      
+
       // 解析Range头
       final rangeMatch = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(rangeHeader);
       if (rangeMatch == null) {
@@ -169,29 +304,127 @@ class HttpService {
 
       final startStr = rangeMatch.group(1);
       final endStr = rangeMatch.group(2);
-      
+
       int start = 0;
       int end = fileSize - 1;
-      
+
       if (startStr != null && startStr.isNotEmpty) {
         start = int.parse(startStr);
       }
       if (endStr != null && endStr.isNotEmpty) {
         end = int.parse(endStr);
       }
-      
+
       // 确保范围有效
       if (start > end || start >= fileSize) {
         return Response(416, body: 'Range Not Satisfiable');
       }
-      
-      end = end.clamp(start, fileSize - 1);
+
+      end = end.clamp(start, fileSize - 1).toInt();
+
       final contentLength = end - start + 1;
 
       // 创建范围流
-      final stream = (await _smbService.getFileStream(file.path))
-          .skip(start)
-          .take(contentLength);
+      final sourceStream = await _smbService!.getFileStream(file.path);
+
+      // 使用优化的StreamTransformer来处理字节范围
+      int bytesToSkip = start;
+      int bytesToSend = contentLength;
+
+      final rangeStream = sourceStream.transform(
+        StreamTransformer<Uint8List, Uint8List>.fromHandlers(
+          handleData: (chunk, sink) {
+            // 快速跳过：如果还需要跳过字节
+            if (bytesToSkip > 0) {
+              if (chunk.length <= bytesToSkip) {
+                // 整个块都需要跳过
+                bytesToSkip -= chunk.length;
+                return;
+              } else {
+                // 跳过部分字节，使用 sublist 视图避免复制
+                chunk = Uint8List.sublistView(chunk, bytesToSkip);
+                bytesToSkip = 0;
+              }
+            }
+
+            // 如果还需要发送字节
+            if (bytesToSend > 0) {
+              if (chunk.length <= bytesToSend) {
+                // 发送整个块
+                sink.add(chunk);
+                bytesToSend -= chunk.length;
+              } else {
+                // 只发送部分字节，使用 sublist 视图避免复制
+                sink.add(Uint8List.sublistView(chunk, 0, bytesToSend));
+                bytesToSend = 0;
+              }
+            }
+
+            // 如果已发送完所有需要的数据，关闭 sink
+            if (bytesToSend <= 0) {
+              sink.close();
+            }
+          },
+        ),
+      );
+
+      return Response(
+        206, // Partial Content
+        body: rangeStream,
+        headers: {
+          'Content-Type': mimeType,
+          'Content-Length': contentLength.toString(),
+          'Content-Range': 'bytes $start-$end/$fileSize',
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=3600',
+          'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+        },
+      );
+    } catch (e) {
+      return Response.internalServerError(body: '服务器错误: $e');
+    }
+  }
+
+  // 处理WebDAV Range请求（支持断点续传和流媒体）
+  Future<Response> _handleWebDavRangeRequest(
+    Request request,
+    WebDavFile file,
+    String mimeType,
+    String rangeHeader
+  ) async {
+    try {
+      final fileSize = file.size;
+
+      // 解析Range头
+      final rangeMatch = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(rangeHeader);
+      if (rangeMatch == null) {
+        return Response(416, body: 'Invalid Range');
+      }
+
+      final startStr = rangeMatch.group(1);
+      final endStr = rangeMatch.group(2);
+
+      int start = 0;
+      int end = fileSize - 1;
+
+      if (startStr != null && startStr.isNotEmpty) {
+        start = int.parse(startStr);
+      }
+      if (endStr != null && endStr.isNotEmpty) {
+        end = int.parse(endStr);
+      }
+
+      // 确保范围有效
+      if (start > end || start >= fileSize) {
+        return Response(416, body: 'Range Not Satisfiable');
+      }
+
+      end = end.clamp(start, fileSize - 1).toInt();
+
+      final contentLength = end - start + 1;
+
+      // WebDAV可以直接使用Range参数请求
+      final stream = await _webdavService!.getFileStream(file.path, start: start, end: end);
 
       return Response(
         206, // Partial Content
@@ -206,8 +439,7 @@ class HttpService {
         },
       );
     } catch (e) {
-      print('Range请求处理失败: $e');
-      return Response.internalServerError(body: '服务器错误');
+      return Response.internalServerError(body: '服务器错误: $e');
     }
   }
 
@@ -215,12 +447,13 @@ class HttpService {
   Future<Response> _handleStatusRequest(Request request) async {
     final status = {
       'status': 'running',
-      'smb_connected': _smbService.isConnected,
+      'smb_connected': _smbService?.isConnected ?? false,
+      'webdav_connected': _webdavService?.isConnected ?? false,
       'local_ip': _localIp,
       'port': _port,
       'base_url': baseUrl,
     };
-    
+
     return Response.ok(
       '${status.toString()}',
       headers: {'Content-Type': 'application/json'},
@@ -230,28 +463,50 @@ class HttpService {
   // 处理文件信息请求
   Future<Response> _handleFileInfoRequest(Request request) async {
     try {
-      final filePath = '/${request.params['path']}';
-      
-      if (!_smbService.isConnected) {
-        return Response.notFound('SMB未连接');
+      // 获取并解码URL路径（处理中文和特殊字符）
+      final encodedPath = request.params['path'] ?? '';
+      final decodedPath = Uri.decodeComponent(encodedPath);
+      final filePath = '/$decodedPath';
+
+      if (_smbService == null && _webdavService == null) {
+        return Response.notFound('未连接到任何文件服务器');
       }
 
-      final file = await _smbService.getFile(filePath);
-      if (!file.isExists) {
+      Map<String, dynamic>? info;
+
+      if (_smbService != null && _smbService!.isConnected) {
+        final file = await _smbService!.getFile(filePath);
+        if (!file.isExists) {
+          return Response.notFound('文件不存在');
+        }
+        info = {
+          'name': file.name,
+          'path': file.path,
+          'size': file.size,
+          'is_directory': file.isDirectory(),
+          'url': getFileUrl(file.path),
+        };
+      } else if (_webdavService != null && _webdavService!.isConnected) {
+        final file = await _webdavService!.getFileInfo(filePath);
+        if (file == null) {
+          return Response.notFound('文件不存在');
+        }
+        info = {
+          'name': file.name,
+          'path': file.path,
+          'size': file.size,
+          'is_directory': file.isDirectory,
+          'url': getFileUrl(file.path),
+        };
+      }
+
+      if (info == null) {
         return Response.notFound('文件不存在');
       }
 
-      final info = {
-        'name': file.name,
-        'path': file.path,
-        'size': file.size,
-        'is_directory': file.isDirectory(),
-        'url': getFileUrl(file.path),
-      };
-
       return Response.ok(
         info.toString(),
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
       return Response.internalServerError(body: '获取文件信息失败: $e');
@@ -350,7 +605,25 @@ class HttpService {
   String getFileUrl(String smbPath) {
     // 移除开头的斜杠（如果有的话）
     final cleanPath = smbPath.startsWith('/') ? smbPath.substring(1) : smbPath;
-    return '$baseUrl/file/$cleanPath';
+
+    // 对路径的每个部分分别进行URL编码，保留路径分隔符
+    final pathSegments = cleanPath.split('/');
+    final encodedSegments = pathSegments.map((segment) => Uri.encodeComponent(segment)).toList();
+    final encodedPath = encodedSegments.join('/');
+
+    return '$baseUrl/file/$encodedPath';
+  }
+
+  String getFileUrlLocalhost(String smbPath) {
+    // 移除开头的斜杠（如果有的话）
+    final cleanPath = smbPath.startsWith('/') ? smbPath.substring(1) : smbPath;
+
+    // 对路径的每个部分分别进行URL编码，保留路径分隔符
+    final pathSegments = cleanPath.split('/');
+    final encodedSegments = pathSegments.map((segment) => Uri.encodeComponent(segment)).toList();
+    final encodedPath = encodedSegments.join('/');
+
+    return 'http://localhost:$_port/file/$encodedPath';
   }
 
   // 获取本机IP地址（供外部调用）
@@ -365,4 +638,13 @@ class HttpService {
     }
     return urls;
   }
+}
+
+// 文件信息缓存类
+class _FileInfoCache {
+  final SmbFile? smbFile;
+  final WebDavFile? webdavFile;
+  final DateTime timestamp;
+
+  _FileInfoCache({this.smbFile, this.webdavFile}) : timestamp = DateTime.now();
 }
