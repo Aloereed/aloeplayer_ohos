@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-07 22:27:23
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-11-16 13:40:38
+ * @LastEditTime: 2025-11-16 17:28:28
  * @Description: file content
  */
 /*
@@ -51,6 +51,8 @@ import 'volumeview.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:dart_libass/dart_libass.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:aloeplayer/player.dart';
 import 'package:aloeplayer/pages/servers_page.dart';
 import 'mpvplayer.dart';
@@ -974,6 +976,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
+    MediaKit.ensureInitialized();
     _settingsService.loadAllFonts();
     _checkPrivacyPolicyStatus();
     _checkAndOpenUriFile();

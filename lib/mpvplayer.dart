@@ -18,154 +18,7 @@ import 'history_service.dart';
 import 'volumeview.dart';
 import 'settings.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-
-// VideoPlayer AudioHandler - 新版 audio_service (0.18.x) 实现
-class VideoPlayerAudioHandler extends BaseAudioHandler {
-  final Player player;
-  final Function() onPlayNext;
-  final Function() onPlayPrevious;
-
-  VideoPlayerAudioHandler({
-    required this.player,
-    required this.onPlayNext,
-    required this.onPlayPrevious,
-  });
-
-  @override
-  Future<void> play() async {
-    player.play();
-    playbackState.add(playbackState.value.copyWith(
-      playing: true,
-      controls: [
-        MediaControl.skipToPrevious,
-        MediaControl.rewind,
-        MediaControl.pause,
-        MediaControl.fastForward,
-        MediaControl.skipToNext,
-      ],
-    ));
-  }
-
-  @override
-  Future<void> pause() async {
-    player.pause();
-    playbackState.add(playbackState.value.copyWith(
-      playing: false,
-      controls: [
-        MediaControl.skipToPrevious,
-        MediaControl.rewind,
-        MediaControl.play,
-        MediaControl.fastForward,
-        MediaControl.skipToNext,
-      ],
-    ));
-  }
-
-  @override
-  Future<void> stop() async {
-    player.pause();
-    await player.seek(Duration.zero);
-    playbackState.add(playbackState.value.copyWith(
-      playing: false,
-      processingState: AudioProcessingState.idle,
-    ));
-  }
-
-  @override
-  Future<void> skipToNext() async {
-    onPlayNext();
-  }
-
-  @override
-  Future<void> skipToPrevious() async {
-    onPlayPrevious();
-  }
-
-  @override
-  Future<void> fastForward() async {
-    final position = player.state.position + const Duration(seconds: 10);
-    await player.seek(position);
-  }
-
-  @override
-  Future<void> rewind() async {
-    final position = player.state.position - const Duration(seconds: 10);
-    await player.seek(position > Duration.zero ? position : Duration.zero);
-  }
-
-  @override
-  Future<void> seek(Duration position) async {
-    await player.seek(position);
-    playbackState.add(playbackState.value.copyWith(
-      updatePosition: position,
-    ));
-  }
-
-  @override
-  Future<void> setSpeed(double speed) async {
-    await player.setRate(speed);
-    playbackState.add(playbackState.value.copyWith(
-      speed: speed,
-    ));
-  }
-
-  // 更新播放状态
-  void updatePlaybackState() {
-    playbackState.add(PlaybackState(
-      controls: [
-        MediaControl.skipToPrevious,
-        MediaControl.rewind,
-        player.state.playing ? MediaControl.pause : MediaControl.play,
-        MediaControl.fastForward,
-        MediaControl.skipToNext,
-      ],
-      systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-      },
-      playing: true,
-      updatePosition: player.state.position,
-      bufferedPosition: player.state.position,
-      speed: player.state.rate,
-      processingState: !(player.state.completed)
-          ? AudioProcessingState.ready
-          : AudioProcessingState.idle,
-      repeatMode: AudioServiceRepeatMode.none,
-      shuffleMode: AudioServiceShuffleMode.none,
-    ));
-  }
-
-  // 更新媒体项目（自定义方法）
-  Future<void> setCurrentMediaItem(String filePath, Duration duration) async {
-    // 先查看/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Thumbnails/
-    // 下是否有filePath的basename+.jpg的文件
-    final thumbnailPath = path.join(
-        '/storage/Users/currentUser/Download/com.aloereed.aloeplayer',
-        'Thumbnails',
-        '${path.basename(filePath)}.jpg');
-    var iconFile = File(thumbnailPath);
-
-    // 如果不存在，就
-    // 将Assets/icon.png复制到/storage/Users/currentUser/Download/com.aloereed.aloeplayer/icon.png
-    if (!await iconFile.exists()) {
-      final iconBytes = await rootBundle.load('Assets/icon.png');
-      iconFile = File(path.join(
-          Directory.systemTemp.path, 'com.aloereed.aloeplayer', 'icon.png'));
-      await iconFile.create(recursive: true);
-      await iconFile.writeAsBytes(iconBytes.buffer.asUint8List());
-    }
-
-    mediaItem.add(MediaItem(
-      id: filePath,
-      album: "AloePlayer",
-      title: path.basenameWithoutExtension(filePath),
-      artist: "AloePlayer",
-      duration: duration,
-      artUri: Uri.file(iconFile.path),
-    ));
-  }
-}
+import 'audio_handler.dart';
 
 // 播放列表排序类型枚举
 enum PlaylistSortType {
@@ -493,7 +346,6 @@ class _MPVPlayerState extends State<MPVPlayer>
   @override
   void initState() {
     super.initState();
-    MediaKit.ensureInitialized();
 
     _controlsAnimationController = AnimationController(
       vsync: this,
@@ -758,7 +610,24 @@ class _MPVPlayerState extends State<MPVPlayer>
       // 创建 AudioHandler 实例
       _audioHandler = await AudioService.init(
         builder: () => VideoPlayerAudioHandler(
-          player: player,
+          onPlay: () => player.play(),
+          onPause: () => player.pause(),
+          onStop: () async {
+            player.pause();
+            await player.seek(Duration.zero);
+          },
+          onSeek: (position) => player.seek(position),
+          onSetSpeed: (speed) => player.setRate(speed),
+          onFastForward: (duration) =>
+              player.seek(player.state.position + duration),
+          onRewind: (duration) {
+            final position = player.state.position - duration;
+            player.seek(position > Duration.zero ? position : Duration.zero);
+          },
+          isPlaying: () => player.state.playing,
+          getCurrentPosition: () => player.state.position,
+          getDuration: () => player.state.duration,
+          getPlaybackSpeed: () => player.state.rate,
           onPlayNext: _playNext,
           onPlayPrevious: _playPrevious,
         ),

@@ -42,6 +42,7 @@ import 'history_service.dart';
 import 'package:aloeplayer/ass.dart';
 import 'package:galactic_hotkeys/galactic_hotkeys_widget.dart';
 import 'package:screenshot/screenshot.dart';
+import 'audio_handler.dart';
 
 int rgbToColor(int rgb) {
   // 将 RGB 值转换为 ARGB 值，透明度为 0xFF（完全不透明）
@@ -181,6 +182,11 @@ class _PlayerTabState extends State<PlayerTab>
   final EventChannel _eventChannel2 = EventChannel('com.example.app/events');
   final EventChannel _eventChannel =
       EventChannel('samples.flutter.dev/volumepluginevent');
+
+  // Audio Service 相关
+  VideoPlayerAudioHandler? _audioHandler;
+  bool _audioServiceInitialized = false;
+
   Future<void> _setupAudioSession() async {
     final session = await AudioSession.instance;
 
@@ -342,6 +348,10 @@ class _PlayerTabState extends State<PlayerTab>
     subtitleFontFamily = await _settingsService
         .loadFontFromFile(await _settingsService.getSubtitleFont());
     _openUri(widget.openfile);
+
+    // 初始化 Audio Service
+    _initializeAudioService();
+
     // _useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
     // _ffmpegExample = FfmpegExample(initUri: '');
   }
@@ -355,6 +365,81 @@ class _PlayerTabState extends State<PlayerTab>
 
   void _onError(Object error) {
     print('Error: $error');
+  }
+
+  // 初始化 Audio Service
+  void _initializeAudioService() async {
+    if (_audioServiceInitialized) return;
+
+    try {
+      // 创建 AudioHandler 实例
+      _audioHandler = await AudioService.init(
+        builder: () => VideoPlayerAudioHandler(
+          onPlay: () => _videoController?.play(),
+          onPause: () => _videoController?.pause(),
+          onStop: () async {
+            _videoController?.pause();
+            await _videoController?.seekTo(Duration.zero);
+          },
+          onSeek: (position) => _videoController?.seekTo(position),
+          onSetSpeed: (speed) => _videoController?.setPlaybackSpeed(speed),
+          onFastForward: (duration) {
+            final currentPosition = _videoController?.value.position ?? Duration.zero;
+            _videoController?.seekTo(currentPosition + duration);
+          },
+          onRewind: (duration) {
+            final currentPosition = _videoController?.value.position ?? Duration.zero;
+            final newPosition = currentPosition - duration;
+            _videoController?.seekTo(
+              newPosition > Duration.zero ? newPosition : Duration.zero
+            );
+          },
+          isPlaying: () => _videoController?.value.isPlaying ?? false,
+          getCurrentPosition: () => _videoController?.value.position ?? Duration.zero,
+          getDuration: () => _videoController?.value.duration ?? Duration.zero,
+          getPlaybackSpeed: () => _videoController?.value.playbackSpeed ?? 1.0,
+          onPlayNext: _usePlaylist ? _playNextItem : null,
+          onPlayPrevious: _usePlaylist ? _playPreviousItem : null,
+        ),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.aloereed.aloeplayer.channel.audio',
+          androidNotificationChannelName: 'AloePlayer',
+          androidNotificationOngoing: true,
+          androidStopForegroundOnPause: true,
+        ),
+      );
+
+      _audioServiceInitialized = true;
+      print('Audio Service 初始化完成');
+    } catch (e) {
+      print('初始化 Audio Service 时发生错误: $e');
+      _audioServiceInitialized = false;
+    }
+  }
+
+  // 更新播放状态到 Audio Service
+  void _updateAudioServiceState() async {
+    if (!_audioServiceInitialized || _audioHandler == null) return;
+
+    try {
+      _audioHandler!.updatePlaybackState();
+    } catch (e) {
+      print('更新播放状态时发生错误: $e');
+    }
+  }
+
+  // 更新媒体项目到 Audio Service
+  void _updateAudioServiceMediaItem() async {
+    if (!_audioServiceInitialized || _audioHandler == null) return;
+
+    try {
+      final filePath = widget.openfile;
+      final duration = _videoController?.value.duration ?? Duration.zero;
+
+      _audioHandler!.setCurrentMediaItem(filePath, duration);
+    } catch (e) {
+      print('更新媒体项目时发生错误: $e');
+    }
   }
 
   @override
@@ -2016,6 +2101,8 @@ class _PlayerTabState extends State<PlayerTab>
           await _initializeChewieController();
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
+          _videoController?.addListener(_updateAudioServiceState);
+          _updateAudioServiceMediaItem();
           final needToFullscreen =
               await _settingsService.getAutoFullscreenBeginPlay();
           if (needToFullscreen) {
@@ -2093,6 +2180,8 @@ class _PlayerTabState extends State<PlayerTab>
           await _initializeChewieController();
           _videoController?.play();
           _videoController?.addListener(_updatePlaybackState);
+          _videoController?.addListener(_updateAudioServiceState);
+          _updateAudioServiceMediaItem();
           final needToFullscreen =
               await _settingsService.getAutoFullscreenBeginPlay();
           if (needToFullscreen) {
@@ -2965,6 +3054,12 @@ class _PlayerTabState extends State<PlayerTab>
     _audioTrackController?.dispose();
     _videoController?.dispose();
     _chewieController?.dispose();
+
+    // 清理 Audio Service
+    if (_audioHandler != null) {
+      _audioHandler!.stop();
+    }
+
     _volumeSliderTimer?.cancel();
     _animeController?.dispose();
     _hideTimer?.cancel();

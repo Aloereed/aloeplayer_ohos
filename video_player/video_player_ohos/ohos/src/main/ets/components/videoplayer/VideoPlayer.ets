@@ -32,7 +32,6 @@ import {
 import { QueuingEventSink } from "./QueuingEventSink"
 import { ArrayList, HashMap } from "@kit.ArkTS"
 import { audio } from "@kit.AudioKit"
-import { avSession } from "@kit.AVSessionKit"
 import fs from "@ohos.file.fs"
 // import { AVIjkPlayer } from "./AVIjkPlayer"
 const FORMAT_SS: String = "ss"
@@ -47,12 +46,7 @@ const AVPLAYER_IO_ERROR: number = 5400103
 const TAG = "VideoPlayer"
 export class VideoPlayer {
     public avPlayer: media.AVPlayer  | null = null
-    private session: avSession.AVSession | null = null
-    private currentState: avSession.AVPlaybackState = {
-        state: avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-    }
     public playerModel: PlayerModel | null = null
-    private sessionName: string | null = null
     private duration: number = 0
     private status: number = -1
     private loop: boolean = false
@@ -110,7 +104,6 @@ export class VideoPlayer {
         }
         this.eventChannel = eventChannel
         this.headers = headers
-        this.sessionName = this.createGuid()
         if (AudioFocus == true) {
             this.interruptMode = audio.InterruptMode.SHARE_MODE
             Log.i(TAG, "set interruptMode : " + this.interruptMode)
@@ -297,202 +290,6 @@ export class VideoPlayer {
             console.info(TAG, `release success.`)
         }
     }
-    async createSession(): Promise<avSession.AVSession> {
-        let type: avSession.AVSessionType =
-            this.mediaType == "audio" ? "audio" : "video"
-        /*
-         * context:应用上下文，提供获取应用程序环境信息的能力。
-         * tag:会话的自定义名称。
-         *type:会话类型。
-         */
-        let context = getContext(this) as Context
-        if (this.sessionName == null) {
-            this.sessionName = this.createGuid()
-            // this.sessionName = "AloePlayer"
-        }
-
-        this.session = await avSession.createAVSession(
-            context,
-            this.sessionName,
-            type
-        )
-        
-        console.info(`session get done : sessionName : ${this.sessionName}`)
-        await this.fetchMetadataFromFdSrcByPromise()
-        // 设置必要的媒体信息
-        let metadata: avSession.AVMetadata = {
-            assetId: "0", // 由应用指定，用于标识应用媒体库里的媒体
-            title: this.title ?? "AloePlayer",
-            mediaImage: this.pixelMap,
-            artist: this.artist ?? "正在播放",
-            duration: this.duration, // 资源的时长，以ms为单位
-            // lyric:this.lrc,
-        }
-        this.session
-            .setAVMetadata(metadata)
-            .then(() => {
-                console.info("SetAVMetadata successfully")
-            })
-            .catch((err: BusinessError) => {
-                console.error(
-                    `Failed to set AVMetadata. Code: ${err.code}, message: ${err.message}`
-                )
-            })
-        //监听事件
-        await this.RegisterSessionListener()
-        // 激活接口要在元数据、控制命令注册完成之后再执行
-        await this.session.activate()
-        this.session.setExtras({
-            requireAbilityList: ['url-cast'],
-          });
-        console.info(
-            `session create done : sessionId : ${this.session.sessionId}`
-        )
-        return this.session
-    }
-
-    async RegisterSessionListener(): Promise<void> {
-        // Processes playback commands.
-        this.session?.on("play", async () => {
-            // Logger.info(TAG, 'on play, do play task');
-            this.avPlayer?.play()
-            // this.isPlayLink!.set(true);
-            this.currentState = {
-                state: avSession.PlaybackState.PLAYBACK_STATE_PLAY,
-                position: {
-                    elapsedTime: this.getPosition(),
-                    updateTime: new Date().getTime(),
-                },
-            }
-            await this.session?.setAVPlaybackState(this.currentState)
-        })
-
-        // Suspend instruction processing.
-        this.session?.on("pause", async () => {
-            // Logger.info(TAG, 'on pause, do pause task');
-            this.avPlayer?.pause()
-            // this.isPlayLink!.set(false);
-            this.currentState = {
-                state: avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-                position: {
-                    elapsedTime: this.getPosition(),
-                    updateTime: new Date().getTime(),
-                },
-            }
-            await this.session?.setAVPlaybackState(this.currentState)
-        })
-
-        // Stop instruction processing.
-        this.session?.on("stop", async () => {
-            // Logger.info(TAG, 'on stop , do stop task');
-            this.avPlayer?.stop()
-            // this.isPlayLink!.set(false);
-            this.currentState = {
-                state: avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-            }
-            await this.session?.setAVPlaybackState(this.currentState)
-        })
-
-        // Next song/set instruction processing.
-        this.session?.on("playNext", async () => {
-            // Logger.info(TAG, 'on playNext , do playNext task');
-        })
-
-        // Previous song/set instruction processing.
-        this.session?.on("playPrevious", async () => {
-            // Logger.info(TAG, 'on playPrevious , do playPrevious task');
-        })
-
-        // Processes the progress bar dragging command.
-        this.session?.on("seek", (position: number) => {
-            // Logger.info(TAG, 'on seek: seek to' + position);
-            this.seekTo(position)
-            // Modify the playback progress based on the instruction.
-            // if (position >= this.currentAVMetadataLink!.get().duration!) {
-            //   this.next();
-            // } else {
-            //   this.avPlayer?.seek(position);
-            //   this.currentState?.position = {
-            //     elapsedTime: position,
-            //     updateTime: new Date().getTime()
-            //   };
-            //   this.session?.setAVPlaybackState(this.currentState);
-            // }
-        })
-
-        // Processes the favorite/like command for the audio session.
-        this.session?.on("toggleFavorite", (assetId: string) => {
-            // If a system callback message is received, the user clicks the favorites button when playing the song.
-            // The app stores the favorites status based on the song ID and reports the current favorites status.
-            // Logger.info(TAG, 'on toggleFavorite session, do toggleFavorite task: ' + assetId);
-            // this.isFavorMapLink!.get().set(assetId, !this.isFavorMapLink!.get().get(assetId));
-            // this.currentState?.isFavorite = this.isFavorMapLink!.get().get(assetId);
-            // this.session?.setAVPlaybackState(this.currentState);
-        })
-
-        // Cyclic mode instruction processing for audio session.
-        this.session?.on("setLoopMode", (mode) => {
-            // Logger.info(TAG, 'on setLoopMode: ');
-            this.setLoop()
-            // The value transferred by the playback control is not processed.
-            // The value is switched based on the application sequence.
-            // let currentMode = this.currentLoopModeLink!.get();
-            // this.currentLoopModeLink!.set(currentMode === 3 ? 0 : currentMode + 1);
-            // // The playback status is updated. The cyclic mode after application processing is reported in the playback status.
-            // this.currentState?.loopMode = this.currentLoopModeLink!.get();
-            // // Logger.info(TAG, 'self setLoopMode: ' + this.currentState?.loopMode);
-            // this.session?.setAVPlaybackState(this.currentState);
-        })
-
-        // Fast-forward command processing for video sessions.
-        this.session?.on("fastForward", (skipInterval?: number) => {
-            // Logger.info(TAG, 'on fastForward: ');
-            if (
-                skipInterval != null &&
-                this.getPosition() + skipInterval! * 1000 <= this.duration
-            )
-                this.seekTo(this.getPosition() + skipInterval! * 1000)
-            // let currentTime: number =
-            //   (skipInterval! * 1000 + this.avPlayer!.currentTime) > this.currentAVMetadataLink!.get().duration! ?
-            //     this.currentAVMetadataLink!.get().duration! : (skipInterval! * 1000 + this.avPlayer!.currentTime);
-            // if (currentTime >= this.currentAVMetadataLink!.get().duration!) {
-            //   this.next();
-            // } else {
-            //   this.avPlayer?.seek(currentTime);
-            //   this.currentState?.position = {
-            //     elapsedTime: currentTime,
-            //     updateTime: new Date().getTime()
-            //   };
-            //   this.currentState?.state = avSession.PlaybackState.PLAYBACK_STATE_PLAY;
-            //   this.session?.setAVPlaybackState(this.currentState);
-            // }
-        })
-
-        // Rewind command processing, for video session.
-        this.session?.on("rewind", (skipInterval?: number) => {
-            // Logger.info(TAG, 'on rewind: ');
-            if (
-                skipInterval != null &&
-                this.getPosition() - skipInterval! * 1000 > 0
-            )
-                this.seekTo(this.getPosition() - skipInterval! * 1000)
-            // let currentTime: number = (this.avPlayer!.currentTime - skipInterval! * 1000) <= 0 ?
-            //   0 : (this.avPlayer!.currentTime - skipInterval! * 1000);
-            // this.avPlayer?.seek(skipInterval);
-            // // Logger.info(TAG, ' currentTime' + JSON.stringify(currentTime));
-            // if (currentTime <= 0) {
-            //   this.previous();
-            // } else {
-            //   this.avPlayer?.seek(currentTime);
-            //   this.currentState?.position = {
-            //     elapsedTime: currentTime,
-            //     updateTime: new Date().getTime()
-            //   };
-            //   this.currentState?.state = avSession.PlaybackState.PLAYBACK_STATE_PLAY;
-            //   this.session?.setAVPlaybackState(this.currentState);
-            // }
-        })
-    }
 
     /**
      * Creates a videoPlayer object.
@@ -569,30 +366,10 @@ export class VideoPlayer {
                         } else {
                             this.avPlayer.fdSrc = this.rawFile!
                         }
-                        this.currentState = {
-                            state: avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-                            position: {
-                                elapsedTime: this.getPosition(),
-                                updateTime: new Date().getTime(),
-                            },
-                        }
-                        await this.session?.setAVPlaybackState(
-                            this.currentState
-                        )
                         break
                     case AvplayerStatus.INITIALIZED:
                         this.avPlayer.surfaceId = this.surfaceId
                         this.avPlayer.prepare()
-                        this.currentState = {
-                            state: avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-                            position: {
-                                elapsedTime: this.getPosition(),
-                                updateTime: new Date().getTime(),
-                            },
-                        }
-                        await this.session?.setAVPlaybackState(
-                            this.currentState
-                        )
                         break
                     case AvplayerStatus.PREPARED:
                         this.avPlayer.videoScaleType = 0
@@ -600,64 +377,14 @@ export class VideoPlayer {
                         this.setVideoSize()
                         this.sendInitialized()
                         this.duration = this.avPlayer.duration
-                        let metadata: avSession.AVMetadata = {
-                            assetId: "0",
-                            title: this.title ?? "AloePlayer",
-                            mediaImage: this.pixelMap,
-                            artist: this.artist ?? "正在播放",
-                            duration: this.duration, // 资源的时长，以ms为单位
-                        }
-                        await this.session
-                            ?.setAVMetadata(metadata)
-                            .then(() => {
-                                console.info(`SetAVMetadata successfully`)
-                            })
-                            .catch((err: BusinessError) => {
-                                console.error(
-                                    `Failed to set AVMetadata. Code: ${err.code}, message: ${err.message}`
-                                )
-                            })
-                        this.currentState = {
-                            state: avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-                            position: {
-                                elapsedTime: this.getPosition(),
-                                updateTime: new Date().getTime(),
-                            },
-                        }
-                        await this.session?.setAVPlaybackState(
-                            this.currentState
-                        )
                         break
                     case AvplayerStatus.PLAYING:
                         this.status = CommonConstants.STATUS_START
                         this.watchStatus()
-                        // this.isPlayLink!.set(true);
-                        this.currentState = {
-                            state: avSession.PlaybackState.PLAYBACK_STATE_PLAY,
-                            position: {
-                                elapsedTime: this.getPosition(),
-                                updateTime: new Date().getTime(),
-                            },
-                        }
-                        await this.session?.setAVPlaybackState(
-                            this.currentState
-                        )
                         break
                     case AvplayerStatus.PAUSED:
                         this.status = CommonConstants.STATUS_PAUSE
                         this.watchStatus()
-                        // this.isPlayLink!.set(true);
-                        this.currentState = {
-                            state: avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-                            position: {
-                                elapsedTime: this.getPosition(),
-                                updateTime: new Date().getTime(),
-                            },
-                        }
-                        await this.session?.setAVPlaybackState(
-                            this.currentState
-                        )
-
                         break
                     case AvplayerStatus.COMPLETED:
                         if (this.playerModel != null) {
@@ -666,17 +393,6 @@ export class VideoPlayer {
                         }
                         this.sendCompleted()
                         this.duration = PlayConstants.PLAYER_DURATION
-                        // this.isPlayLink!.set(true);
-                        this.currentState = {
-                            state: avSession.PlaybackState.PLAYBACK_STATE_PLAY,
-                            position: {
-                                elapsedTime: this.getPosition(),
-                                updateTime: new Date().getTime(),
-                            },
-                        }
-                        await this.session?.setAVPlaybackState(
-                            this.currentState
-                        )
                         if (!this.loop) {
                             let curIndex =
                                 this.index + PlayConstants.PLAYER_NEXT
@@ -696,13 +412,6 @@ export class VideoPlayer {
                         }
                         break
                     case AvplayerStatus.RELEASED:
-                        // this.isPlayLink!.set(true);
-                        this.currentState = {
-                            state: avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-                        }
-                        await this.session?.setAVPlaybackState(
-                            this.currentState
-                        )
                         this.avPlayer.release()
                         this.status = CommonConstants.STATUS_STOP
                         this.watchStatus()
@@ -717,41 +426,6 @@ export class VideoPlayer {
 
         this.avPlayer.on(Events.TIME_UPDATE, (time: number) => {
             this.initProgress(time)
-            // let metadata: avSession.AVMetadata = {
-            //     assetId: "0",
-            //     title: this.title ?? "AloePlayer",
-            //     mediaImage: this.pixelMap,
-            //     artist: this.artist ?? "正在播放",
-            //     duration: this.duration, // 资源的时长，以ms为单位
-            // }
-            // await this.session
-            //     ?.setAVMetadata(metadata)
-            //     .then(() => {
-            //         console.info(`SetAVMetadata successfully`)
-            //     })
-            //     .catch((err: BusinessError) => {
-            //         console.error(
-            //             `Failed to set AVMetadata. Code: ${err.code}, message: ${err.message}`
-            //         )
-            //     })
-            // 设置状态： 播放状态，进度位置，播放倍速，缓存的时间
-            let playbackState: avSession.AVPlaybackState = {
-                state: avSession.PlaybackState.PLAYBACK_STATE_PLAY, // 播放状态
-                position: {
-                    elapsedTime: this.getPosition(), // 已经播放的位置，以ms为单位
-                    updateTime: new Date().getTime(), // 应用更新当前位置时的时间戳，以ms为单位
-                },
-                speed: this.playerModel?.playSpeed, // 可选，默认是1.0，播放的倍速，按照应用内支持的speed进行设置，系统不做校验// 可选，资源缓存的时间，以ms为单位
-            }
-            this.session?.setAVPlaybackState(playbackState, (err) => {
-                if (err) {
-                    console.error(
-                        `Failed to set AVPlaybackState. Code: ${err.code}, message: ${err.message}`
-                    )
-                } else {
-                    console.info(`SetAVPlaybackState successfully`)
-                }
-            })
         })
 
         this.avPlayer?.on(
