@@ -341,6 +341,10 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   // 是否处于多选模式
   bool _isMultiSelectMode = false;
 
+  // 搜索框焦点控制
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _isSearchFocused = false;
+
 // 存储已选中的文件
   Set<FileSystemEntity> _selectedItems = {};
 
@@ -375,6 +379,14 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   @override
   void initState() async {
     super.initState();
+
+    // 添加搜索框焦点监听器
+    _searchFocusNode.addListener(() {
+      setState(() {
+        _isSearchFocused = _searchFocusNode.hasFocus;
+      });
+    });
+
     await initPreferences();
     bool useinnerthumb = await _settingsService.getUseInnerThumbnail();
     if (useinnerthumb) {
@@ -388,6 +400,12 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     });
     // _loadVideoFiles();
     _loadItems();
+  }
+
+  @override
+  void dispose() {
+    _searchFocusNode.dispose();
+    super.dispose();
   }
 
   // 加载所有项目的收藏状态
@@ -821,6 +839,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   Future<bool> _showImportInfoDialog(BuildContext context) async {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return await showDialog<bool>(
           context: context,
           barrierDismissible: false,
@@ -828,7 +848,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
             return BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
               child: Dialog(
-                backgroundColor: Colors.white.withOpacity(0.9),
+                backgroundColor: isDarkMode
+                    ? Colors.grey[900]!.withOpacity(0.9)
+                    : Colors.white.withOpacity(0.9),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20.0),
@@ -838,27 +860,31 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.info_outline,
                         color: Colors.blue,
                         size: 48.0,
                       ),
                       const SizedBox(height: 16.0),
-                      const Text(
+                      Text(
                         "文件导入说明",
                         style: TextStyle(
                           fontSize: 22.0,
                           fontWeight: FontWeight.bold,
+                          color: isDarkMode ? Colors.white : Colors.black87,
                         ),
                       ),
                       const SizedBox(height: 16.0),
-                      const Text(
+                      Text(
                         "使用文件管理器进行复制导入是最快捷和方便的方式：\n\n"
                         "• 在 /下载/AloePlayer/Videos 下可以复制导入视频\n"
                         "• 在 /下载/AloePlayer/Audios 下可以复制导入音频\n\n"
                         "由于开发者使用平板开发，平板端和手机端系统文件管理器的差别越来越大，使用应用内导入可能不稳定（例如不能导入\"最近\"里的视频会崩溃无法复现），尽情谅解。\n\n"
                         "导入后请下拉刷新。",
-                        style: TextStyle(fontSize: 16.0),
+                        style: TextStyle(
+                          fontSize: 16.0,
+                          color: isDarkMode ? Colors.white70 : Colors.black87,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24.0),
@@ -869,9 +895,12 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                             onPressed: () {
                               Navigator.of(context).pop(false);
                             },
-                            child: const Text(
+                            child: Text(
                               "取消",
-                              style: TextStyle(fontSize: 16.0),
+                              style: TextStyle(
+                                fontSize: 16.0,
+                                color: isDarkMode ? Colors.white70 : Colors.black54,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 16.0),
@@ -880,6 +909,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                               Navigator.of(context).pop(true);
                             },
                             style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(context).primaryColor,
+                              foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 24.0, vertical: 12.0),
                               shape: RoundedRectangleBorder(
@@ -1552,23 +1583,26 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
             title: AnimatedContainer(
               duration: Duration(milliseconds: 300),
               width: double.infinity,
-              height: 40,
-              margin: EdgeInsets.symmetric(horizontal: 16),
+              height: _isSearchFocused ? 48 : 40,  // 焦点状态下增加高度
+              margin: EdgeInsets.symmetric(
+                horizontal: _isSearchFocused ? 8 : 16,  // 焦点状态下减少边距
+              ),
               decoration: BoxDecoration(
                 color: Theme.of(context).brightness == Brightness.dark
                     ? Colors.grey[800]
                     : Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(_isSearchFocused ? 24 : 20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 5,
+                    color: Colors.black.withOpacity(_isSearchFocused ? 0.15 : 0.1),
+                    blurRadius: _isSearchFocused ? 8 : 5,
                     offset: Offset(0, 2),
                   ),
                 ],
               ),
               child: Center(
                 child: TextField(
+                  focusNode: _searchFocusNode,
                   decoration: InputDecoration(
                     hintText: '搜索视频...',
                     border: InputBorder.none,
@@ -1577,7 +1611,24 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                       color: Theme.of(context).brightness != Brightness.dark
                           ? Colors.grey[800]!.withOpacity(0.7)
                           : Colors.white.withOpacity(0.7),
+                      size: _isSearchFocused ? 24 : 22,
                     ),
+                    suffixIcon: _isSearchFocused && _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(
+                              Icons.clear,
+                              color: Theme.of(context).brightness != Brightness.dark
+                                  ? Colors.grey[800]!.withOpacity(0.7)
+                                  : Colors.white.withOpacity(0.7),
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _searchQuery = '';
+                              });
+                              _filterItems('');
+                            },
+                          )
+                        : null,
                     contentPadding: EdgeInsets.symmetric(horizontal: 16),
                     hintStyle: TextStyle(color: Colors.grey),
                   ),
@@ -1585,8 +1636,14 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                     color: Theme.of(context).brightness == Brightness.dark
                         ? Colors.white
                         : Colors.black87,
+                    fontSize: _isSearchFocused ? 16 : 15,
                   ),
-                  onChanged: _filterItems,
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                    _filterItems(value);
+                  },
                 ),
               ),
             ),
@@ -2329,6 +2386,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     final isSelected = _selectedItems.contains(file);
 
     return Stack(
+      fit: StackFit.expand,  // 确保 Stack 填满整个空间
       children: [
         GestureDetector(
           onTap: () {
@@ -3859,6 +3917,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       crossAxisCount: crossAxisCount,
       childAspectRatio: childAspectRatio,
       padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      mainAxisSpacing: 12,  // 增加行间距
+      crossAxisSpacing: 8,  // 增加列间距
       children: [
         _buildOptionTile(
           icon: Icons.play_arrow,

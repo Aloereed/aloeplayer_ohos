@@ -863,6 +863,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   }
 
   Future<bool> _showImportInfoDialog(BuildContext context) async {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return await showDialog<bool>(
           context: context,
           barrierDismissible: false,
@@ -870,7 +872,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
             return BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
               child: Dialog(
-                backgroundColor: Colors.white.withOpacity(0.9),
+                backgroundColor: isDarkMode
+                    ? Colors.grey[900]!.withOpacity(0.9)
+                    : Colors.white.withOpacity(0.9),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20.0),
@@ -880,27 +884,31 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.info_outline,
                         color: Colors.blue,
                         size: 48.0,
                       ),
                       const SizedBox(height: 16.0),
-                      const Text(
+                      Text(
                         "文件导入说明",
                         style: TextStyle(
                           fontSize: 22.0,
                           fontWeight: FontWeight.bold,
+                          color: isDarkMode ? Colors.white : Colors.black87,
                         ),
                       ),
                       const SizedBox(height: 16.0),
-                      const Text(
+                      Text(
                         "使用文件管理器进行复制导入是最快捷和方便的方式：\n\n"
                         "• 在 /下载/AloePlayer/Videos 下可以复制导入视频\n"
                         "• 在 /下载/AloePlayer/Audios 下可以复制导入音频\n\n"
                         "由于开发者使用平板开发，平板端和手机端系统文件管理器的差别越来越大，使用应用内导入可能不稳定（例如不能导入\"最近\"里的视频会崩溃无法复现），尽情谅解。\n\n"
                         "导入后请下拉刷新。",
-                        style: TextStyle(fontSize: 16.0),
+                        style: TextStyle(
+                          fontSize: 16.0,
+                          color: isDarkMode ? Colors.white70 : Colors.black87,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24.0),
@@ -911,9 +919,12 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                             onPressed: () {
                               Navigator.of(context).pop(false);
                             },
-                            child: const Text(
+                            child: Text(
                               "取消",
-                              style: TextStyle(fontSize: 16.0),
+                              style: TextStyle(
+                                fontSize: 16.0,
+                                color: isDarkMode ? Colors.white70 : Colors.black54,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 16.0),
@@ -922,6 +933,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                               Navigator.of(context).pop(true);
                             },
                             style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(context).primaryColor,
+                              foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 24.0, vertical: 12.0),
                               shape: RoundedRectangleBorder(

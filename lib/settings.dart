@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-11-16 12:15:59
+ * @LastEditTime: 2025-11-16 15:55:07
  * @Description: file content
  */
 import 'dart:convert';
@@ -606,7 +606,7 @@ class SettingsService {
 
   Future<int> getUseFfmpegForPlay() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_useFfmpegForPlayKey) ?? 0; // 默认值为false
+    return prefs.getInt(_useFfmpegForPlayKey) ?? 2; // 默认值为false
   }
 
   Future<void> saveAutoFullscreenBeginPlay(bool autoFullscreen) async {
@@ -699,7 +699,7 @@ class SettingsService {
     return prefs.getInt(_subtitleMany) ?? 0; // 默认值为0
   }
 
-   // 检查是否是首次启动
+  // 检查是否是首次启动
   Future<bool> isFirstLaunch() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_firstLaunchKey) ?? true;
@@ -1305,7 +1305,7 @@ class _SettingsTabState extends State<SettingsTab> {
   // 显示购买会员对话框
   void _showPurchaseDialog(BuildContext context) {
     final products = _membershipService.getProductInfo();
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1317,7 +1317,8 @@ class _SettingsTabState extends State<SettingsTab> {
             maxHeight: MediaQuery.of(context).size.height * 0.8,
           ),
           child: Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: EdgeInsets.all(20),
               child: Column(
@@ -1349,98 +1350,108 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   ),
                   SizedBox(height: 20),
-                  ...products.map((product) => Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
+                  ...products
+                      .map((product) => Padding(
+                            padding: EdgeInsets.only(bottom: 12),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey[300]!),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              product['name'],
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            if (product['badge'] != null)
+                                              Container(
+                                                margin: EdgeInsets.only(top: 4),
+                                                padding: EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.orange,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  product['badge'],
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        Text(
+                                          product['price'],
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                                Theme.of(context).primaryColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 8),
                                     Text(
-                                      product['name'],
+                                      product['description'],
                                       style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
                                       ),
                                     ),
-                                    if (product['badge'] != null)
-                                      Container(
-                                        margin: EdgeInsets.only(top: 4),
-                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange,
-                                          borderRadius: BorderRadius.circular(12),
+                                    SizedBox(height: 12),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed: () async {
+                                          Navigator.of(context).pop();
+                                          await _purchaseProduct(product['id']);
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              Theme.of(context).primaryColor,
+                                          foregroundColor: Colors.white,
+                                          padding: EdgeInsets.symmetric(
+                                              vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
                                         ),
                                         child: Text(
-                                          product['badge'],
+                                          '购买${product['duration']}',
                                           style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.white,
+                                            fontSize: 14,
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
                                       ),
+                                    ),
                                   ],
                                 ),
-                                Text(
-                                  product['price'],
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).primaryColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              product['description'],
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
                               ),
                             ),
-                            SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  Navigator.of(context).pop();
-                                  await _purchaseProduct(product['id']);
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Theme.of(context).primaryColor,
-                                  foregroundColor: Colors.white,
-                                  padding: EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: Text(
-                                  '购买${product['duration']}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )).toList(),
+                          ))
+                      .toList(),
                   SizedBox(height: 16),
                   Text(
                     '• 支持多种支付方式\n• 购买后立即生效\n• 可随时取消订阅',
@@ -1465,7 +1476,8 @@ class _SettingsTabState extends State<SettingsTab> {
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         child: Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Padding(
             padding: EdgeInsets.all(20),
             child: Column(
@@ -1500,7 +1512,8 @@ class _SettingsTabState extends State<SettingsTab> {
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       style: TextButton.styleFrom(
-                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                       ),
                       child: Text('取消'),
                     ),
@@ -1512,7 +1525,8 @@ class _SettingsTabState extends State<SettingsTab> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -1662,7 +1676,8 @@ class _SettingsTabState extends State<SettingsTab> {
                               ),
                               SizedBox(height: 4),
                               FutureBuilder<String>(
-                                future: Future.value(_membershipService.getMembershipStatusDescription()),
+                                future: Future.value(_membershipService
+                                    .getMembershipStatusDescription()),
                                 builder: (context, snapshot) {
                                   return Text(
                                     snapshot.data ?? '加载中...',
@@ -1688,7 +1703,8 @@ class _SettingsTabState extends State<SettingsTab> {
                               ),
                               SizedBox(height: 4),
                               FutureBuilder<String>(
-                                future: Future.value(_membershipService.getFormattedExpiryDate()),
+                                future: Future.value(_membershipService
+                                    .getFormattedExpiryDate()),
                                 builder: (context, snapshot) {
                                   return Text(
                                     snapshot.data ?? '无',
@@ -1713,7 +1729,8 @@ class _SettingsTabState extends State<SettingsTab> {
                             // onPressed: () => _showPurchaseDialog(context),
                             // 显示为禁用
                             onPressed: null,
-                            icon: Icon(Icons.shopping_cart, color: Colors.white),
+                            icon:
+                                Icon(Icons.shopping_cart, color: Colors.white),
                             label: Text(
                               '购买会员[禁用]',
                               style: TextStyle(color: Colors.white),
@@ -1721,7 +1738,8 @@ class _SettingsTabState extends State<SettingsTab> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white.withOpacity(0.2),
                               foregroundColor: Colors.white,
-                              side: BorderSide(color: Colors.white.withOpacity(0.5)),
+                              side: BorderSide(
+                                  color: Colors.white.withOpacity(0.5)),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -1740,7 +1758,8 @@ class _SettingsTabState extends State<SettingsTab> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white.withOpacity(0.2),
                               foregroundColor: Colors.white,
-                              side: BorderSide(color: Colors.white.withOpacity(0.5)),
+                              side: BorderSide(
+                                  color: Colors.white.withOpacity(0.5)),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -1751,7 +1770,8 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                     // 续费提示
                     FutureBuilder<bool>(
-                      future: Future.value(_membershipService.shouldShowRenewalPrompt()),
+                      future: Future.value(
+                          _membershipService.shouldShowRenewalPrompt()),
                       builder: (context, snapshot) {
                         if (snapshot.data == true) {
                           return Container(
@@ -1760,7 +1780,8 @@ class _SettingsTabState extends State<SettingsTab> {
                             decoration: BoxDecoration(
                               color: Colors.orange.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                              border: Border.all(
+                                  color: Colors.orange.withOpacity(0.5)),
                             ),
                             child: Row(
                               children: [
@@ -1791,7 +1812,7 @@ class _SettingsTabState extends State<SettingsTab> {
               ),
             ),
           ),
-          
+
           SizedBox(height: 16),
           // 主题设置部分
           Card(
@@ -1842,9 +1863,9 @@ class _SettingsTabState extends State<SettingsTab> {
               ),
             ),
           ),
-          
+
           SizedBox(height: 16),
- // 播放设置部分
+          // 播放设置部分
           Card(
             elevation: 2,
             child: Padding(
@@ -1911,6 +1932,11 @@ class _SettingsTabState extends State<SettingsTab> {
                               final currentValue = snapshot.data!;
                               final options = [
                                 {
+                                  'value': 2,
+                                  'label': '全新MPV(推荐)',
+                                  'icon': Icons.play_circle_outline
+                                },
+                                {
                                   'value': 0,
                                   'label': '系统硬解(高码率)',
                                   'icon': Icons.phone_android
@@ -1919,11 +1945,6 @@ class _SettingsTabState extends State<SettingsTab> {
                                   'value': 1,
                                   'label': 'FFmpeg软解',
                                   'icon': Icons.settings_applications
-                                },
-                                {
-                                  'value': 2,
-                                  'label': '全新MPV(推荐)',
-                                  'icon': Icons.play_circle_outline
                                 },
                                 {
                                   'value': 3,
@@ -2183,7 +2204,7 @@ class _SettingsTabState extends State<SettingsTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('字幕设置',
+                  Text('字幕设置(非MPV)',
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   SizedBox(height: 8),
@@ -2337,7 +2358,6 @@ class _SettingsTabState extends State<SettingsTab> {
             ),
           ),
           SizedBox(height: 16),
-
 
           // 清除缓存部分
           Card(
