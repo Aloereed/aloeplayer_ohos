@@ -67,9 +67,26 @@ dependency_overrides:
     path: ./image_picker/image_picker_android
   image_picker_ios:
     path: ./image_picker/image_picker_ios
+  image_picker_linux:
+    path: ./image_picker/image_picker_linux
+  image_picker_macos:
+    path: ./image_picker/image_picker_macos
+  image_picker_windows:
+    path: ./image_picker/image_picker_windows
   # in_app_purchase:
   #   git:
   #     path: packages/in_app_purchase/in_app_purchase
+  #     ref: b176e2eb854544a9c743e69ddb8b9d0e016e379c
+  #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
+  # in_app_purchase_platform_interface:
+  #   git:
+  #     path: packages/in_app_purchase/in_app_purchase_platform_interface
+  #     ref: b176e2eb854544a9c743e69ddb8b9d0e016e379c
+  #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
+  # in_app_purchase_storekit:
+  #   git:
+  #     path: packages/in_app_purchase/in_app_purchase_storekit
+  #     ref: b176e2eb854544a9c743e69ddb8b9d0e016e379c
   #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
   in_app_purchase: any
   # just_audio:

@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-11-16 15:55:07
+ * @LastEditTime: 2025-11-17 21:48:57
  * @Description: file content
  */
 import 'dart:convert';
@@ -1616,204 +1616,204 @@ class _SettingsTabState extends State<SettingsTab> {
       body: ListView(
         padding: EdgeInsets.all(16),
         children: [
-          // 会员功能部分
-          Card(
-            elevation: 3,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.purple.shade400,
-                    Colors.blue.shade400,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.diamond,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          '会员中心',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 12),
-                    Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '会员状态',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white70,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              FutureBuilder<String>(
-                                future: Future.value(_membershipService
-                                    .getMembershipStatusDescription()),
-                                builder: (context, snapshot) {
-                                  return Text(
-                                    snapshot.data ?? '加载中...',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '到期时间',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white70,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              FutureBuilder<String>(
-                                future: Future.value(_membershipService
-                                    .getFormattedExpiryDate()),
-                                builder: (context, snapshot) {
-                                  return Text(
-                                    snapshot.data ?? '无',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            // onPressed: () => _showPurchaseDialog(context),
-                            // 显示为禁用
-                            onPressed: null,
-                            icon:
-                                Icon(Icons.shopping_cart, color: Colors.white),
-                            label: Text(
-                              '购买会员[禁用]',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                              foregroundColor: Colors.white,
-                              side: BorderSide(
-                                  color: Colors.white.withOpacity(0.5)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _showRestoreDialog(context),
-                            icon: Icon(Icons.refresh, color: Colors.white),
-                            label: Text(
-                              '恢复购买',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                              foregroundColor: Colors.white,
-                              side: BorderSide(
-                                  color: Colors.white.withOpacity(0.5)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    // 续费提示
-                    FutureBuilder<bool>(
-                      future: Future.value(
-                          _membershipService.shouldShowRenewalPrompt()),
-                      builder: (context, snapshot) {
-                        if (snapshot.data == true) {
-                          return Container(
-                            margin: EdgeInsets.only(top: 12),
-                            padding: EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: Colors.orange.withOpacity(0.5)),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.warning,
-                                  color: Colors.orange.shade200,
-                                  size: 16,
-                                ),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    '您的会员即将到期，请及时续费以免影响使用',
-                                    style: TextStyle(
-                                      color: Colors.orange.shade200,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        return SizedBox.shrink();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          // 会员功能部分 - 暂时隐藏
+          // Card(
+          //   elevation: 3,
+          //   child: Container(
+          //     decoration: BoxDecoration(
+          //       borderRadius: BorderRadius.circular(12),
+          //       gradient: LinearGradient(
+          //         colors: [
+          //           Colors.purple.shade400,
+          //           Colors.blue.shade400,
+          //         ],
+          //         begin: Alignment.topLeft,
+          //         end: Alignment.bottomRight,
+          //       ),
+          //     ),
+          //     child: Padding(
+          //       padding: EdgeInsets.all(16),
+          //       child: Column(
+          //         crossAxisAlignment: CrossAxisAlignment.start,
+          //         children: [
+          //           Row(
+          //             children: [
+          //               Icon(
+          //                 Icons.diamond,
+          //                 color: Colors.white,
+          //                 size: 24,
+          //               ),
+          //               SizedBox(width: 8),
+          //               Text(
+          //                 '会员中心',
+          //                 style: TextStyle(
+          //                   fontSize: 18,
+          //                   fontWeight: FontWeight.bold,
+          //                   color: Colors.white,
+          //                 ),
+          //               ),
+          //             ],
+          //           ),
+          //           SizedBox(height: 12),
+          //           Container(
+          //             padding: EdgeInsets.all(12),
+          //             decoration: BoxDecoration(
+          //               color: Colors.white.withOpacity(0.15),
+          //               borderRadius: BorderRadius.circular(8),
+          //             ),
+          //             child: Row(
+          //               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          //               children: [
+          //                 Column(
+          //                   crossAxisAlignment: CrossAxisAlignment.start,
+          //                   children: [
+          //                     Text(
+          //                       '会员状态',
+          //                       style: TextStyle(
+          //                         fontSize: 14,
+          //                         color: Colors.white70,
+          //                       ),
+          //                     ),
+          //                     SizedBox(height: 4),
+          //                     FutureBuilder<String>(
+          //                       future: Future.value(_membershipService
+          //                           .getMembershipStatusDescription()),
+          //                       builder: (context, snapshot) {
+          //                         return Text(
+          //                           snapshot.data ?? '加载中...',
+          //                           style: TextStyle(
+          //                             fontSize: 16,
+          //                             fontWeight: FontWeight.bold,
+          //                             color: Colors.white,
+          //                           ),
+          //                         );
+          //                       },
+          //                     ),
+          //                   ],
+          //                 ),
+          //                 Column(
+          //                   crossAxisAlignment: CrossAxisAlignment.end,
+          //                   children: [
+          //                     Text(
+          //                       '到期时间',
+          //                       style: TextStyle(
+          //                         fontSize: 14,
+          //                         color: Colors.white70,
+          //                       ),
+          //                     ),
+          //                     SizedBox(height: 4),
+          //                     FutureBuilder<String>(
+          //                       future: Future.value(_membershipService
+          //                           .getFormattedExpiryDate()),
+          //                       builder: (context, snapshot) {
+          //                         return Text(
+          //                           snapshot.data ?? '无',
+          //                           style: TextStyle(
+          //                             fontSize: 16,
+          //                             fontWeight: FontWeight.bold,
+          //                             color: Colors.white,
+          //                           ),
+          //                         );
+          //                       },
+          //                     ),
+          //                   ],
+          //                 ),
+          //               ],
+          //             ),
+          //           ),
+          //           SizedBox(height: 12),
+          //           Row(
+          //             children: [
+          //               Expanded(
+          //                 child: ElevatedButton.icon(
+          //                   onPressed: () => _showPurchaseDialog(context),
+          //                   // 显示为禁用
+          //                   // onPressed: null,
+          //                   icon:
+          //                       Icon(Icons.shopping_cart, color: Colors.white),
+          //                   label: Text(
+          //                     '购买会员',
+          //                     style: TextStyle(color: Colors.white),
+          //                   ),
+          //                   style: ElevatedButton.styleFrom(
+          //                     backgroundColor: Colors.white.withOpacity(0.2),
+          //                     foregroundColor: Colors.white,
+          //                     side: BorderSide(
+          //                         color: Colors.white.withOpacity(0.5)),
+          //                     shape: RoundedRectangleBorder(
+          //                       borderRadius: BorderRadius.circular(8),
+          //                     ),
+          //                   ),
+          //                 ),
+          //               ),
+          //               SizedBox(width: 8),
+          //               Expanded(
+          //                 child: ElevatedButton.icon(
+          //                   onPressed: () => _showRestoreDialog(context),
+          //                   icon: Icon(Icons.refresh, color: Colors.white),
+          //                   label: Text(
+          //                     '恢复购买',
+          //                     style: TextStyle(color: Colors.white),
+          //                   ),
+          //                   style: ElevatedButton.styleFrom(
+          //                     backgroundColor: Colors.white.withOpacity(0.2),
+          //                     foregroundColor: Colors.white,
+          //                     side: BorderSide(
+          //                         color: Colors.white.withOpacity(0.5)),
+          //                     shape: RoundedRectangleBorder(
+          //                       borderRadius: BorderRadius.circular(8),
+          //                     ),
+          //                   ),
+          //                 ),
+          //               ),
+          //             ],
+          //           ),
+          //           // 续费提示
+          //           FutureBuilder<bool>(
+          //             future: Future.value(
+          //                 _membershipService.shouldShowRenewalPrompt()),
+          //             builder: (context, snapshot) {
+          //               if (snapshot.data == true) {
+          //                 return Container(
+          //                   margin: EdgeInsets.only(top: 12),
+          //                   padding: EdgeInsets.all(8),
+          //                   decoration: BoxDecoration(
+          //                     color: Colors.orange.withOpacity(0.2),
+          //                     borderRadius: BorderRadius.circular(8),
+          //                     border: Border.all(
+          //                         color: Colors.orange.withOpacity(0.5)),
+          //                   ),
+          //                   child: Row(
+          //                     children: [
+          //                       Icon(
+          //                         Icons.warning,
+          //                         color: Colors.orange.shade200,
+          //                         size: 16,
+          //                       ),
+          //                       SizedBox(width: 8),
+          //                       Expanded(
+          //                         child: Text(
+          //                           '您的会员即将到期，请及时续费以免影响使用',
+          //                           style: TextStyle(
+          //                             color: Colors.orange.shade200,
+          //                             fontSize: 12,
+          //                           ),
+          //                         ),
+          //                       ),
+          //                     ],
+          //                   ),
+          //                 );
+          //               }
+          //               return SizedBox.shrink();
+          //             },
+          //           ),
+          //         ],
+          //       ),
+          //     ),
+          //   ),
+          // ),
 
-          SizedBox(height: 16),
+          // SizedBox(height: 16),
           // 主题设置部分
           Card(
             elevation: 2,

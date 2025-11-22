@@ -551,21 +551,19 @@ packages:
     source: path
     version: "0.8.8+1"
   image_picker_linux:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: image_picker_linux
-      sha256: "34a65f6740df08bbbeb0a1abd8e6d32107941fd4868f67a507b25601651022c9"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.2.1+2"
+      path: "image_picker/image_picker_linux"
+      relative: true
+    source: path
+    version: "0.2.1"
   image_picker_macos:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: image_picker_macos
-      sha256: "1b90ebbd9dcf98fb6c1d01427e49a55bd96b5d67b8c67cf955d60a5de74207c1"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.2.1+2"
+      path: "image_picker/image_picker_macos"
+      relative: true
+    source: path
+    version: "0.2.1"
   image_picker_ohos:
     dependency: "direct overridden"
     description:
@@ -581,13 +579,12 @@ packages:
     source: path
     version: "2.9.0"
   image_picker_windows:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: image_picker_windows
-      sha256: "6ad07afc4eb1bc25f3a01084d28520496c4a3bb0cb13685435838167c9dcedeb"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.2.1+1"
+      path: "image_picker/image_picker_windows"
+      relative: true
+    source: path
+    version: "0.2.1"
   in_app_purchase:
     dependency: "direct overridden"
     description:

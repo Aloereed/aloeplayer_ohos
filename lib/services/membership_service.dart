@@ -54,6 +54,7 @@ class MembershipService {
     
     // 检查内购是否可用
     _isAvailable = await _inAppPurchase.isAvailable();
+    print('内购是否可用: $_isAvailable');
     
     if (_isAvailable) {
       await _loadProducts();
@@ -271,6 +272,7 @@ class MembershipService {
   // 发起购买
   Future<bool> purchaseProduct(String productId) async {
     if (!_isAvailable || _isLoading) {
+      print('购买失败: 插件未初始化或正在加载: $_isAvailable, $_isLoading');
       return false;
     }
 
@@ -283,6 +285,7 @@ class MembershipService {
 
       final PurchaseParam purchaseParam = PurchaseParam(productDetails: product);
       final bool success = await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
+      print('购买成功: $success');
       return success;
     } catch (e) {
       print('购买失败: $e');
