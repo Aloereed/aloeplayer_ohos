@@ -9,6 +9,12 @@
       "tablet",
       "2in1",
     ],
+    "metadata": [
+      {
+        "name": "client_id",
+        "value": "6917562055503460269"
+      }
+    ],
     deliveryWithInstall: true,
     installationFree: false,
     pages: "$profile:main_pages",

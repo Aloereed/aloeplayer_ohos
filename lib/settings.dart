@@ -2,7 +2,7 @@
  * @Author: 
  * @Date: 2025-01-12 15:11:12
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-11-17 21:48:57
+ * @LastEditTime: 2025-11-23 17:25:56
  * @Description: file content
  */
 import 'dart:convert';
@@ -23,6 +23,7 @@ import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'services/membership_service.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 enum SortType { none, name, modifiedDate }
 
@@ -486,10 +487,25 @@ class SettingsService {
   static const String _hdrForHdr = 'hdr_for_hdr';
   static const String _hdrDetect = 'hdr_detect';
   static const String _subtitleMany = 'subtitle_many';
-  static const String _versionName = '3.0.0';
-  static const int _versionNumber = 38;
   static const String _firstLaunchKey = 'first_launch_completed';
   static const String _playerSelectionShownKey = 'player_selection_shown';
+
+  // 获取应用版本信息
+  static Future<PackageInfo> getPackageInfo() async {
+    return await PackageInfo.fromPlatform();
+  }
+
+  // 获取版本名称
+  static Future<String> getVersionName() async {
+    final info = await getPackageInfo();
+    return info.version;
+  }
+
+  // 获取版本号（build number）
+  static Future<String> getVersionNumber() async {
+    final info = await getPackageInfo();
+    return info.buildNumber;
+  }
 
   Future<bool> activatePersistPermission(String uri) async {
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
@@ -2544,8 +2560,14 @@ class _SettingsTabState extends State<SettingsTab> {
                   SizedBox(height: 8),
                   Text('AloePlayer', style: TextStyle(fontSize: 16)),
                   SizedBox(height: 4),
-                  Text('版本号: ${SettingsService._versionName}',
-                      style: TextStyle(fontSize: 14, color: Colors.grey)),
+                  FutureBuilder<String>(
+                    future: SettingsService.getVersionName(),
+                    builder: (context, snapshot) {
+                      final version = snapshot.data ?? '加载中...';
+                      return Text('版本号: $version',
+                          style: TextStyle(fontSize: 14, color: Colors.grey));
+                    },
+                  ),
                   SizedBox(height: 8),
                   Wrap(
                     spacing: 12,
@@ -2712,12 +2734,13 @@ void _showAboutDialog(BuildContext context) {
                   ),
                   SizedBox(height: 8),
                   InkWell(
-                    onTap: () {
+                    onTap: () async {
+                      final version = await SettingsService.getVersionName();
                       Navigator.pop(context);
                       showLicensePage(
                         context: context,
                         applicationName: 'AloePlayer',
-                        applicationVersion: SettingsService._versionName,
+                        applicationVersion: version,
                         applicationLegalese: '© 2025 Aloereed',
                       );
                     },

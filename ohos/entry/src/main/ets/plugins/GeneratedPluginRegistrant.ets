@@ -7,6 +7,7 @@ import SharedPreferencesPlugin from 'shared_preferences_ohos';
 import UrlLauncherPlugin from 'url_launcher_ohos';
 import WebViewFlutterPlugin from 'webview_flutter_ohos';
 import SharePlusOhosPlugin from 'share_plus';
+import PackageInfoPlugin from 'package_info_plus';
 import SqflitePlugin from 'sqflite';
 import WakelockPlugin from 'wakelock';
 import AudioServicePlugin from 'audio_service';
@@ -38,6 +39,7 @@ export class GeneratedPluginRegistrant {
       flutterEngine.getPlugins()?.add(new UrlLauncherPlugin());
       flutterEngine.getPlugins()?.add(new WebViewFlutterPlugin());
       flutterEngine.getPlugins()?.add(new SharePlusOhosPlugin());
+      flutterEngine.getPlugins()?.add(new PackageInfoPlugin());
       flutterEngine.getPlugins()?.add(new SqflitePlugin());
       flutterEngine.getPlugins()?.add(new WakelockPlugin());
       flutterEngine.getPlugins()?.add(new AudioServicePlugin());

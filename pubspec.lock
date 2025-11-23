@@ -785,21 +785,22 @@ packages:
     source: git
     version: "0.0.9"
   package_info_plus:
-    dependency: transitive
+    dependency: "direct main"
     description:
-      name: package_info_plus
-      sha256: "7e76fad405b3e4016cd39d08f455a4eb5199723cf594cd1b8916d47140d93017"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "4.2.0"
+      path: "packages/package_info_plus/package_info_plus"
+      ref: "br_package_info_plus-v8.1.0_ohos"
+      resolved-ref: "2180f5bd763cc26478d4f0baba4acdc1528f4647"
+      url: "https://gitcode.com/openharmony-sig/flutter_plus_plugins.git"
+    source: git
+    version: "8.1.0"
   package_info_plus_platform_interface:
     dependency: transitive
     description:
       name: package_info_plus_platform_interface
-      sha256: "9bc8ba46813a4cc42c66ab781470711781940780fd8beddd0c3da62506d3a6c6"
+      sha256: "202a487f08836a592a6bd4f901ac69b3a8f146af552bbd14407b6b41e1c3f086"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.0.1"
+    version: "3.2.1"
   path:
     dependency: "direct main"
     description:

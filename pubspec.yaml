@@ -38,6 +38,7 @@ dependencies:
   shelf_router: ^1.1.4
   screenshot: ^3.0.0
   uuid: ^3.0.6
+  package_info_plus: ^8.1.2
 dependency_overrides:
   audio_service:
     git:
@@ -86,6 +87,11 @@ dependency_overrides:
   # in_app_purchase_storekit:
   #   git:
   #     path: packages/in_app_purchase/in_app_purchase_storekit
+  #     ref: b176e2eb854544a9c743e69ddb8b9d0e016e379c
+  #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
+  # in_app_purchase_ohos:
+  #   git:
+  #     path: packages/in_app_purchase/in_app_purchase_ohos
   #     ref: b176e2eb854544a9c743e69ddb8b9d0e016e379c
   #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
   in_app_purchase: any
@@ -151,6 +157,11 @@ dependency_overrides:
     git:
       path: packages/webview_flutter/webview_flutter
       url: https://gitcode.com/openharmony-sig/flutter_packages.git
+  package_info_plus:
+    git:
+      path: packages/package_info_plus/package_info_plus
+      url: https://gitcode.com/openharmony-sig/flutter_plus_plugins.git
+      ref: br_package_info_plus-v8.1.0_ohos
   win32: 5.5.4
   media_kit:
     path: ../media-kit/media_kit
@@ -173,4 +184,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 3.0.0+38
+version: 3.0.2+47

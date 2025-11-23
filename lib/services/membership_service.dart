@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum MembershipStatus {
@@ -20,7 +19,7 @@ class MembershipService {
   factory MembershipService() => _instance;
   MembershipService._internal();
 
-  final InAppPurchase _inAppPurchase = InAppPurchase.instance;
+  late final InAppPurchase _inAppPurchase;
   late StreamSubscription<List<PurchaseDetails>> _subscription;
   
   // 产品ID列表 - 需要在应用商店配置
@@ -49,16 +48,30 @@ class MembershipService {
 
   // 初始化服务
   Future<void> initialize() async {
-    await _loadMembershipStatus();
-    await _checkMembershipExpiry();
-    
-    // 检查内购是否可用
-    _isAvailable = await _inAppPurchase.isAvailable();
-    print('内购是否可用: $_isAvailable');
-    
-    if (_isAvailable) {
-      await _loadProducts();
-      _listenToPurchaseUpdates();
+    try {
+      await _loadMembershipStatus();
+      await _checkMembershipExpiry();
+
+      // 初始化 InAppPurchase 实例
+      print('正在初始化 InAppPurchase 实例...');
+      _inAppPurchase = InAppPurchase.instance;
+      print('InAppPurchase 实例初始化成功');
+
+      // 检查内购是否可用
+      print('正在检查内购是否可用...');
+      _isAvailable = await _inAppPurchase.isAvailable();
+      print('内购是否可用: $_isAvailable');
+
+      if (_isAvailable) {
+        await _loadProducts();
+        _listenToPurchaseUpdates();
+      } else {
+        print('警告: 内购功能在当前平台不可用');
+      }
+    } catch (e, stackTrace) {
+      print('初始化 MembershipService 失败: $e');
+      print('堆栈跟踪: $stackTrace');
+      _isAvailable = false;
     }
   }
 

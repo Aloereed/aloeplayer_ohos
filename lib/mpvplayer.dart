@@ -1802,19 +1802,16 @@ class _MPVPlayerState extends State<MPVPlayer>
             // 视频播放器
             Stack(
               children: [
-                Center(
+                Positioned.fill(
                   child: Transform(
                     alignment: Alignment.center,
                     transform: Matrix4.identity()
                       ..scale(_mirror ? -_zoom : _zoom, _zoom),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Video(
-                        controller: controller,
-                        controls: NoVideoControls,
-                        pauseUponEnteringBackgroundMode:
-                            !_backgroundPlayEnabled,
-                      ),
+                    child: Video(
+                      controller: controller,
+                      controls: NoVideoControls,
+                      pauseUponEnteringBackgroundMode:
+                          !_backgroundPlayEnabled,
                     ),
                   ),
                 ),
