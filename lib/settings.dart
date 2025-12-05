@@ -2713,6 +2713,10 @@ void _showAboutDialog(BuildContext context) {
                   _buildTipItem(context, '7. 新版本库文件默认位于"下载"文件夹下', isDarkMode),
                   _buildTipItem(context, '8. 播放列表：播放器最右侧往左滑动唤出', isDarkMode),
                   SizedBox(height: 24),
+                  _buildSectionTitle(context, 'PC键盘快捷键', isDarkMode),
+                  SizedBox(height: 12),
+                  _buildCompactShortcutList(context, isDarkMode),
+                  SizedBox(height: 24),
                   _buildSectionTitle(context, '备案和许可', isDarkMode),
                   SizedBox(height: 12),
                   InkWell(
@@ -2818,3 +2822,74 @@ Widget _buildTipItem(BuildContext context, String text, bool isDarkMode) {
     ),
   );
 }
+
+// 构建紧凑的快捷键列表
+Widget _buildCompactShortcutList(BuildContext context, bool isDarkMode) {
+  final shortcuts = [
+    ['空格/K', '播放/暂停'],
+    ['←/→', '快退/快进5秒'],
+    ['Shift+←/→', '快退/快进30秒'],
+    ['J/L', '快退/快进30秒'],
+    ['↑/↓', '音量增/减'],
+    ['M', '静音'],
+    ['F/F11', '全屏'],
+    ['+/-', '速度增/减'],
+    ['Backspace', '恢复正常速度'],
+    ['N/P', '下/上一个'],
+    ['S', '截图'],
+    ['C', '字幕切换'],
+    ['D', '弹幕开关'],
+    ['ESC/Q', '退出'],
+  ];
+
+  return Container(
+    padding: EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: isDarkMode
+          ? Colors.white.withOpacity(0.05)
+          : Colors.black.withOpacity(0.03),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      children: shortcuts.map((shortcut) {
+        return Padding(
+          padding: EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Container(
+                constraints: BoxConstraints(minWidth: 100),
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDarkMode
+                      ? Colors.white.withOpacity(0.1)
+                      : Colors.black.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  shortcut[0],
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDarkMode ? Colors.white : Colors.black87,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  shortcut[1],
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDarkMode ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    ),
+  );
+}
+

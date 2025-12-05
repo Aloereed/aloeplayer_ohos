@@ -3,6 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+/// 隐私协议版本管理
+class PrivacyPolicyVersion {
+  // 当前隐私协议版本号 - 只需要在这里修改即可
+  static const int current = 1;
+
+  // SharedPreferences的key
+  static const String acceptedKey = 'privacy_policy_accepted';
+  static const String versionKey = 'privacy_policy_version';
+}
+
 class OnboardingPrivacyDialog extends StatelessWidget {
   final VoidCallback onAccept;
   final VoidCallback onDecline;
@@ -93,10 +103,10 @@ class OnboardingPrivacyDialog extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               // 分隔线
               Divider(height: 1, color: Colors.grey.withOpacity(0.3)),
-              
+
               // 内容区域
               Container(
                 width: double.maxFinite,
@@ -144,7 +154,201 @@ class OnboardingPrivacyDialog extends StatelessWidget {
                   ),
                 ),
               ),
-              
+
+              // 按钮区域
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: onDecline,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                        child: const Text(
+                          '拒绝',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: onAccept,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          '同意并继续',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 隐私协议更新弹窗(仅用于已接受过旧版本的用户)
+class PrivacyPolicyUpdateDialog extends StatelessWidget {
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  const PrivacyPolicyUpdateDialog({
+    Key? key,
+    required this.onAccept,
+    required this.onDecline,
+  }) : super(key: key);
+
+  Future<String> _loadHtmlFromAssets() async {
+    return await rootBundle.loadString('Assets/privacy_policy.html');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 15,
+                spreadRadius: 5,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 标题区域
+              Container(
+                padding: const EdgeInsets.only(top: 28, bottom: 16),
+                child: Column(
+                  children: [
+                    // 提示图标
+                    Container(
+                      height: 80,
+                      width: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.orange.withOpacity(0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.privacy_tip_outlined,
+                        size: 48,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      '隐私协议已更新',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        '我们已更新隐私协议，请您重新阅读并确认',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.black54,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 分隔线
+              Divider(height: 1, color: Colors.grey.withOpacity(0.3)),
+
+              // 内容区域
+              Container(
+                width: double.maxFinite,
+                height: 320,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                    ),
+                    child: FutureBuilder<String>(
+                      future: _loadHtmlFromAssets(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        } else if (snapshot.hasError) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.error_outline, color: Colors.red.shade300, size: 48),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  '无法加载隐私政策',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ],
+                            ),
+                          );
+                        } else {
+                          return WebViewWidget(
+                            controller: WebViewController()
+                              ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                              ..loadHtmlString(snapshot.data!)
+                              ..setBackgroundColor(Colors.transparent),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+
               // 按钮区域
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),

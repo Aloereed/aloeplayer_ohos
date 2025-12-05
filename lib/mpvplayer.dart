@@ -14,11 +14,34 @@ import 'package:screen/screen.dart';
 import 'package:xml/xml.dart' as xml;
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:galactic_hotkeys/galactic_hotkeys.dart';
 import 'history_service.dart';
 import 'volumeview.dart';
 import 'settings.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'audio_handler.dart';
+
+// 键盘快捷键枚举
+enum PlayerHotkey {
+  playPause,        // 播放/暂停
+  seekForward,      // 快进5秒
+  seekBackward,     // 快退5秒
+  seekForwardLong,  // 快进30秒
+  seekBackwardLong, // 快退30秒
+  volumeUp,         // 音量增加
+  volumeDown,       // 音量减少
+  toggleMute,       // 静音切换
+  toggleFullscreen, // 全屏切换
+  speedUp,          // 加速
+  speedDown,        // 减速
+  speedReset,       // 恢复正常速度
+  nextVideo,        // 下一个视频
+  previousVideo,    // 上一个视频
+  screenshot,       // 截图
+  toggleSubtitle,   // 字幕切换
+  toggleDanmaku,    // 弹幕切换
+  quit,             // 退出
+}
 
 // 播放列表排序类型枚举
 enum PlaylistSortType {
@@ -331,6 +354,10 @@ class _MPVPlayerState extends State<MPVPlayer>
   bool _isInBackground = false;
   AppLifecycleState? _lastLifecycleState;
 
+  // HDR相关
+  bool _isHDRVideo = false;
+  double? _savedBrightness; // 保存进入播放器前的亮度
+
   // 缓冲相关
   bool _isBuffering = false;
 
@@ -460,6 +487,9 @@ class _MPVPlayerState extends State<MPVPlayer>
 
     // 初始化 Audio Service
     _initializeAudioService();
+
+    // 保存当前亮度
+    _saveBrightness();
 
     // 添加应用生命周期监听器
     WidgetsBinding.instance.addObserver(this);
@@ -724,6 +754,124 @@ class _MPVPlayerState extends State<MPVPlayer>
     return nextVolume;
   }
 
+  // 保存当前亮度
+  void _saveBrightness() async {
+    try {
+      final brightness = await Screen.brightness;
+      if (brightness != null) {
+        _savedBrightness = brightness;
+        print('已保存当前亮度: $_savedBrightness');
+      }
+    } catch (e) {
+      print('保存亮度时发生错误: $e');
+    }
+  }
+
+  // 检测 HDR 视频（使用 ffmpeg）
+  Future<bool> _getHdr(String filePath) async {
+    try {
+      // 如果是.lnk文件，读取实际路径
+      if (filePath.endsWith('.lnk')) {
+        final file = File(filePath);
+        filePath = await file.readAsString();
+      }
+
+      final _ffmpegplatform =
+          const MethodChannel('samples.flutter.dev/ffmpegplugin');
+      int getHdrMethod = await _settingsService.getHdrDetect();
+
+      if (getHdrMethod == 0) {
+        return false;
+      }
+
+      String hdrJson = '';
+      if (getHdrMethod == 1) {
+        hdrJson = await _ffmpegplatform
+                .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
+            '';
+      } else if (getHdrMethod == 2) {
+        hdrJson = await _ffmpegplatform.invokeMethod<String>(
+                'getVideoHDRInfoFFmpeg', {'path': filePath}) ??
+            '';
+      }
+
+      // 如果返回的JSON字符串为空，默认为非HDR
+      if (hdrJson.isEmpty) {
+        print('获取HDR信息失败：返回空JSON');
+        return false;
+      }
+
+      // 解析JSON字符串
+      try {
+        final Map<String, dynamic> data = json.decode(hdrJson);
+        final bool isHdr = data['isHDR'] ?? false;
+        print('视频HDR状态: ${isHdr ? "是HDR" : "非HDR"}');
+        return isHdr;
+      } catch (e) {
+        print('解析HDR JSON出错: $e');
+        print('原始JSON: $hdrJson');
+        return false;
+      }
+    } catch (e) {
+      print('获取HDR信息时发生错误: $e');
+      return false;
+    }
+  }
+
+  // 检查并处理 HDR 视频
+  Future<void> _checkAndHandleHDR(String filePath) async {
+    try {
+      final isHDR = await _getHdr(filePath);
+
+      // 如果检测到HDR视频且之前不是HDR状态
+      if (isHDR && !_isHDRVideo) {
+        setState(() {
+          _isHDRVideo = true;
+        });
+        await _setMaxBrightness();
+        print('检测到 HDR 视频,已将亮度调至最大');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('检测到 HDR 视频，已自动调整亮度至最大'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else if (!isHDR && _isHDRVideo) {
+        // 如果之前是HDR现在不是了,恢复亮度
+        setState(() {
+          _isHDRVideo = false;
+        });
+        await _restoreBrightness();
+      }
+    } catch (e) {
+      print('检测 HDR 视频时发生错误: $e');
+    }
+  }
+
+  // 设置最大亮度
+  Future<void> _setMaxBrightness() async {
+    try {
+      await Screen.setBrightness(0.99); // 设置为最大亮度
+    } catch (e) {
+      print('设置最大亮度时发生错误: $e');
+    }
+  }
+
+  // 恢复保存的亮度
+  Future<void> _restoreBrightness() async {
+    try {
+      if (_savedBrightness != null) {
+        await Screen.setBrightness(_savedBrightness!);
+        print('已恢复亮度到: $_savedBrightness');
+      }
+    } catch (e) {
+      print('恢复亮度时发生错误: $e');
+    }
+  }
+
   String convertUriToPath(String uri) {
     // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
     if (uri.startsWith('file://media')) {
@@ -941,6 +1089,11 @@ class _MPVPlayerState extends State<MPVPlayer>
     // 自动检测并载入字幕文件（仅对特定目录下的本地文件）
     if (!isHttpUrl && !isFileUrl) {
       _autoLoadSubtitle(resolvedPath);
+    }
+
+    // 检测 HDR 视频并调节亮度（仅对本地文件）
+    if (!isHttpUrl && !isFileUrl) {
+      _checkAndHandleHDR(resolvedPath);
     }
   }
 
@@ -1571,6 +1724,209 @@ class _MPVPlayerState extends State<MPVPlayer>
     );
   }
 
+  // 获取键盘快捷键配置
+  Map<PlayerHotkey, List<List<LogicalKeyboardKey>>> _getHotkeyShortcuts() {
+    return {
+      // 空格键 - 播放/暂停
+      PlayerHotkey.playPause: [
+        [LogicalKeyboardKey.space],
+        [LogicalKeyboardKey.keyK],
+      ],
+      // 左右箭头 - 快进/快退5秒
+      PlayerHotkey.seekForward: [
+        [LogicalKeyboardKey.arrowRight],
+      ],
+      PlayerHotkey.seekBackward: [
+        [LogicalKeyboardKey.arrowLeft],
+      ],
+      // Shift + 左右箭头 - 快进/快退30秒
+      PlayerHotkey.seekForwardLong: [
+        [LogicalKeyboardKey.shiftLeft, LogicalKeyboardKey.arrowRight],
+        [LogicalKeyboardKey.shiftRight, LogicalKeyboardKey.arrowRight],
+        [LogicalKeyboardKey.keyL],
+      ],
+      PlayerHotkey.seekBackwardLong: [
+        [LogicalKeyboardKey.shiftLeft, LogicalKeyboardKey.arrowLeft],
+        [LogicalKeyboardKey.shiftRight, LogicalKeyboardKey.arrowLeft],
+        [LogicalKeyboardKey.keyJ],
+      ],
+      // 上下箭头 - 音量调节
+      PlayerHotkey.volumeUp: [
+        [LogicalKeyboardKey.arrowUp],
+      ],
+      PlayerHotkey.volumeDown: [
+        [LogicalKeyboardKey.arrowDown],
+      ],
+      // M键 - 静音切换
+      PlayerHotkey.toggleMute: [
+        [LogicalKeyboardKey.keyM],
+      ],
+      // F键或F11 - 全屏切换
+      PlayerHotkey.toggleFullscreen: [
+        [LogicalKeyboardKey.keyF],
+        [LogicalKeyboardKey.f11],
+      ],
+      // 速度调节
+      PlayerHotkey.speedUp: [
+        [LogicalKeyboardKey.bracketRight], // ]
+        [LogicalKeyboardKey.equal], // +
+      ],
+      PlayerHotkey.speedDown: [
+        [LogicalKeyboardKey.bracketLeft], // [
+        [LogicalKeyboardKey.minus], // -
+      ],
+      PlayerHotkey.speedReset: [
+        [LogicalKeyboardKey.backspace],
+      ],
+      // N键 - 下一个视频
+      PlayerHotkey.nextVideo: [
+        [LogicalKeyboardKey.keyN],
+        [LogicalKeyboardKey.pageDown],
+      ],
+      // P键 - 上一个视频
+      PlayerHotkey.previousVideo: [
+        [LogicalKeyboardKey.keyP],
+        [LogicalKeyboardKey.pageUp],
+      ],
+      // S键 - 截图
+      PlayerHotkey.screenshot: [
+        [LogicalKeyboardKey.keyS],
+      ],
+      // C键 - 字幕切换
+      PlayerHotkey.toggleSubtitle: [
+        [LogicalKeyboardKey.keyC],
+      ],
+      // D键 - 弹幕切换
+      PlayerHotkey.toggleDanmaku: [
+        [LogicalKeyboardKey.keyD],
+      ],
+      // ESC或Q键 - 退出
+      PlayerHotkey.quit: [
+        [LogicalKeyboardKey.escape],
+        [LogicalKeyboardKey.keyQ],
+      ],
+    };
+  }
+
+  // 处理键盘快捷键
+  void _handleHotkey(PlayerHotkey hotkey, List<LogicalKeyboardKey> keys) {
+    switch (hotkey) {
+      case PlayerHotkey.playPause:
+        if (player.state.playing) {
+          player.pause();
+        } else {
+          player.play();
+        }
+        break;
+
+      case PlayerHotkey.seekForward:
+        player.seek(player.state.position + const Duration(seconds: 5));
+        break;
+
+      case PlayerHotkey.seekBackward:
+        final newPosition = player.state.position - const Duration(seconds: 5);
+        player.seek(newPosition > Duration.zero ? newPosition : Duration.zero);
+        break;
+
+      case PlayerHotkey.seekForwardLong:
+        player.seek(player.state.position + const Duration(seconds: 30));
+        break;
+
+      case PlayerHotkey.seekBackwardLong:
+        final newPosition = player.state.position - const Duration(seconds: 30);
+        player.seek(newPosition > Duration.zero ? newPosition : Duration.zero);
+        break;
+
+      case PlayerHotkey.volumeUp:
+        setSystemVolume(0.1);
+        break;
+
+      case PlayerHotkey.volumeDown:
+        setSystemVolume(-0.1);
+        break;
+
+      case PlayerHotkey.toggleMute:
+        if (player.state.volume > 0) {
+          _lastVolume = player.state.volume;
+          player.setVolume(0.0);
+        } else {
+          player.setVolume(_lastVolume > 0 ? _lastVolume : 1.0);
+        }
+        break;
+
+      case PlayerHotkey.toggleFullscreen:
+        _toggleFullScreen();
+        break;
+
+      case PlayerHotkey.speedUp:
+        setState(() {
+          _playbackSpeed = (_playbackSpeed + 0.25).clamp(0.25, 16.0);
+        });
+        player.setRate(_playbackSpeed);
+        _showSpeedToast();
+        break;
+
+      case PlayerHotkey.speedDown:
+        setState(() {
+          _playbackSpeed = (_playbackSpeed - 0.25).clamp(0.25, 16.0);
+        });
+        player.setRate(_playbackSpeed);
+        _showSpeedToast();
+        break;
+
+      case PlayerHotkey.speedReset:
+        setState(() {
+          _playbackSpeed = 1.0;
+        });
+        player.setRate(1.0);
+        _showSpeedToast();
+        break;
+
+      case PlayerHotkey.nextVideo:
+        _playNext();
+        break;
+
+      case PlayerHotkey.previousVideo:
+        _playPrevious();
+        break;
+
+      case PlayerHotkey.screenshot:
+        _takeScreenshot();
+        break;
+
+      case PlayerHotkey.toggleSubtitle:
+        _showSubtitleTrackDialog();
+        break;
+
+      case PlayerHotkey.toggleDanmaku:
+        setState(() {
+          _danmakuOn = !_danmakuOn;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_danmakuOn ? '弹幕已开启' : '弹幕已关闭'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+        break;
+
+      case PlayerHotkey.quit:
+        Navigator.pop(context);
+        break;
+    }
+  }
+
+  // 显示速度调整提示
+  void _showSpeedToast() {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('播放速度: ${_playbackSpeed.toStringAsFixed(2)}x'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _speedAdjustTimer?.cancel(); // 清理定时器
@@ -1590,6 +1946,11 @@ class _MPVPlayerState extends State<MPVPlayer>
     // 清理后台播放资源
     _cleanupBackgroundPlayback();
 
+    // 如果是HDR视频，恢复亮度
+    if (_isHDRVideo) {
+      _restoreBrightness();
+    }
+
     player.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     // 恢复所有方向,允许系统自动旋转
@@ -1604,12 +1965,15 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: GestureDetector(
-        onTapDown: (details) {
-          _toggleControls();
-        },
+    return GalacticHotkeys<PlayerHotkey>(
+      shortcuts: _getHotkeyShortcuts(),
+      onShortcutPressed: _handleHotkey,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: GestureDetector(
+          onTapDown: (details) {
+            _toggleControls();
+          },
         onDoubleTapDown: (details) {
           final screenWidth = MediaQuery.of(context).size.width;
           final tapPosition = details.globalPosition;
@@ -1902,6 +2266,7 @@ class _MPVPlayerState extends State<MPVPlayer>
             ),
           ],
         ),
+      ),
       ),
     );
   }

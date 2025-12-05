@@ -1159,29 +1159,28 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _checkPrivacyPolicyStatus() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool? isAccepted = prefs.getBool('privacy_policy_accepted');
+    bool? isAccepted = prefs.getBool(PrivacyPolicyVersion.acceptedKey);
+    int acceptedVersion = prefs.getInt(PrivacyPolicyVersion.versionKey) ?? 0;
 
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
 // 调用方法 getBatteryLevel
     final result =
         await _platform.invokeMethod<String>('getDownloadPermission');
-    // 如果尚未接受隐私政策，显示对话框
-    if (isAccepted == null || !isAccepted) {
+
+    // 检查是否需要显示隐私协议弹窗
+    // 1. 如果从未接受过隐私协议(在boarding页面会处理)
+    // 2. 如果已接受但版本过旧,显示更新弹窗
+    if (isAccepted == true && acceptedVersion < PrivacyPolicyVersion.current) {
+      // 隐私协议已更新,需要用户重新确认
       Future.delayed(Duration.zero, () {
-        // _showPrivacyPolicyDialog();
+        _showPrivacyPolicyUpdateDialog();
       });
-    } else {
+    } else if (isAccepted == true) {
       setState(() {
         _isPolicyAccepted = true;
       });
-      // 创建实例
-//       final _platform =
-//           const MethodChannel('samples.flutter.dev/downloadplugin');
-// // 调用方法 getBatteryLevel
-//       final result =
-//           await _platform.invokeMethod<String>('getDownloadPermission');
-      // final result2 = await _platform.invokeMethod<String>('startBgTask');
     }
+    // 如果isAccepted为null或false,会在boarding页面处理
   }
 
   void _showPrivacyPolicyDialog() {
@@ -1192,7 +1191,8 @@ class _HomeScreenState extends State<HomeScreen>
         return OnboardingPrivacyDialog(
           onAccept: () async {
             SharedPreferences prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('privacy_policy_accepted', true);
+            await prefs.setBool(PrivacyPolicyVersion.acceptedKey, true);
+            await prefs.setInt(PrivacyPolicyVersion.versionKey, PrivacyPolicyVersion.current);
             setState(() {
               _isPolicyAccepted = true;
             });
@@ -1210,6 +1210,33 @@ class _HomeScreenState extends State<HomeScreen>
             Future.delayed(Duration(milliseconds: 200), () {
               // 退出应用
               // SystemNavigator.pop();
+              exit(0);
+            });
+          },
+        );
+      },
+    );
+  }
+
+  // 显示隐私协议更新弹窗(不包含boarding内容)
+  void _showPrivacyPolicyUpdateDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 禁止点击外部关闭对话框
+      builder: (BuildContext context) {
+        return PrivacyPolicyUpdateDialog(
+          onAccept: () async {
+            SharedPreferences prefs = await SharedPreferences.getInstance();
+            await prefs.setInt(PrivacyPolicyVersion.versionKey, PrivacyPolicyVersion.current);
+            setState(() {
+              _isPolicyAccepted = true;
+            });
+            Navigator.of(context).pop(); // 关闭对话框
+          },
+          onDecline: () {
+            // 用户拒绝，退出应用
+            Navigator.of(context).pop(); // 关闭对话框
+            Future.delayed(Duration(milliseconds: 200), () {
               exit(0);
             });
           },

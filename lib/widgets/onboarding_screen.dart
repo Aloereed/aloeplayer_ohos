@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+import 'package:aloeplayer/privacy_policy.dart';
 
 /// 欢迎引导页
 /// 展示应用核心功能和特点
@@ -77,7 +78,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _acceptPolicy() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('privacy_policy_accepted', true);
+    await prefs.setBool(PrivacyPolicyVersion.acceptedKey, true);
+    // 保存当前隐私协议版本
+    await prefs.setInt(PrivacyPolicyVersion.versionKey, PrivacyPolicyVersion.current);
     setState(() {
       _isPolicyAccepted = true;
     });
