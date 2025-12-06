@@ -20,6 +20,11 @@ class ServerConfig {
   final int? port; // WebDAV端口 (默认80/443)
   final bool useHttps; // WebDAV是否使用HTTPS
 
+  // SMB高级选项
+  final bool smbSigningRequired; // SMB签名要求 (默认false)
+  final bool smbAnonymousLogin; // 匿名登录 (默认false)
+  final bool smbEncryption; // SMB加密传输 (默认false)
+
   ServerConfig({
     required this.id,
     required this.name,
@@ -33,6 +38,9 @@ class ServerConfig {
     this.lastConnected,
     this.port,
     this.useHttps = false,
+    this.smbSigningRequired = false,
+    this.smbAnonymousLogin = false,
+    this.smbEncryption = false,
   });
 
   // 从JSON创建
@@ -55,6 +63,9 @@ class ServerConfig {
           : null,
       port: json['port'] as int?,
       useHttps: json['useHttps'] as bool? ?? false,
+      smbSigningRequired: json['smbSigningRequired'] as bool? ?? false,
+      smbAnonymousLogin: json['smbAnonymousLogin'] as bool? ?? false,
+      smbEncryption: json['smbEncryption'] as bool? ?? false,
     );
   }
 
@@ -73,6 +84,9 @@ class ServerConfig {
       'lastConnected': lastConnected?.toIso8601String(),
       'port': port,
       'useHttps': useHttps,
+      'smbSigningRequired': smbSigningRequired,
+      'smbAnonymousLogin': smbAnonymousLogin,
+      'smbEncryption': smbEncryption,
     };
   }
 
@@ -90,6 +104,9 @@ class ServerConfig {
     DateTime? lastConnected,
     int? port,
     bool? useHttps,
+    bool? smbSigningRequired,
+    bool? smbAnonymousLogin,
+    bool? smbEncryption,
   }) {
     return ServerConfig(
       id: id ?? this.id,
@@ -104,6 +121,9 @@ class ServerConfig {
       lastConnected: lastConnected ?? this.lastConnected,
       port: port ?? this.port,
       useHttps: useHttps ?? this.useHttps,
+      smbSigningRequired: smbSigningRequired ?? this.smbSigningRequired,
+      smbAnonymousLogin: smbAnonymousLogin ?? this.smbAnonymousLogin,
+      smbEncryption: smbEncryption ?? this.smbEncryption,
     );
   }
 

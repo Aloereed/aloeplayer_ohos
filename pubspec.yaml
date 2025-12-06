@@ -29,16 +29,16 @@ dependencies:
   webdav_client: null
   xml: null
   intl: any
-  castscreen: 
+  castscreen:
     path: ./castscreen-1.0.2
   dio: any
-  smb_connect: ^0.0.9
   galactic_hotkeys: ^1.1.1
   shelf: ^1.4.1
   shelf_router: ^1.1.4
   screenshot: ^3.0.0
   uuid: ^3.0.6
   package_info_plus: ^8.1.2
+  ffi: any
 dependency_overrides:
   audio_service:
     git:
@@ -184,4 +184,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 3.0.3+56
+version: 3.0.3+80

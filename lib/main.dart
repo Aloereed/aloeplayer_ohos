@@ -69,6 +69,9 @@ void main() async {
   // 初始化 MediaKit
   MediaKit.ensureInitialized();
 
+  // 加载 HTTP 服务配置
+  await HttpServiceSettings.loadSettings();
+
   // audioHandler = await AudioService.init(
   //   builder: () => MyAudioHandler(),
   //   config: const AudioServiceConfig(

@@ -29,6 +29,30 @@ enum SortType { none, name, modifiedDate }
 
 enum SortOrder { ascending, descending }
 
+// HTTP 服务配置
+class HttpServiceSettings {
+  // HTTP Range 请求的最大长度(字节)
+  // 用于限制视频流播放时单次传输的数据量
+  // 默认 10MB,播放器会在需要时自动请求更多数据
+  static int _maxRangeLengthMB = 10; // 默认 10MB
+  static int get maxRangeLength => _maxRangeLengthMB * 1024 * 1024;
+
+  // 设置最大范围长度 (MB)
+  static void setMaxRangeLengthMB(int mb) {
+    _maxRangeLengthMB = mb;
+  }
+
+  // 文件流读取的默认块大小(字节)
+  // 每次从 SMB 服务器读取的数据块大小
+  static const int defaultChunkSize = 65536; // 64KB
+
+  // 从 SharedPreferences 加载配置
+  static Future<void> loadSettings() async {
+    final settingsService = SettingsService();
+    _maxRangeLengthMB = await settingsService.getHttpMaxRangeLength();
+  }
+}
+
 // 将字体缓存添加到全局状态，方便管理已加载的字体
 class FontCache {
   static final Map<String, String> _loadedFonts = {}; // 路径到fontFamily的映射
@@ -489,6 +513,7 @@ class SettingsService {
   static const String _subtitleMany = 'subtitle_many';
   static const String _firstLaunchKey = 'first_launch_completed';
   static const String _playerSelectionShownKey = 'player_selection_shown';
+  static const String _httpMaxRangeLengthKey = 'http_max_range_length';
 
   // 获取应用版本信息
   static Future<PackageInfo> getPackageInfo() async {
@@ -737,6 +762,18 @@ class SettingsService {
   Future<void> markPlayerSelectionShown() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerSelectionShownKey, true);
+  }
+
+  // HTTP Range 请求最大长度 (MB)
+  Future<void> saveHttpMaxRangeLength(int lengthMB) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_httpMaxRangeLengthKey, lengthMB);
+  }
+
+  Future<int> getHttpMaxRangeLength() async {
+    final prefs = await SharedPreferences.getInstance();
+    // 默认值为 10MB
+    return prefs.getInt(_httpMaxRangeLengthKey) ?? 10;
   }
 
   // 清除缓存 递归删除“/data/storage/el2/base/haps/entry/cache/”下的所有文件
@@ -2387,6 +2424,56 @@ class _SettingsTabState extends State<SettingsTab> {
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   SizedBox(height: 8),
+                  ListTile(
+                    leading: Icon(Icons.speed, color: Colors.lightBlue),
+                    title: Text('SMB视频流缓冲区大小'),
+                    subtitle: Text('调整SMB流式播放时单次传输的数据量'),
+                    trailing: FutureBuilder<int>(
+                      future: _settingsService.getHttpMaxRangeLength(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return DropdownButton<int>(
+                            value: snapshot.data!,
+                            items: [
+                              DropdownMenuItem<int>(
+                                value: 0,
+                                child: Text('不限制'),
+                              ),
+                              DropdownMenuItem<int>(
+                                value: 5,
+                                child: Text('5 MB'),
+                              ),
+                              DropdownMenuItem<int>(
+                                value: 10,
+                                child: Text('10 MB (默认)'),
+                              ),
+                              DropdownMenuItem<int>(
+                                value: 20,
+                                child: Text('20 MB'),
+                              ),
+                              DropdownMenuItem<int>(
+                                value: 30,
+                                child: Text('30 MB'),
+                              ),
+                              DropdownMenuItem<int>(
+                                value: 50,
+                                child: Text('50 MB'),
+                              ),
+                            ],
+                            onChanged: (int? value) async {
+                              if (value != null) {
+                                await _settingsService.saveHttpMaxRangeLength(value);
+                                HttpServiceSettings.setMaxRangeLengthMB(value);
+                                setState(() {});
+                              }
+                            },
+                          );
+                        } else {
+                          return const CircularProgressIndicator();
+                        }
+                      },
+                    ),
+                  ),
                   ListTile(
                       leading: Icon(Icons.display_settings_rounded,
                           color: Colors.lightBlue),

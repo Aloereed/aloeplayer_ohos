@@ -383,6 +383,12 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
   bool _obscurePassword = true;
   bool _useHttps = false;
 
+  // SMB高级选项
+  bool _smbSigningRequired = false;
+  bool _smbAnonymousLogin = false;
+  bool _smbEncryption = false;
+  bool _showAdvancedOptions = false;
+
   @override
   void initState() {
     super.initState();
@@ -400,6 +406,11 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
     _initialPathController =
         TextEditingController(text: widget.existing?.initialPath ?? '/');
     _useHttps = widget.existing?.useHttps ?? false;
+
+    // 初始化SMB高级选项
+    _smbSigningRequired = widget.existing?.smbSigningRequired ?? false;
+    _smbAnonymousLogin = widget.existing?.smbAnonymousLogin ?? false;
+    _smbEncryption = widget.existing?.smbEncryption ?? false;
   }
 
   @override
@@ -416,11 +427,21 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
 
   void _save() {
     if (_nameController.text.trim().isEmpty ||
-        _hostController.text.trim().isEmpty ||
-        _usernameController.text.trim().isEmpty) {
+        _hostController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('请填写服务器名称、主机地址和用户名'),
+          content: Text('请填写服务器名称和主机地址'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // 如果不是匿名登录，检查用户名
+    if (!_smbAnonymousLogin && _usernameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请填写用户名或启用匿名登录'),
           backgroundColor: Colors.red,
         ),
       );
@@ -446,14 +467,17 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
       name: _nameController.text.trim(),
       type: _serverType,
       host: _hostController.text.trim(),
-      username: _usernameController.text.trim(),
-      password: _passwordController.text.trim(),
+      username: _smbAnonymousLogin ? 'guest' : _usernameController.text.trim(),
+      password: _smbAnonymousLogin ? '' : _passwordController.text.trim(),
       domain: _domainController.text.trim(),
       initialPath: _initialPathController.text.trim(),
       createdAt: widget.existing?.createdAt ?? DateTime.now(),
       lastConnected: widget.existing?.lastConnected,
       port: port,
       useHttps: _useHttps,
+      smbSigningRequired: _smbSigningRequired,
+      smbAnonymousLogin: _smbAnonymousLogin,
+      smbEncryption: _smbEncryption,
     );
 
     Navigator.pop(context, config);
@@ -549,6 +573,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.person),
               ),
+              enabled: !_smbAnonymousLogin,
             ),
             const SizedBox(height: 12),
             TextField(
@@ -567,6 +592,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
                   },
                 ),
               ),
+              enabled: !_smbAnonymousLogin,
             ),
             const SizedBox(height: 12),
             // SMB 特有字段
@@ -578,6 +604,87 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
                   hintText: 'WORKGROUP',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.domain),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // SMB 高级选项折叠面板
+              Card(
+                elevation: 1,
+                child: ExpansionTile(
+                  leading: const Icon(Icons.settings_outlined, color: Colors.blue),
+                  title: const Text(
+                    'SMB 高级选项',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    _showAdvancedOptions ? '点击收起' : '点击展开',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  initiallyExpanded: _showAdvancedOptions,
+                  onExpansionChanged: (expanded) {
+                    setState(() => _showAdvancedOptions = expanded);
+                  },
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            title: const Text('匿名登录'),
+                            subtitle: const Text('使用访客模式连接'),
+                            value: _smbAnonymousLogin,
+                            onChanged: (value) {
+                              setState(() => _smbAnonymousLogin = value);
+                            },
+                            activeColor: Colors.blue,
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            title: const Text('要求签名'),
+                            subtitle: const Text('启用SMB签名验证（推荐）'),
+                            value: _smbSigningRequired,
+                            onChanged: (value) {
+                              setState(() => _smbSigningRequired = value);
+                            },
+                            activeColor: Colors.blue,
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            title: const Text('启用加密'),
+                            subtitle: const Text('使用SMB3加密传输'),
+                            value: _smbEncryption,
+                            onChanged: (value) {
+                              setState(() => _smbEncryption = value);
+                            },
+                            activeColor: Colors.blue,
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.info_outline, size: 18, color: Colors.blue),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '提示：某些服务器可能需要特定配置才能连接',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),

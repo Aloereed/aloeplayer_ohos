@@ -1,7 +1,7 @@
 // lib/pages/smb_browser_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:smb_connect/smb_connect.dart';
+import '../libsmb2_service/smb_file.dart';
 import '../services/smb_service.dart';
 import '../services/http_service.dart';
 

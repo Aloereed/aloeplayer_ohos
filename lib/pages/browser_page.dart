@@ -110,7 +110,10 @@ class _BrowserPageState extends State<BrowserPage> {
         await _configService.updateLastConnected(widget.serverConfig.id);
 
         // 加载初始路径
-        await _loadFiles(widget.serverConfig.initialPath);
+        // 对于 SMB: 如果有 initialPath，连接时已经包含在 host 中，所以从 '/' 开始
+        // 对于 WebDAV: initialPath 需要在这里使用
+        final startPath = widget.serverConfig.type == ServerType.smb ? '/' : widget.serverConfig.initialPath;
+        await _loadFiles(startPath);
 
         _showSuccess('连接成功');
       } else {

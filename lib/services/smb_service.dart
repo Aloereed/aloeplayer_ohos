@@ -1,25 +1,22 @@
 /*
- * @Author: 
+ * @Author:
  * @Date: 2025-08-17 20:21:25
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-08-17 20:24:32
- * @Description: file content
+ * @LastEditTime: 2025-12-06 22:00:00
+ * @Description: SMB Service - 使用 libsmb2 FFI 实现
  */
 // lib/services/smb_service.dart
-import 'dart:convert';
-import 'dart:io';
+// 使用 libsmb2 的实现，完全解耦 smb_connect
 import 'dart:typed_data';
-import 'package:smb_connect/smb_connect.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../libsmb2_service/libsmb2_service.dart';
+import '../libsmb2_service/smb_file.dart';
+import '../libsmb2_service/smb_file_adapter.dart';
 
 class SmbService {
-  static const String _hostKey = 'smb_host';
-  static const String _usernameKey = 'smb_username';
-  static const String _passwordKey = 'smb_password';
-  static const String _domainKey = 'smb_domain';
+  // 使用 Libsmb2Service 作为底层实现
+  final Libsmb2Service _libsmb2Service = Libsmb2Service();
 
-  SmbConnect? _connection;
-  bool get isConnected => _connection != null;
+  bool get isConnected => _libsmb2Service.isConnected;
 
   // 保存登录信息
   Future<void> saveCredentials({
@@ -28,22 +25,17 @@ class SmbService {
     required String password,
     required String domain,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_hostKey, host);
-    await prefs.setString(_usernameKey, username);
-    await prefs.setString(_passwordKey, password);
-    await prefs.setString(_domainKey, domain);
+    await _libsmb2Service.saveCredentials(
+      host: host,
+      username: username,
+      password: password,
+      domain: domain,
+    );
   }
 
   // 获取保存的登录信息
   Future<Map<String, String>> getSavedCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    return {
-      'host': prefs.getString(_hostKey) ?? '',
-      'username': prefs.getString(_usernameKey) ?? '',
-      'password': prefs.getString(_passwordKey) ?? '',
-      'domain': prefs.getString(_domainKey) ?? '',
-    };
+    return await _libsmb2Service.getSavedCredentials();
   }
 
   // 连接SMB
@@ -52,51 +44,44 @@ class SmbService {
     required String username,
     required String password,
     required String domain,
+    bool signingRequired = false,
+    bool anonymousLogin = false,
+    bool encryption = false,
   }) async {
-    try {
-      _connection = await SmbConnect.connectAuth(
-        host: host,
-        domain: domain,
-        username: username,
-        password: password,
-      );
-      return true;
-    } catch (e) {
-      print('SMB连接失败: $e');
-      return false;
-    }
+    return await _libsmb2Service.connect(
+      host: host,
+      username: username,
+      password: password,
+      domain: domain,
+      signingRequired: signingRequired,
+      anonymousLogin: anonymousLogin,
+      encryption: encryption,
+    );
   }
 
   // 断开连接
   Future<void> disconnect() async {
-    if (_connection != null) {
-      await _connection!.close();
-      _connection = null;
-    }
+    await _libsmb2Service.disconnect();
   }
 
   // 获取文件列表
   Future<List<SmbFile>> listFiles(String path) async {
-    if (_connection == null) throw Exception('未连接到SMB服务器');
-    
-    try {
-      SmbFile folder = await _connection!.file(path);
-      return await _connection!.listFiles(folder);
-    } catch (e) {
-      throw Exception('获取文件列表失败: $e');
-    }
+    final libsmb2Files = await _libsmb2Service.listFiles(path);
+    // 将 Libsmb2File 转换为 SmbFile 适配器
+    return libsmb2Files.map((f) => SmbFileAdapter(f)).toList();
   }
 
   // 获取文件流
   Future<Stream<Uint8List>> getFileStream(String filePath) async {
-    if (_connection == null) throw Exception('未连接到SMB服务器');
-    
-    return await _connection!.openRead(await _connection!.file(filePath));
+    return await _libsmb2Service.getFileStream(filePath);
   }
 
   // 获取文件
   Future<SmbFile> getFile(String path) async {
-    if (_connection == null) throw Exception('未连接到SMB服务器');
-    return await _connection!.file(path);
+    final libsmb2File = await _libsmb2Service.getFile(path);
+    return SmbFileAdapter(libsmb2File);
   }
+
+  // 获取底层的 Libsmb2Service（如果需要直接访问）
+  Libsmb2Service get libsmb2Service => _libsmb2Service;
 }

@@ -9,7 +9,8 @@ import 'package:path/path.dart' as path;
 import 'smb_service.dart';
 import 'webdav_service.dart';
 import 'file_service.dart';
-import 'package:smb_connect/smb_connect.dart';
+import '../libsmb2_service/smb_file.dart';
+import '../settings.dart';
 
 class HttpService {
   static HttpService? _instance;
@@ -315,6 +316,22 @@ class HttpService {
         end = int.parse(endStr);
       }
 
+      // 限制单次 Range 请求的最大长度
+      // 对于视频流播放，通常播放器会请求较小的块（如 2-10MB）
+      // 限制最大长度可以：
+      // 1. 节省带宽 - 用户跳转时不会浪费大量流量
+      // 2. 快速响应 - 播放器可以快速开始播放
+      // 3. 支持跳转 - 用户可以随时中断当前请求
+      final maxRangeLength = HttpServiceSettings.maxRangeLength;
+      final requestedLength = end - start + 1;
+
+      // 如果设置了限制（maxRangeLength > 0）且请求范围超过限制
+      if (maxRangeLength > 0 && requestedLength > maxRangeLength) {
+        // 如果请求的范围太大，只返回配置的最大范围
+        print('[HTTP] Range request too large: ${requestedLength ~/ (1024 * 1024)}MB, limiting to ${maxRangeLength ~/ (1024 * 1024)}MB');
+        end = start + maxRangeLength - 1;
+      }
+
       // 确保范围有效
       if (start > end || start >= fileSize) {
         return Response(416, body: 'Range Not Satisfiable');
@@ -324,48 +341,13 @@ class HttpService {
 
       final contentLength = end - start + 1;
 
-      // 创建范围流
-      final sourceStream = await _smbService!.getFileStream(file.path);
-
-      // 使用优化的StreamTransformer来处理字节范围
-      int bytesToSkip = start;
-      int bytesToSend = contentLength;
-
-      final rangeStream = sourceStream.transform(
-        StreamTransformer<Uint8List, Uint8List>.fromHandlers(
-          handleData: (chunk, sink) {
-            // 快速跳过：如果还需要跳过字节
-            if (bytesToSkip > 0) {
-              if (chunk.length <= bytesToSkip) {
-                // 整个块都需要跳过
-                bytesToSkip -= chunk.length;
-                return;
-              } else {
-                // 跳过部分字节，使用 sublist 视图避免复制
-                chunk = Uint8List.sublistView(chunk, bytesToSkip);
-                bytesToSkip = 0;
-              }
-            }
-
-            // 如果还需要发送字节
-            if (bytesToSend > 0) {
-              if (chunk.length <= bytesToSend) {
-                // 发送整个块
-                sink.add(chunk);
-                bytesToSend -= chunk.length;
-              } else {
-                // 只发送部分字节，使用 sublist 视图避免复制
-                sink.add(Uint8List.sublistView(chunk, 0, bytesToSend));
-                bytesToSend = 0;
-              }
-            }
-
-            // 如果已发送完所有需要的数据，关闭 sink
-            if (bytesToSend <= 0) {
-              sink.close();
-            }
-          },
-        ),
+      // 使用底层的 getRangeStream 直接读取指定范围
+      // 这样可以避免读取整个文件,只读取需要的部分,大幅提升性能和响应速度
+      // 特别是对于大文件和视频文件的跳转播放场景
+      final rangeStream = await _smbService!.libsmb2Service.getRangeStream(
+        file.path,
+        start: start,
+        end: end,
       );
 
       return Response(
