@@ -6,6 +6,7 @@ import 'package:aloeplayer/webdav.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:aloeplayer/theme_provider.dart';
 
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -32,7 +33,8 @@ import 'screens/cast_screen_page.dart';
 import 'mediakit_miniplayer.dart';
 import 'mediakit_musicplayer.dart';
 import 'mediakit_audio_service.dart';
-import 'audio_metadata.dart' ;
+import 'audio_metadata.dart';
+
 String pathToUri(String path) {
   if (path.contains(':')) {
     return Uri.parse(path).toString();
@@ -526,7 +528,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     _tabController.addListener(_handleTabChange);
     _ensureAudioDirectoryExists();
     _isGridView = !(await _settingsService.getDefaultListmode());
-    _useMediaKit = (await _settingsService.getUseFfmpegForPlay()==2);
+    _useMediaKit = (await _settingsService.getUseFfmpegForPlay() == 2);
     _loadItems();
   }
 
@@ -929,7 +931,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                               "取消",
                               style: TextStyle(
                                 fontSize: 16.0,
-                                color: isDarkMode ? Colors.white70 : Colors.black54,
+                                color: isDarkMode
+                                    ? Colors.white70
+                                    : Colors.black54,
                               ),
                             ),
                           ),
@@ -1796,7 +1800,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                         context,
                         MaterialPageRoute(
                           builder: (context) => _useMediaKit
-                              ? MediaKitMusicPlayerPage(filePath: songs[0].filePath)
+                              ? MediaKitMusicPlayerPage(
+                                  filePath: songs[0].filePath)
                               : MusicPlayerPage(filePath: songs[0].filePath),
                         ),
                       );
@@ -1995,8 +2000,10 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                             context,
                             MaterialPageRoute(
                               builder: (context) => _useMediaKit
-                                  ? MediaKitMusicPlayerPage(filePath: songs[0].filePath)
-                                  : MusicPlayerPage(filePath: songs[0].filePath),
+                                  ? MediaKitMusicPlayerPage(
+                                      filePath: songs[0].filePath)
+                                  : MusicPlayerPage(
+                                      filePath: songs[0].filePath),
                             ),
                           );
                         }
@@ -2024,9 +2031,16 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: Theme.of(context).brightness == Brightness.dark
-                              ? [Colors.grey[850]!.withOpacity(0.6), Colors.grey[900]!.withOpacity(0.6)]
-                              : [Colors.white.withOpacity(0.8), Colors.grey[50]!.withOpacity(0.8)],
+                          colors:
+                              Theme.of(context).brightness == Brightness.dark
+                                  ? [
+                                      Colors.grey[850]!.withOpacity(0.6),
+                                      Colors.grey[900]!.withOpacity(0.6)
+                                    ]
+                                  : [
+                                      Colors.white.withOpacity(0.8),
+                                      Colors.grey[50]!.withOpacity(0.8)
+                                    ],
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -2037,7 +2051,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                         ],
                       ),
                       child: ListTile(
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         leading: Container(
                           width: 48,
                           height: 48,
@@ -2047,7 +2062,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                           ),
                           child: Center(
                             child: Text(
-                              song.trackNumber > 0 ? song.trackNumber.toString() : '-',
+                              song.trackNumber > 0
+                                  ? song.trackNumber.toString()
+                                  : '-',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -2079,7 +2096,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                             context,
                             MaterialPageRoute(
                               builder: (context) => _useMediaKit
-                                  ? MediaKitMusicPlayerPage(filePath: song.filePath)
+                                  ? MediaKitMusicPlayerPage(
+                                      filePath: song.filePath)
                                   : MusicPlayerPage(filePath: song.filePath),
                             ),
                           );
@@ -2917,12 +2935,14 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                             height: 24,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           ),
                         )
                       : snapshot.hasError || snapshot.data == null
-                          ? Icon(Icons.music_note, size: 32, color: Colors.white)
+                          ? Icon(Icons.music_note,
+                              size: 32, color: Colors.white)
                           : Image.memory(snapshot.data!, fit: BoxFit.cover),
                 ),
               );
@@ -3048,15 +3068,18 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                         ? Center(
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
                         : snapshot.hasError || snapshot.data == null
-                            ? Icon(Icons.music_note, size: 50, color: Colors.white)
+                            ? Icon(Icons.music_note,
+                                size: 50, color: Colors.white)
                             : Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  Image.memory(snapshot.data!, fit: BoxFit.cover),
+                                  Image.memory(snapshot.data!,
+                                      fit: BoxFit.cover),
                                   Container(
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
@@ -3108,14 +3131,18 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                                 Icon(
                                   Icons.access_time_rounded,
                                   size: 12,
-                                  color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                                  color: isDarkMode
+                                      ? Colors.grey[400]
+                                      : Colors.grey[600],
                                 ),
                                 SizedBox(width: 4),
                                 Text(
                                   durationText,
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                                    color: isDarkMode
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600],
                                   ),
                                 ),
                               ],
@@ -3537,7 +3564,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   }
 
   // 艺术家列表项组件
-  Widget _buildArtistListItem(String artistName, List<AudioMetadataLite> artistSongs) {
+  Widget _buildArtistListItem(
+      String artistName, List<AudioMetadataLite> artistSongs) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final albumArt = artistSongs.isNotEmpty && artistSongs[0].albumArt != null
         ? artistSongs[0].albumArt
@@ -3551,8 +3579,14 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDarkMode
-              ? [Colors.grey[850]!.withOpacity(0.6), Colors.grey[900]!.withOpacity(0.6)]
-              : [Colors.white.withOpacity(0.8), Colors.grey[50]!.withOpacity(0.8)],
+              ? [
+                  Colors.grey[850]!.withOpacity(0.6),
+                  Colors.grey[900]!.withOpacity(0.6)
+                ]
+              : [
+                  Colors.white.withOpacity(0.8),
+                  Colors.grey[50]!.withOpacity(0.8)
+                ],
         ),
         boxShadow: [
           BoxShadow(
@@ -3641,8 +3675,14 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDarkMode
-              ? [Colors.grey[850]!.withOpacity(0.6), Colors.grey[900]!.withOpacity(0.6)]
-              : [Colors.white.withOpacity(0.8), Colors.grey[50]!.withOpacity(0.8)],
+              ? [
+                  Colors.grey[850]!.withOpacity(0.6),
+                  Colors.grey[900]!.withOpacity(0.6)
+                ]
+              : [
+                  Colors.white.withOpacity(0.8),
+                  Colors.grey[50]!.withOpacity(0.8)
+                ],
         ),
         boxShadow: [
           BoxShadow(
@@ -3734,8 +3774,14 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDarkMode
-              ? [Colors.grey[850]!.withOpacity(0.6), Colors.grey[900]!.withOpacity(0.6)]
-              : [Colors.white.withOpacity(0.8), Colors.grey[50]!.withOpacity(0.8)],
+              ? [
+                  Colors.grey[850]!.withOpacity(0.6),
+                  Colors.grey[900]!.withOpacity(0.6)
+                ]
+              : [
+                  Colors.white.withOpacity(0.8),
+                  Colors.grey[50]!.withOpacity(0.8)
+                ],
         ),
         boxShadow: [
           BoxShadow(
@@ -3815,6 +3861,10 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
 
   // 根据屏幕大小和方向动态计算网格列数
   int _getGridCrossAxisCount(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    if (themeProvider.pcMode) {
+      return 6;
+    }
     final mediaQuery = MediaQuery.of(context);
     final size = mediaQuery.size;
     final orientation = mediaQuery.orientation;

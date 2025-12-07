@@ -43,3 +43,5 @@ app.*.map.json
 /android/app/release
 
 nul
+.env
+lib/env/env.g.dart

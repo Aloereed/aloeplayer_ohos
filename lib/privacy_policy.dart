@@ -6,7 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 /// 隐私协议版本管理
 class PrivacyPolicyVersion {
   // 当前隐私协议版本号 - 只需要在这里修改即可
-  static const int current = 1;
+  static const int current = 20251205;
 
   // SharedPreferences的key
   static const String acceptedKey = 'privacy_policy_accepted';
@@ -111,7 +111,8 @@ class OnboardingPrivacyDialog extends StatelessWidget {
               Container(
                 width: double.maxFinite,
                 height: 320, // 略微减小高度以平衡整体比例
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
@@ -123,7 +124,8 @@ class OnboardingPrivacyDialog extends StatelessWidget {
                     child: FutureBuilder<String>(
                       future: _loadHtmlFromAssets(),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
@@ -132,7 +134,8 @@ class OnboardingPrivacyDialog extends StatelessWidget {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.error_outline, color: Colors.red.shade300, size: 48),
+                                Icon(Icons.error_outline,
+                                    color: Colors.red.shade300, size: 48),
                                 const SizedBox(height: 16),
                                 const Text(
                                   '无法加载隐私政策',
@@ -305,7 +308,8 @@ class PrivacyPolicyUpdateDialog extends StatelessWidget {
               Container(
                 width: double.maxFinite,
                 height: 320,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
@@ -317,7 +321,8 @@ class PrivacyPolicyUpdateDialog extends StatelessWidget {
                     child: FutureBuilder<String>(
                       future: _loadHtmlFromAssets(),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
@@ -326,7 +331,8 @@ class PrivacyPolicyUpdateDialog extends StatelessWidget {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.error_outline, color: Colors.red.shade300, size: 48),
+                                Icon(Icons.error_outline,
+                                    color: Colors.red.shade300, size: 48),
                                 const SizedBox(height: 16),
                                 const Text(
                                   '无法加载隐私政策',

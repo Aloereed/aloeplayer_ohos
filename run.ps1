@@ -90,6 +90,7 @@ Write-Host "目标设备: $DeviceId"
 Write-Host "----------------------------------------"
 
 try {
+    dart run build_runner build --delete-conflicting-outputs
     Invoke-Expression $runCommand
     $exitCode = $LASTEXITCODE
 

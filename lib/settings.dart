@@ -14,7 +14,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'theme_provider.dart'; // 假设你已经有一个ThemeProvider
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
@@ -23,6 +22,7 @@ import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'services/membership_service.dart';
+import 'membership_details.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 enum SortType { none, name, modifiedDate }
@@ -514,6 +514,7 @@ class SettingsService {
   static const String _firstLaunchKey = 'first_launch_completed';
   static const String _playerSelectionShownKey = 'player_selection_shown';
   static const String _httpMaxRangeLengthKey = 'http_max_range_length';
+  static const String _usePcMode = 'use_pc_mode';
 
   // 获取应用版本信息
   static Future<PackageInfo> getPackageInfo() async {
@@ -776,6 +777,16 @@ class SettingsService {
     return prefs.getInt(_httpMaxRangeLengthKey) ?? 10;
   }
 
+  Future<void> saveUsePcMode(bool usePcMode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_usePcMode, usePcMode);
+  }
+
+  Future<bool> getUsePcMode(BuildContext context) async {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    return themeProvider.pcMode;
+  }
+
   // 清除缓存 递归删除“/data/storage/el2/base/haps/entry/cache/”下的所有文件
 
   Future<void> deleteCacheDirectory(String path) async {
@@ -913,13 +924,22 @@ class _SettingsTabState extends State<SettingsTab> {
   late Future<bool> _backgroundPlayFuture;
   final SettingsService _settingsService = SettingsService();
   final MembershipService _membershipService = MembershipService();
+  bool _isLoginLoading = false;
 
   @override
   void initState() {
     super.initState();
     _loadSubtitleFontSize();
     _backgroundPlayFuture = _settingsService.getBackgroundPlay();
-    _membershipService.initialize();
+    // _membershipService.initialize(); // Move to main.dart
+    _refreshMembershipInfo();
+  }
+
+  Future<void> _refreshMembershipInfo() async {
+    if (_membershipService.isHuaweiLogin) {
+      await _membershipService.fetchMySubscriptions();
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _loadSubtitleFontSize() async {
@@ -935,63 +955,6 @@ class _SettingsTabState extends State<SettingsTab> {
       // 重新触发 FutureBuilder 的 future
       _backgroundPlayFuture = _settingsService.getBackgroundPlay();
     });
-  }
-
-  // 辅助方法: 构建单个选项行
-  Widget _buildOptionTile(BuildContext context, int value, String label,
-      dynamic icon, int groupValue, Function(int?) onChanged) {
-    final isSelected = value == groupValue;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => onChanged(value),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
-              : Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected
-                ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
-                : Theme.of(context).dividerColor,
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            icon is String
-                ? buildIcon(icon)
-                : Icon(
-                    icon,
-                    size: 22,
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).iconTheme.color,
-                  ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-                  color:
-                      isSelected ? Theme.of(context).colorScheme.primary : null,
-                ),
-              ),
-            ),
-            if (isSelected)
-              Icon(
-                Icons.check_circle,
-                size: 20,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-          ],
-        ),
-      ),
-    );
   }
 
 // 应用启动时加载所有字体
@@ -1295,25 +1258,6 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  Widget buildIcon(dynamic icon) {
-    try {
-      if (icon is String) {
-        print('加载PNG图片: ${icon}');
-        // PNG图片处理
-        return Image.asset(
-          icon,
-          width: 24, // 设置合适的宽度
-          height: 24, // 设置合适的高度
-        );
-      } else {
-        return Icon(icon as IconData, color: Colors.lightBlue);
-      }
-    } catch (e) {
-      print('加载图标出错: $e');
-      return SizedBox(); // 默认返回空Widget
-    }
-  }
-
 // 字体选择Tile
   ListTile buildFontSelectionTile() {
     return ListTile(
@@ -1355,20 +1299,16 @@ class _SettingsTabState extends State<SettingsTab> {
     return (baseStyle ?? TextStyle()).copyWith(fontFamily: fontFamily);
   }
 
-  // 显示购买会员对话框
-  void _showPurchaseDialog(BuildContext context) {
-    final products = _membershipService.getProductInfo();
+  // 显示兑换码对话框
+  void _showRedeemDialog(BuildContext context) {
+    final TextEditingController _controller = TextEditingController();
+    bool _isRedeeming = false;
 
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
-          ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Dialog(
+          backgroundColor: Colors.transparent,
           child: Card(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1376,142 +1316,75 @@ class _SettingsTabState extends State<SettingsTab> {
               padding: EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '升级会员',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.close),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
+                  Text(
+                    '兑换会员',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   SizedBox(height: 16),
-                  Text(
-                    '解锁全部高级功能，享受无限制的媒体体验',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
+                  TextField(
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      labelText: '输入兑换码',
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     ),
                   ),
                   SizedBox(height: 20),
-                  ...products
-                      .map((product) => Padding(
-                            padding: EdgeInsets.only(bottom: 12),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey[300]!),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              product['name'],
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            if (product['badge'] != null)
-                                              Container(
-                                                margin: EdgeInsets.only(top: 4),
-                                                padding: EdgeInsets.symmetric(
-                                                    horizontal: 8, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.orange,
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                ),
-                                                child: Text(
-                                                  product['badge'],
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        Text(
-                                          product['price'],
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color:
-                                                Theme.of(context).primaryColor,
-                                          ),
-                                        ),
-                                      ],
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text('取消'),
+                      ),
+                      SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _isRedeeming
+                            ? null
+                            : () async {
+                                final code = _controller.text.trim();
+                                if (code.isEmpty) return;
+
+                                setState(() => _isRedeeming = true);
+                                final result =
+                                    await _membershipService.redeemCode(code);
+                                setState(() => _isRedeeming = false);
+
+                                if (result.success) {
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('兑换成功: ${result.message}'),
+                                      backgroundColor: Colors.green,
                                     ),
-                                    SizedBox(height: 8),
-                                    Text(
-                                      product['description'],
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey[600],
-                                      ),
+                                  );
+                                  // Refresh global state UI
+                                  _refreshMembershipInfo();
+                                  // Trigger a rebuild of the current page if easier
+                                  this.setState(() {});
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(result.message),
+                                      backgroundColor: Colors.red,
                                     ),
-                                    SizedBox(height: 12),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton(
-                                        onPressed: () async {
-                                          Navigator.of(context).pop();
-                                          await _purchaseProduct(product['id']);
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor:
-                                              Theme.of(context).primaryColor,
-                                          foregroundColor: Colors.white,
-                                          padding: EdgeInsets.symmetric(
-                                              vertical: 12),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '购买${product['duration']}',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ))
-                      .toList(),
-                  SizedBox(height: 16),
-                  Text(
-                    '• 支持多种支付方式\n• 购买后立即生效\n• 可随时取消订阅',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                                  );
+                                }
+                              },
+                        child: _isRedeeming
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : Text('兑换'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1519,6 +1392,15 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
         ),
       ),
+    );
+  }
+
+  // 显示会员详情与购买对话框
+  void _showMembershipDetails(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          MembershipDetailsDialog(membershipService: _membershipService),
     );
   }
 
@@ -1596,36 +1478,6 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // 购买产品
-  Future<void> _purchaseProduct(String productId) async {
-    try {
-      final success = await _membershipService.purchaseProduct(productId);
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('购买请求已提交,正在处理...'),
-            backgroundColor: Colors.blue,
-          ),
-        );
-        setState(() {}); // 刷新UI
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('购买失败,请重试'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('购买出错:$e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
   // 恢复购买
   Future<void> _restorePurchases() async {
     try {
@@ -1656,10 +1508,127 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
+  Future<void> _handleHuaweiLogin() async {
+    setState(() {
+      _isLoginLoading = true;
+    });
+
+    try {
+      final result = await _membershipService.loginWithHuaweiAndBackend();
+
+      if (result.success) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('登录成功'), backgroundColor: Colors.green),
+        );
+        setState(() {});
+
+        // Prompt for nickname if needed (first time login or default nickname)
+        if (result.needsNicknameUpdate ||
+            _membershipService.nickname == null ||
+            _membershipService.nickname!.isEmpty) {
+          // Add a small delay to let the UI update first
+          Future.delayed(Duration(milliseconds: 500), () {
+            if (mounted)
+              _showNicknameDialog(context,
+                  isMandatory: result.needsNicknameUpdate);
+          });
+        }
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('登录失败: ${result.message}'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoginLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    await _membershipService.logout();
+    setState(() {});
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已退出登录')),
+    );
+  }
+
+  void _showNicknameDialog(BuildContext context, {bool isMandatory = false}) {
+    final TextEditingController _controller =
+        TextEditingController(text: _membershipService.nickname);
+    showDialog(
+      context: context,
+      barrierDismissible:
+          !isMandatory, // If mandatory, prevent clicking outside
+      builder: (context) => WillPopScope(
+        onWillPop: () async => !isMandatory, // Prevent back button if mandatory
+        child: AlertDialog(
+          title: Text(isMandatory ? '欢迎加入！请设置昵称' : '设置昵称'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isMandatory)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: Text('首次登录建议修改默认昵称。',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ),
+              TextField(
+                controller: _controller,
+                decoration: InputDecoration(hintText: '请输入昵称'),
+              ),
+            ],
+          ),
+          actions: [
+            if (!isMandatory)
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('取消'),
+              ),
+            TextButton(
+              onPressed: () async {
+                if (_controller.text.isNotEmpty) {
+                  // Determine if we should update server or just local (depends on if logged in via backend)
+                  // For safety, try server update if possible
+                  bool success = await _membershipService
+                      .updateNicknameOnServer(_controller.text);
+
+                  if (success) {
+                    setState(() {});
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('昵称更新成功')),
+                    );
+                  } else {
+                    // Fallback for offline or error, mostly just valid for local state but good to warn
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content: Text('昵称同步失败，仅本地保存'),
+                          backgroundColor: Colors.orange),
+                    );
+                    await _membershipService.setNickname(_controller.text);
+                    setState(() {});
+                    Navigator.pop(context);
+                  }
+                }
+              },
+              child: Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-
     return Scaffold(
       appBar: AppBar(
         title: Text('设置',
@@ -1667,1054 +1636,835 @@ class _SettingsTabState extends State<SettingsTab> {
         centerTitle: true,
       ),
       body: ListView(
-        padding: EdgeInsets.all(16),
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
-          // 会员功能部分 - 暂时隐藏
-          // Card(
-          //   elevation: 3,
-          //   child: Container(
-          //     decoration: BoxDecoration(
-          //       borderRadius: BorderRadius.circular(12),
-          //       gradient: LinearGradient(
-          //         colors: [
-          //           Colors.purple.shade400,
-          //           Colors.blue.shade400,
-          //         ],
-          //         begin: Alignment.topLeft,
-          //         end: Alignment.bottomRight,
-          //       ),
-          //     ),
-          //     child: Padding(
-          //       padding: EdgeInsets.all(16),
-          //       child: Column(
-          //         crossAxisAlignment: CrossAxisAlignment.start,
-          //         children: [
-          //           Row(
-          //             children: [
-          //               Icon(
-          //                 Icons.diamond,
-          //                 color: Colors.white,
-          //                 size: 24,
-          //               ),
-          //               SizedBox(width: 8),
-          //               Text(
-          //                 '会员中心',
-          //                 style: TextStyle(
-          //                   fontSize: 18,
-          //                   fontWeight: FontWeight.bold,
-          //                   color: Colors.white,
-          //                 ),
-          //               ),
-          //             ],
-          //           ),
-          //           SizedBox(height: 12),
-          //           Container(
-          //             padding: EdgeInsets.all(12),
-          //             decoration: BoxDecoration(
-          //               color: Colors.white.withOpacity(0.15),
-          //               borderRadius: BorderRadius.circular(8),
-          //             ),
-          //             child: Row(
-          //               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          //               children: [
-          //                 Column(
-          //                   crossAxisAlignment: CrossAxisAlignment.start,
-          //                   children: [
-          //                     Text(
-          //                       '会员状态',
-          //                       style: TextStyle(
-          //                         fontSize: 14,
-          //                         color: Colors.white70,
-          //                       ),
-          //                     ),
-          //                     SizedBox(height: 4),
-          //                     FutureBuilder<String>(
-          //                       future: Future.value(_membershipService
-          //                           .getMembershipStatusDescription()),
-          //                       builder: (context, snapshot) {
-          //                         return Text(
-          //                           snapshot.data ?? '加载中...',
-          //                           style: TextStyle(
-          //                             fontSize: 16,
-          //                             fontWeight: FontWeight.bold,
-          //                             color: Colors.white,
-          //                           ),
-          //                         );
-          //                       },
-          //                     ),
-          //                   ],
-          //                 ),
-          //                 Column(
-          //                   crossAxisAlignment: CrossAxisAlignment.end,
-          //                   children: [
-          //                     Text(
-          //                       '到期时间',
-          //                       style: TextStyle(
-          //                         fontSize: 14,
-          //                         color: Colors.white70,
-          //                       ),
-          //                     ),
-          //                     SizedBox(height: 4),
-          //                     FutureBuilder<String>(
-          //                       future: Future.value(_membershipService
-          //                           .getFormattedExpiryDate()),
-          //                       builder: (context, snapshot) {
-          //                         return Text(
-          //                           snapshot.data ?? '无',
-          //                           style: TextStyle(
-          //                             fontSize: 16,
-          //                             fontWeight: FontWeight.bold,
-          //                             color: Colors.white,
-          //                           ),
-          //                         );
-          //                       },
-          //                     ),
-          //                   ],
-          //                 ),
-          //               ],
-          //             ),
-          //           ),
-          //           SizedBox(height: 12),
-          //           Row(
-          //             children: [
-          //               Expanded(
-          //                 child: ElevatedButton.icon(
-          //                   onPressed: () => _showPurchaseDialog(context),
-          //                   // 显示为禁用
-          //                   // onPressed: null,
-          //                   icon:
-          //                       Icon(Icons.shopping_cart, color: Colors.white),
-          //                   label: Text(
-          //                     '购买会员',
-          //                     style: TextStyle(color: Colors.white),
-          //                   ),
-          //                   style: ElevatedButton.styleFrom(
-          //                     backgroundColor: Colors.white.withOpacity(0.2),
-          //                     foregroundColor: Colors.white,
-          //                     side: BorderSide(
-          //                         color: Colors.white.withOpacity(0.5)),
-          //                     shape: RoundedRectangleBorder(
-          //                       borderRadius: BorderRadius.circular(8),
-          //                     ),
-          //                   ),
-          //                 ),
-          //               ),
-          //               SizedBox(width: 8),
-          //               Expanded(
-          //                 child: ElevatedButton.icon(
-          //                   onPressed: () => _showRestoreDialog(context),
-          //                   icon: Icon(Icons.refresh, color: Colors.white),
-          //                   label: Text(
-          //                     '恢复购买',
-          //                     style: TextStyle(color: Colors.white),
-          //                   ),
-          //                   style: ElevatedButton.styleFrom(
-          //                     backgroundColor: Colors.white.withOpacity(0.2),
-          //                     foregroundColor: Colors.white,
-          //                     side: BorderSide(
-          //                         color: Colors.white.withOpacity(0.5)),
-          //                     shape: RoundedRectangleBorder(
-          //                       borderRadius: BorderRadius.circular(8),
-          //                     ),
-          //                   ),
-          //                 ),
-          //               ),
-          //             ],
-          //           ),
-          //           // 续费提示
-          //           FutureBuilder<bool>(
-          //             future: Future.value(
-          //                 _membershipService.shouldShowRenewalPrompt()),
-          //             builder: (context, snapshot) {
-          //               if (snapshot.data == true) {
-          //                 return Container(
-          //                   margin: EdgeInsets.only(top: 12),
-          //                   padding: EdgeInsets.all(8),
-          //                   decoration: BoxDecoration(
-          //                     color: Colors.orange.withOpacity(0.2),
-          //                     borderRadius: BorderRadius.circular(8),
-          //                     border: Border.all(
-          //                         color: Colors.orange.withOpacity(0.5)),
-          //                   ),
-          //                   child: Row(
-          //                     children: [
-          //                       Icon(
-          //                         Icons.warning,
-          //                         color: Colors.orange.shade200,
-          //                         size: 16,
-          //                       ),
-          //                       SizedBox(width: 8),
-          //                       Expanded(
-          //                         child: Text(
-          //                           '您的会员即将到期，请及时续费以免影响使用',
-          //                           style: TextStyle(
-          //                             color: Colors.orange.shade200,
-          //                             fontSize: 12,
-          //                           ),
-          //                         ),
-          //                       ),
-          //                     ],
-          //                   ),
-          //                 );
-          //               }
-          //               return SizedBox.shrink();
-          //             },
-          //           ),
-          //         ],
-          //       ),
-          //     ),
-          //   ),
-          // ),
-
-          // SizedBox(height: 16),
-          // 主题设置部分
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('主题设置',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  RadioListTile<ThemeMode>(
-                    title: const Text('亮色模式'),
-                    value: ThemeMode.light,
-                    groupValue: themeProvider.themeMode,
-                    onChanged: (ThemeMode? value) {
-                      if (value != null) {
-                        themeProvider.setThemeMode(value);
-                      }
-                    },
-                    activeColor: Colors.lightBlue,
-                  ),
-                  RadioListTile<ThemeMode>(
-                    title: const Text('暗色模式'),
-                    value: ThemeMode.dark,
-                    groupValue: themeProvider.themeMode,
-                    onChanged: (ThemeMode? value) {
-                      if (value != null) {
-                        themeProvider.setThemeMode(value);
-                      }
-                    },
-                    activeColor: Colors.lightBlue,
-                  ),
-                  RadioListTile<ThemeMode>(
-                    title: const Text('跟随系统'),
-                    value: ThemeMode.system,
-                    groupValue: themeProvider.themeMode,
-                    onChanged: (ThemeMode? value) {
-                      if (value != null) {
-                        themeProvider.setThemeMode(value);
-                      }
-                    },
-                    activeColor: Colors.lightBlue,
-                  ),
-                ],
-              ),
-            ),
-          ),
-
+          _buildMemberSection(context),
           SizedBox(height: 16),
-          // 播放设置部分
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('播放设置',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Card(
-                    margin:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: Theme.of(context).dividerColor.withOpacity(0.5),
-                        width: 1,
-                      ),
-                    ),
-                    child: Theme(
-                      data: Theme.of(context)
-                          .copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        collapsedShape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        leading: Icon(
-                          Icons.play_circle_filled,
-                          color: Colors.lightBlue,
-                          size: 26,
-                        ),
-                        title: Text(
-                          '播放器选择',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '选择视频播放引擎',
-                          style: TextStyle(
-                            fontSize: 14,
-                          ),
-                        ),
-                        children: [
-                          FutureBuilder<int>(
-                            future: _settingsService.getUseFfmpegForPlay(),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData) {
-                                return const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(16.0),
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                );
-                              }
-
-                              final currentValue = snapshot.data!;
-                              final options = [
-                                {
-                                  'value': 2,
-                                  'label': '全新MPV(推荐)',
-                                  'icon': Icons.play_circle_outline
-                                },
-                                {
-                                  'value': 0,
-                                  'label': '系统硬解(高码率)',
-                                  'icon': Icons.phone_android
-                                },
-                                {
-                                  'value': 1,
-                                  'label': 'FFmpeg软解',
-                                  'icon': Icons.settings_applications
-                                },
-                                {
-                                  'value': 3,
-                                  'label': '系统播放(仅音频软解)',
-                                  'icon': Icons.mic_external_on_sharp
-                                },
-                                {
-                                  'value': 4,
-                                  'label': '流心视频(HDR)',
-                                  'icon': 'Assets/sweet_video.png'
-                                }
-                              ];
-
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).cardColor,
-                                  borderRadius: BorderRadius.only(
-                                    bottomLeft: Radius.circular(12),
-                                    bottomRight: Radius.circular(12),
-                                  ),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          16, 0, 16, 16),
-                                      child: Row(
-                                        children: [
-                                          currentValue == 4
-                                              ? buildIcon(options.firstWhere(
-                                                      (opt) =>
-                                                          opt['value'] ==
-                                                          currentValue)['icon']
-                                                  as String)
-                                              : Icon(
-                                                  options.firstWhere((opt) =>
-                                                          opt['value'] ==
-                                                          currentValue)['icon']
-                                                      as IconData,
-                                                  color: Colors.lightBlue),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            '当前选择: ${options.firstWhere((opt) => opt['value'] == currentValue)['label']}',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    ...options
-                                        .map((option) => _buildOptionTile(
-                                              context,
-                                              option['value'] as int,
-                                              option['label'] as String,
-                                              option['icon'] as dynamic,
-                                              currentValue,
-                                              (value) {
-                                                if (value != null) {
-                                                  _settingsService
-                                                      .saveUseFfmpegForPlay(
-                                                          value);
-                                                  setState(() {});
-                                                }
-                                              },
-                                            ))
-                                        .toList(),
-                                    SizedBox(height: 4),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.hdr_auto_select_outlined,
-                        color: Colors.lightBlue),
-                    title: Text('使用HDR播放器打开HDR视频'),
-                    subtitle: Text('仅限从视频库中点击时'),
-                    trailing: FutureBuilder<bool>(
-                      future: _settingsService.getHdrForHdr(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: (value) {
-                              _settingsService.saveHdrForHdr(value);
-                              setState(() {});
-                            },
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  // 添加一个ListTile用于选择视频库检测HDR的方式，0为不检测，1为系统，2为ffmpeg
-                  ListTile(
-                    leading: Icon(Icons.hdr_enhanced_select,
-                        color: Colors.lightBlue),
-                    title: Text('视频库检测HDR方式'),
-                    subtitle: Text('使用HDR检测可能导致卡顿'),
-                    trailing: FutureBuilder<int>(
-                      future: _settingsService.getHdrDetect(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return DropdownButton<int>(
-                            value: snapshot.data!,
-                            items: [
-                              DropdownMenuItem<int>(
-                                value: 0,
-                                child: Text('不检测'),
-                              ),
-                              DropdownMenuItem<int>(
-                                value: 1,
-                                child: Text('系统检测'),
-                              ),
-                              DropdownMenuItem<int>(
-                                value: 2,
-                                child: Text('FFmpeg检测'),
-                              ),
-                            ],
-                            onChanged: (int? value) {
-                              if (value != null) {
-                                _settingsService.saveHdrDetect(value);
-                                setState(() {});
-                              }
-                            },
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.list, color: Colors.lightBlue),
-                    title: Text('默认列表模式'),
-                    subtitle: Text('启动时视频库和音频库为列表模式'),
-                    trailing: FutureBuilder<bool>(
-                      future: _settingsService.getDefaultListmode(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: (value) {
-                              _settingsService.saveDefaultListmode(value);
-                              setState(() {});
-                            },
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.playlist_play, color: Colors.lightBlue),
-                    title: Text('启用库内同级文件夹播放列表导入'),
-                    subtitle: Text('文件过多时可能造成卡顿'),
-                    trailing: FutureBuilder<bool>(
-                      future: _settingsService.getUsePlaylist(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: (value) {
-                              _settingsService.saveUsePlaylist(value);
-                              setState(() {});
-                            },
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.fullscreen, color: Colors.lightBlue),
-                    title: Text('在播放时自动全屏'),
-                    trailing: FutureBuilder<bool>(
-                      future: _settingsService.getAutoFullscreenBeginPlay(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: (value) {
-                              _settingsService
-                                  .saveAutoFullscreenBeginPlay(value);
-                              setState(() {});
-                            },
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.backup_table_rounded,
-                        color: Colors.lightBlue),
-                    title: Text('默认后台播放'),
-                    trailing: FutureBuilder<bool>(
-                      future: _backgroundPlayFuture,
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: _updateBackgroundPlay,
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                      leading: Icon(Icons.loop, color: Colors.lightBlue),
-                      title: Text('使用上次播放位置'),
-                      subtitle: Text('视频播放器在播放时自动从上次播放位置续播'),
-                      trailing: FutureBuilder<bool>(
-                          future: _settingsService.getUseSeekToLatest(),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasData) {
-                              return Switch(
-                                value: snapshot.data!,
-                                onChanged: (value) {
-                                  _settingsService.saveUseSeekToLatest(value);
-                                  setState(() {});
-                                },
-                                activeColor: Colors.lightBlue,
-                              );
-                            } else {
-                              return const CircularProgressIndicator();
-                            }
-                          }))
-                ],
-              ),
-            ),
-          ),
+          _buildThemeSection(context),
           SizedBox(height: 16),
-          // 字幕设置部分
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('字幕设置(非MPV)',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  ListTile(
-                    leading: Icon(Icons.text_fields, color: Colors.lightBlue),
-                    title: Text('字幕字体大小'),
-                    subtitle: Text('ASS字幕为比例调整'),
-                    trailing: DropdownButton<int>(
-                      value: _subtitleFontSize.toInt(),
-                      items: List.generate(30, (index) {
-                        return DropdownMenuItem<int>(
-                          value: 18 + 3 * index,
-                          child: Text('${18 + 3 * index}'),
-                        );
-                      }),
-                      onChanged: (int? value) {
-                        if (value != null) {
-                          setState(() {
-                            _subtitleFontSize = value * 1.0;
-                          });
-                          _settingsService
-                              .saveSubtitleFontSize(value.toDouble());
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.subtitles, color: Colors.lightBlue),
-                    title: Text('自动尝试加载内挂和同级外挂字幕'),
-                    subtitle: Text('打开视频闪退可尝试关闭此项'),
-                    trailing: FutureBuilder<bool>(
-                      future: _settingsService.getAutoLoadSubtitle(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: (value) {
-                              _settingsService.saveAutoLoadSubtitle(value);
-                              setState(() {});
-                            },
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  FutureBuilder<bool>(
-                    future: _settingsService.getAutoLoadSubtitle(),
-                    builder: (context, snapshot) {
-                      if (snapshot.hasData && snapshot.data!) {
-                        return ListTile(
-                          leading: Icon(Icons.subtitles_outlined,
-                              color: Colors.lightBlue),
-                          title: Text('自动提取字幕副轨道数量'),
-                          subtitle: Text('提取副轨道可能导致闪退和卡顿'),
-                          trailing: FutureBuilder<int>(
-                            future: _settingsService.getSubtitleMany(),
-                            builder: (context, subtitleManySnapshot) {
-                              if (subtitleManySnapshot.hasData) {
-                                final value = subtitleManySnapshot.data!;
-                                return DropdownButton<int>(
-                                  value: value,
-                                  onChanged: (newValue) {
-                                    if (newValue != null) {
-                                      _settingsService
-                                          .saveSubtitleMany(newValue);
-                                      setState(() {});
-                                    }
-                                  },
-                                  items: [
-                                    DropdownMenuItem<int>(
-                                      value: 0,
-                                      child: Text('不提取'),
-                                    ),
-                                    DropdownMenuItem<int>(
-                                      value: 1,
-                                      child: Text('1个'),
-                                    ),
-                                    DropdownMenuItem<int>(
-                                      value: 2,
-                                      child: Text('2个'),
-                                    ),
-                                    DropdownMenuItem<int>(
-                                      value: 3,
-                                      child: Text('3个'),
-                                    ),
-                                    DropdownMenuItem<int>(
-                                      value: -1,
-                                      child: Text('不限制'),
-                                    ),
-                                  ],
-                                );
-                              } else {
-                                return const CircularProgressIndicator();
-                              }
-                            },
-                          ),
-                        );
-                      } else {
-                        return Container(); // Return empty container when auto load subtitle is false
-                      }
-                    },
-                  ),
-                  ListTile(
-                    leading:
-                        Icon(Icons.subtitles_outlined, color: Colors.lightBlue),
-                    title: Text('库内抽取ASS字幕'),
-                    subtitle: Text('不选中则抽取SRT文本字幕'),
-                    trailing: FutureBuilder<bool>(
-                      future: _settingsService.getExtractAssSubtitle(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Switch(
-                            value: snapshot.data!,
-                            onChanged: (value) {
-                              _settingsService.saveExtractAssSubtitle(value);
-                              setState(() {});
-                            },
-                            activeColor: Colors.lightBlue,
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.font_download_outlined,
-                        color: Colors.lightBlue),
-                    title: Text('字幕字体'),
-                    subtitle: FutureBuilder<String>(
-                      future: _settingsService.getSubtitleFont(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return Text(snapshot.data!.isEmpty
-                              ? '系统默认'
-                              : getDisplayFontName(snapshot.data!));
-                        } else {
-                          return const Text('加载中...');
-                        }
-                      },
-                    ),
-                    onTap: () {
-                      _showFontSelectionDialog(context);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildPlayerSection(context),
           SizedBox(height: 16),
-
-          // 清除缓存部分
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('缓存文件管理',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  ListTile(
-                    leading: Icon(Icons.speed, color: Colors.lightBlue),
-                    title: Text('SMB视频流缓冲区大小'),
-                    subtitle: Text('调整SMB流式播放时单次传输的数据量'),
-                    trailing: FutureBuilder<int>(
-                      future: _settingsService.getHttpMaxRangeLength(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          return DropdownButton<int>(
-                            value: snapshot.data!,
-                            items: [
-                              DropdownMenuItem<int>(
-                                value: 0,
-                                child: Text('不限制'),
-                              ),
-                              DropdownMenuItem<int>(
-                                value: 5,
-                                child: Text('5 MB'),
-                              ),
-                              DropdownMenuItem<int>(
-                                value: 10,
-                                child: Text('10 MB (默认)'),
-                              ),
-                              DropdownMenuItem<int>(
-                                value: 20,
-                                child: Text('20 MB'),
-                              ),
-                              DropdownMenuItem<int>(
-                                value: 30,
-                                child: Text('30 MB'),
-                              ),
-                              DropdownMenuItem<int>(
-                                value: 50,
-                                child: Text('50 MB'),
-                              ),
-                            ],
-                            onChanged: (int? value) async {
-                              if (value != null) {
-                                await _settingsService.saveHttpMaxRangeLength(value);
-                                HttpServiceSettings.setMaxRangeLengthMB(value);
-                                setState(() {});
-                              }
-                            },
-                          );
-                        } else {
-                          return const CircularProgressIndicator();
-                        }
-                      },
-                    ),
-                  ),
-                  ListTile(
-                      leading: Icon(Icons.display_settings_rounded,
-                          color: Colors.lightBlue),
-                      title: Text('禁用视频库缩略图和时长获取'),
-                      subtitle: Text('HDR获取也会禁用以临时缓解闪退'),
-                      trailing: FutureBuilder<bool>(
-                          future: _settingsService.getDisableThumbnail(),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasData) {
-                              return Switch(
-                                value: snapshot.data!,
-                                onChanged: (value) {
-                                  _settingsService.saveDisableThumbnail(value);
-                                  setState(() {});
-                                },
-                                activeColor: Colors.lightBlue,
-                              );
-                            } else {
-                              return const CircularProgressIndicator();
-                            }
-                          })),
-                  ListTile(
-                      leading:
-                          Icon(Icons.download_rounded, color: Colors.lightBlue),
-                      title: Text('使用应用沙箱存储视频缩略图'),
-                      subtitle: Text('之后你可以自行删除下载文件夹内的缩略图'),
-                      trailing: FutureBuilder<bool>(
-                          future: _settingsService.getUseInnerThumbnail(),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasData) {
-                              return Switch(
-                                value: snapshot.data!,
-                                onChanged: (value) {
-                                  _settingsService.saveUseInnerThumbnail(value);
-                                  setState(() {});
-                                },
-                                activeColor: Colors.lightBlue,
-                              );
-                            } else {
-                              return const CircularProgressIndicator();
-                            }
-                          })),
-                  ListTile(
-                    leading: Icon(Icons.delete, color: Colors.red),
-                    title: Text('清除临时文件'),
-                    subtitle: Text('删除临时文件、临时抽取的字幕等'),
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) {
-                          return AlertDialog(
-                            title: Text('清除临时文件'),
-                            content: Text('确定要删除所有临时文件吗？此操作不可恢复！'),
-                            actions: [
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                },
-                                child: Text('取消',
-                                    style: TextStyle(color: Colors.grey)),
-                              ),
-                              TextButton(
-                                onPressed: () async {
-                                  Navigator.pop(context);
-                                  await _settingsService.clearCache();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('临时文件已清除'),
-                                      duration: Duration(seconds: 2),
-                                    ),
-                                  );
-                                },
-                                child: Text('确定',
-                                    style: TextStyle(color: Colors.red)),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // 添加“部分设置重启应用后生效”的说明
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 10),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.amber.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border:
-                  Border.all(color: Colors.amber.withOpacity(0.3), width: 1),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: Colors.amber[800],
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '部分设置重启应用后生效',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.amber[800],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 4),
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 10),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border:
-                  Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: Colors.orange[800],
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '请不要从“最近”选项卡导入文件; AloePlayer的视频库除了链接文件外均为实际媒体文件，请慎重删改并做好备份。',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.orange[800],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
+          _buildSubtitleSection(context),
           SizedBox(height: 16),
-
-          // 关于此应用程序部分（简化版）
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('关于此应用程序',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
-                      IconButton(
-                        icon: Icon(Icons.info_outline, color: Colors.lightBlue),
-                        onPressed: () => _showAboutDialog(context),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Text('AloePlayer', style: TextStyle(fontSize: 16)),
-                  SizedBox(height: 4),
-                  FutureBuilder<String>(
-                    future: SettingsService.getVersionName(),
-                    builder: (context, snapshot) {
-                      final version = snapshot.data ?? '加载中...';
-                      return Text('版本号: $version',
-                          style: TextStyle(fontSize: 14, color: Colors.grey));
-                    },
-                  ),
-                  SizedBox(height: 8),
-                  Wrap(
-                    spacing: 12,
-                    children: [
-                      _buildLinkButton(
-                          context, '官网', 'https://ohos.aloereed.com'),
-                      _buildLinkButton(context, '更新日志',
-                          'https://ohos.aloereed.com/index.php/2025/10/15/aloeplayer-%e6%9b%b4%e6%96%b0%e6%97%a5%e5%bf%97/'),
-                      _buildLinkButton(context, '隐私政策',
-                          'https://aloereed.com/aloeplayer/privacy-statement.html'),
-                      _buildLinkButton(context, '沪ICP备2025110508号-2A',
-                          'https://beian.miit.gov.cn'),
-                      _buildLinkButton(
-                        context,
-                        '支持作者',
-                        'https://afdian.com/a/aloereed', // 替换为您的爱发电链接
-                        icon: Icons.favorite,
-                        color: Colors.redAccent,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildCacheSection(context),
+          SizedBox(height: 16),
+          _buildAboutSection(context),
+          SizedBox(height: 32),
         ],
       ),
     );
   }
-}
 
-// 构建链接按钮
-Widget _buildLinkButton(BuildContext context, String label, String url,
-    {IconData icon = Icons.link, Color? color}) {
-  return InkWell(
-    onTap: () async {
-      await launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication,
-      );
-    },
-    borderRadius: BorderRadius.circular(20),
-    child: Padding(
-      padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  // 会员/个人中心 - 重新设计，更简洁，去商业化
+  Widget _buildMemberSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.dividerColor.withOpacity(0.1)),
+      ),
+      color: isDark ? theme.cardColor : theme.cardColor,
+      child: Column(
         children: [
-          Icon(icon, size: 16, color: color ?? Colors.lightBlue),
-          SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color ?? Colors.lightBlue,
-              fontWeight: FontWeight.w500,
+          // 顶部用户信息区
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(
+              children: [
+                // 头像区域
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                  ),
+                  child: Icon(
+                    Icons.account_circle,
+                    size: 40,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                SizedBox(width: 16),
+                // 信息区域
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_membershipService.isHuaweiLogin) ...[
+                        GestureDetector(
+                          onTap: () => _showNicknameDialog(context),
+                          child: Row(
+                            children: [
+                              Text(
+                                _membershipService.nickname ?? '设置昵称',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              Icon(Icons.edit,
+                                  size: 14, color: theme.disabledColor),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        FutureBuilder<String>(
+                          future: Future.value(_membershipService
+                              .getMembershipStatusDescription()),
+                          builder: (context, snapshot) {
+                            return Text(
+                              snapshot.data ?? '',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: theme.colorScheme.secondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            );
+                          },
+                        ),
+                      ] else ...[
+                        Text(
+                          '未登录',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          '登录以同步订阅状态',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: theme.disabledColor,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // 登录/退出按钮
+                if (!_membershipService.isHuaweiLogin)
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton(
+                        onPressed: _isLoginLoading ? null : _handleHuaweiLogin,
+                        style: ElevatedButton.styleFrom(
+                          elevation: 0,
+                          backgroundColor: theme.colorScheme.error,
+                          foregroundColor: theme.colorScheme.error,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        child: _isLoginLoading
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : Text('使用华为账号登录',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                )),
+                      ),
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: Icon(Icons.logout, color: theme.disabledColor),
+                    onPressed: _handleLogout,
+                    tooltip: '退出登录',
+                  ),
+              ],
             ),
           ),
+
+          if (_membershipService.isHuaweiLogin)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                children: [
+                  Divider(height: 1),
+                  _buildSettingsTile(
+                    context: context,
+                    icon: Icons.workspace_premium_outlined,
+                    title: '会员服务',
+                    subtitle: '查看会员权益与订阅状态',
+                    onTap: () => _showMembershipDetails(context),
+                    trailing: Icon(Icons.chevron_right, color: Colors.grey),
+                  ),
+                  _buildSettingsTile(
+                    context: context,
+                    icon: Icons.restore,
+                    title: '恢复购买',
+                    subtitle: null,
+                    onTap: () => _showRestoreDialog(context),
+                    trailing: Icon(Icons.chevron_right, color: Colors.grey),
+                  ),
+                  _buildSettingsTile(
+                    context: context,
+                    icon: Icons.redeem,
+                    title: '兑换码',
+                    subtitle: '使用兑换码获取会员',
+                    onTap: () => _showRedeemDialog(context),
+                    trailing: Icon(Icons.chevron_right, color: Colors.grey),
+                  ),
+                  // 续费提示
+                  FutureBuilder<bool>(
+                    future: Future.value(
+                        _membershipService.shouldShowRenewalPrompt()),
+                    builder: (context, snapshot) {
+                      if (snapshot.data == true) {
+                        return Container(
+                          margin: EdgeInsets.only(top: 12),
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded,
+                                  size: 16, color: Colors.orange),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '会员即将到期，建议及时续费',
+                                  style: TextStyle(
+                                      color: Colors.orange[800], fontSize: 12),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return SizedBox.shrink();
+                    },
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
-    ),
-  );
+    );
+  }
+
+  Widget _buildThemeSection(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side:
+            BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 16, top: 12, bottom: 8),
+              child: Text('外观',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            RadioListTile<ThemeMode>(
+              title: const Text('亮色模式'),
+              value: ThemeMode.light,
+              groupValue: themeProvider.themeMode,
+              onChanged: (ThemeMode? value) {
+                if (value != null) themeProvider.setThemeMode(value);
+              },
+              activeColor: Colors.lightBlue,
+            ),
+            RadioListTile<ThemeMode>(
+              title: const Text('暗色模式'),
+              value: ThemeMode.dark,
+              groupValue: themeProvider.themeMode,
+              onChanged: (ThemeMode? value) {
+                if (value != null) themeProvider.setThemeMode(value);
+              },
+              activeColor: Colors.lightBlue,
+            ),
+            RadioListTile<ThemeMode>(
+              title: const Text('跟随系统'),
+              value: ThemeMode.system,
+              groupValue: themeProvider.themeMode,
+              onChanged: (ThemeMode? value) {
+                if (value != null) themeProvider.setThemeMode(value);
+              },
+              activeColor: Colors.lightBlue,
+            ),
+            Divider(height: 1, indent: 16, endIndent: 16),
+            SwitchListTile(
+              title: const Text('PC模式'),
+              subtitle: const Text('优化界面适配桌面操作'),
+              value: themeProvider.pcMode,
+              onChanged: (bool value) {
+                themeProvider.setPCMode(value);
+              },
+              activeColor: Colors.lightBlue,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlayerSection(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side:
+            BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 16, top: 12, bottom: 8),
+              child: Text('播放',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            // Player Selection Expansion
+            Theme(
+              data:
+                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                title: Text('播放器引擎', style: TextStyle(fontSize: 15)),
+                subtitle: FutureBuilder<int>(
+                  future: _settingsService.getUseFfmpegForPlay(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return Text('加载中...');
+                    final val = snapshot.data!;
+                    String label = '全新MPV(推荐)';
+                    if (val == 0)
+                      label = '系统硬解(高码率)';
+                    else if (val == 1)
+                      label = 'FFmpeg软解';
+                    else if (val == 3)
+                      label = '系统播放(仅音频软解)';
+                    else if (val == 4) label = '流心视频(HDR)';
+                    return Text(label,
+                        style: TextStyle(fontSize: 12, color: Colors.grey));
+                  },
+                ),
+                leading:
+                    Icon(Icons.play_circle_outline, color: Colors.lightBlue),
+                children: [
+                  FutureBuilder<int>(
+                      future: _settingsService.getUseFfmpegForPlay(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return SizedBox();
+                        final currentValue = snapshot.data!;
+                        final options = [
+                          {
+                            'value': 2,
+                            'label': '全新MPV(推荐)',
+                            'icon': Icons.play_circle_outline
+                          },
+                          {
+                            'value': 0,
+                            'label': '系统硬解(高码率)',
+                            'icon': Icons.phone_android
+                          },
+                          {
+                            'value': 1,
+                            'label': 'FFmpeg软解',
+                            'icon': Icons.settings_applications
+                          },
+                          {
+                            'value': 3,
+                            'label': '系统播放(仅音频软解)',
+                            'icon': Icons.mic_external_on_sharp
+                          },
+                          {
+                            'value': 4,
+                            'label': '流心视频(HDR)',
+                            'icon': 'Assets/sweet_video.png'
+                          }
+                        ];
+                        // Using existing _buildOptionTile helper but need to adapt it or just enhance here
+                        // For simplicity, reusing the logic
+                        return Column(
+                          children: options
+                              .map((opt) => _buildOptionTile(
+                                      context,
+                                      opt['value'] as int,
+                                      opt['label'] as String,
+                                      opt['icon'],
+                                      currentValue, (val) {
+                                    if (val != null) {
+                                      _settingsService
+                                          .saveUseFfmpegForPlay(val);
+                                      setState(() {});
+                                    }
+                                  }))
+                              .toList(),
+                        );
+                      })
+                ],
+              ),
+            ),
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.hdr_auto_select_outlined,
+              title: 'HDR引擎播放',
+              subtitle: '仅限从视频库进入',
+              trailing: _buildSwitchFuture(_settingsService.getHdrForHdr(),
+                  (v) => _settingsService.saveHdrForHdr(v)),
+            ),
+            _buildListTileFuture<int>(
+              context: context,
+              icon: Icons.hdr_enhanced_select,
+              title: 'HDR检测方式',
+              subtitle: '可能导致卡顿',
+              future: _settingsService.getHdrDetect(),
+              builder: (val) => DropdownButton<int>(
+                  value: val,
+                  underline: SizedBox(),
+                  items: [
+                    DropdownMenuItem(value: 0, child: Text('不检测')),
+                    DropdownMenuItem(value: 1, child: Text('系统检测')),
+                    DropdownMenuItem(value: 2, child: Text('FFmpeg')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      _settingsService.saveHdrDetect(v);
+                      setState(() {});
+                    }
+                  }),
+            ),
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.list,
+              title: '默认列表模式', // Simplified title
+              subtitle: null,
+              trailing: _buildSwitchFuture(
+                  _settingsService.getDefaultListmode(),
+                  (v) => _settingsService.saveDefaultListmode(v)),
+            ),
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.playlist_play,
+              title: '同级文件夹连播', // Simplified title
+              subtitle: '大量文件可能卡顿',
+              trailing: _buildSwitchFuture(_settingsService.getUsePlaylist(),
+                  (v) => _settingsService.saveUsePlaylist(v)),
+            ),
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.fullscreen,
+              title: '自动全屏',
+              subtitle: null,
+              trailing: _buildSwitchFuture(
+                  _settingsService.getAutoFullscreenBeginPlay(),
+                  (v) => _settingsService.saveAutoFullscreenBeginPlay(v)),
+            ),
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.backup_table_rounded, // or picture_in_picture
+              title: '后台播放',
+              subtitle: null,
+              trailing: _buildSwitchFuture(_backgroundPlayFuture,
+                  _updateBackgroundPlay), // special handler
+            ),
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.history, // loop
+              title: '记忆播放位置',
+              subtitle: null,
+              trailing: _buildSwitchFuture(
+                  _settingsService.getUseSeekToLatest(),
+                  (v) => _settingsService.saveUseSeekToLatest(v)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubtitleSection(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side:
+            BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 16, top: 12, bottom: 8),
+              child: Text('字幕(非MPV)',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            // Font Size
+            ListTile(
+              leading: Icon(Icons.format_size, color: Colors.lightBlue),
+              title: Text('字体大小'),
+              trailing: DropdownButton<int>(
+                  value: _subtitleFontSize.toInt(),
+                  underline: SizedBox(),
+                  items: List.generate(15, (index) {
+                    // Reduced range for cleaner UI? or keep same
+                    int val = 18 + 2 * index;
+                    return DropdownMenuItem(value: val, child: Text('$val'));
+                  }),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() {
+                        _subtitleFontSize = v * 1.0;
+                      });
+                      _settingsService.saveSubtitleFontSize(v.toDouble());
+                    }
+                  }),
+            ),
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.subtitles,
+              title: '自动加载字幕',
+              subtitle: '尝试内挂及同级字幕',
+              trailing: _buildSwitchFuture(
+                  _settingsService.getAutoLoadSubtitle(),
+                  (v) => _settingsService.saveAutoLoadSubtitle(v)),
+            ),
+            // Conditional subtitle many
+            FutureBuilder<bool>(
+                future: _settingsService.getAutoLoadSubtitle(),
+                builder: (ctx, snap) {
+                  if (snap.hasData && snap.data!) {
+                    return _buildListTileFuture<int>(
+                        context: context,
+                        icon: Icons.layers_outlined,
+                        title: '副轨道提取数',
+                        subtitle: null,
+                        future: _settingsService.getSubtitleMany(),
+                        builder: (val) => DropdownButton<int>(
+                            value: val,
+                            underline: SizedBox(),
+                            items: [
+                              DropdownMenuItem(value: 0, child: Text('不提取')),
+                              DropdownMenuItem(value: 1, child: Text('1个')),
+                              DropdownMenuItem(value: 2, child: Text('2个')),
+                              DropdownMenuItem(value: -1, child: Text('全部')),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) {
+                                _settingsService.saveSubtitleMany(v);
+                                setState(() {});
+                              }
+                            }));
+                  }
+                  return SizedBox();
+                }),
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.border_all,
+              title: '抽取ASS特效字幕',
+              subtitle: '否则仅抽取文本',
+              trailing: _buildSwitchFuture(
+                  _settingsService.getExtractAssSubtitle(),
+                  (v) => _settingsService.saveExtractAssSubtitle(v)),
+            ),
+            // Subtitle Font
+            ListTile(
+              leading:
+                  Icon(Icons.font_download_outlined, color: Colors.lightBlue),
+              title: Text('字幕字体'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FutureBuilder<String>(
+                      future: _settingsService.getSubtitleFont(),
+                      builder: (context, snapshot) {
+                        return Text(
+                            (snapshot.data == null || snapshot.data!.isEmpty)
+                                ? '默认'
+                                : '自定义',
+                            style: TextStyle(color: Colors.grey, fontSize: 13));
+                      }),
+                  Icon(Icons.chevron_right, color: Colors.grey),
+                ],
+              ),
+              onTap: () => _showFontSelectionDialog(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCacheSection(BuildContext context) {
+    return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+              color: Theme.of(context).dividerColor.withOpacity(0.1)),
+        ),
+        child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 16, top: 12, bottom: 8),
+                child: Text('存储与缓存',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+              _buildListTileFuture<int>(
+                  context: context,
+                  icon: Icons.network_check,
+                  title: 'SMB缓冲大小',
+                  subtitle: null,
+                  future: _settingsService.getHttpMaxRangeLength(),
+                  builder: (val) => DropdownButton<int>(
+                      value: val,
+                      underline: SizedBox(),
+                      items: [0, 5, 10, 20, 50]
+                          .map((e) => DropdownMenuItem(
+                              value: e, child: Text(e == 0 ? '不限制' : '$e MB')))
+                          .toList(),
+                      onChanged: (v) async {
+                        if (v != null) {
+                          await _settingsService.saveHttpMaxRangeLength(v);
+                          HttpServiceSettings.setMaxRangeLengthMB(v);
+                          setState(() {});
+                        }
+                      })),
+              _buildSettingsTile(
+                context: context,
+                icon: Icons.image_not_supported_outlined,
+                title: '禁用缩略图',
+                subtitle: '缓解闪退问题',
+                trailing: _buildSwitchFuture(
+                    _settingsService.getDisableThumbnail(),
+                    (v) => _settingsService.saveDisableThumbnail(v)),
+              ),
+              _buildSettingsTile(
+                context: context,
+                icon: Icons.save_alt,
+                title: '沙箱存储缩略图',
+                subtitle: '保存到下载目录',
+                trailing: _buildSwitchFuture(
+                    _settingsService.getUseInnerThumbnail(),
+                    (v) => _settingsService.saveUseInnerThumbnail(v)),
+              ),
+              ListTile(
+                leading: Icon(Icons.delete_outline, color: Colors.red),
+                title: Text('清除临时文件', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: Text('清除临时文件'),
+                        content: Text('确定要删除所有临时文件吗？此操作不可恢复！'),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                            },
+                            child: Text('取消',
+                                style: TextStyle(color: Colors.grey)),
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              Navigator.pop(context);
+                              await _settingsService.clearCache();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('临时文件已清除'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            child:
+                                Text('确定', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
+              )
+            ])));
+  }
+
+  Widget _buildAboutSection(BuildContext context) {
+    return Column(
+      children: [
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+                color: Theme.of(context).dividerColor.withOpacity(0.1)),
+          ),
+          child: ListTile(
+            leading: Icon(Icons.info_outline, color: Colors.lightBlue),
+            title: Text('关于应用'),
+            subtitle: FutureBuilder<String>(
+              future: SettingsService.getVersionName(),
+              builder: (context, snapshot) {
+                return Text('版本: ${snapshot.data ?? ''}');
+              },
+            ),
+            trailing: Icon(Icons.chevron_right, color: Colors.grey),
+            onTap: () => _showAboutDialog(context),
+          ),
+        ),
+        SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            _buildSimpleLink(context, '官网', 'https://www.aloereed.com'),
+            Text('|', style: TextStyle(color: Colors.grey)),
+            _buildSimpleLink(context, '更新日志',
+                'https://www.aloereed.com/index.php/2025/03/18/aloeplayer/'),
+            Text('|', style: TextStyle(color: Colors.grey)),
+            _buildSimpleLink(context, '隐私政策',
+                'https://aloereed.com/aloeplayer/privacy-statement.html'),
+          ],
+        ),
+        SizedBox(height: 8),
+        _buildSimpleLink(
+            context, '沪ICP备2025110508号-2A', 'https://beian.miit.gov.cn',
+            color: Colors.grey, fontSize: 11),
+      ],
+    );
+  }
+
+  // 辅助构建方法
+  Widget _buildSettingsTile({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Widget? trailing,
+    VoidCallback? onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.lightBlue),
+      title: Text(title),
+      subtitle: subtitle != null
+          ? Text(subtitle, style: TextStyle(fontSize: 12))
+          : null,
+      trailing: trailing,
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildSwitchFuture(Future<bool> future, Function(bool) onChanged) {
+    return FutureBuilder<bool>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return Switch(
+            value: snapshot.data!,
+            onChanged: (v) {
+              onChanged(v);
+              setState(() {});
+            },
+            activeColor: Colors.lightBlue,
+          );
+        }
+        return SizedBox(
+            width: 30,
+            height: 30,
+            child: Padding(
+                padding: EdgeInsets.all(8),
+                child: CircularProgressIndicator(strokeWidth: 2)));
+      },
+    );
+  }
+
+  Widget _buildListTileFuture<T>({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required Future<T> future,
+    required Widget Function(T) builder,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.lightBlue),
+      title: Text(title),
+      subtitle: subtitle != null
+          ? Text(subtitle, style: TextStyle(fontSize: 12))
+          : null,
+      trailing: FutureBuilder<T>(
+          future: future,
+          builder: (ctx, snap) {
+            if (snap.hasData) return builder(snap.data!);
+            return SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2));
+          }),
+    );
+  }
+
+  Widget _buildSimpleLink(BuildContext context, String label, String url,
+      {Color? color, double fontSize = 12}) {
+    return InkWell(
+      onTap: () =>
+          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      child: Text(label,
+          style: TextStyle(color: color ?? Colors.blue, fontSize: fontSize)),
+    );
+  }
+
+  Widget _buildOptionTile(BuildContext context, int value, String label,
+      dynamic icon, int groupValue, Function(int?) onChanged) {
+    return RadioListTile<int>(
+      value: value,
+      groupValue: groupValue,
+      onChanged: onChanged,
+      title: Row(
+        children: [
+          if (icon is IconData)
+            Icon(icon, color: Colors.lightBlue)
+          else if (icon is String)
+            buildIcon(icon),
+          SizedBox(width: 8),
+          Text(label),
+        ],
+      ),
+      activeColor: Colors.lightBlue,
+      controlAffinity: ListTileControlAffinity.trailing,
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+    );
+  }
+
+  Widget buildIcon(String path) {
+    return Image.asset(
+      path,
+      width: 24,
+      height: 24,
+      errorBuilder: (context, error, stackTrace) =>
+          Icon(Icons.error, color: Colors.red),
+    );
+  }
 }
 
 // 显示详细信息的高斯模糊对话框
@@ -2979,4 +2729,3 @@ Widget _buildCompactShortcutList(BuildContext context, bool isDarkMode) {
     ),
   );
 }
-

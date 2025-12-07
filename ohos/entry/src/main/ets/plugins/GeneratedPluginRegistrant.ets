@@ -13,6 +13,7 @@ import WakelockPlugin from 'wakelock';
 import AudioServicePlugin from 'audio_service';
 import FlutterPluginMediaInfoPlugin from 'media_info';
 import VideoThumbnailOhosPlugin from 'video_thumbnail_ohos';
+import SignInWithHuaweiPlugin from 'sign_in_with_huawei';
 import FilePickerPlugin from 'file_picker_ohos';
 import ScreenPlugin from 'screen';
 import ImagePickerPlugin from 'image_picker_ohos';
@@ -45,6 +46,7 @@ export class GeneratedPluginRegistrant {
       flutterEngine.getPlugins()?.add(new AudioServicePlugin());
       flutterEngine.getPlugins()?.add(new FlutterPluginMediaInfoPlugin());
       flutterEngine.getPlugins()?.add(new VideoThumbnailOhosPlugin());
+      flutterEngine.getPlugins()?.add(new SignInWithHuaweiPlugin());
       flutterEngine.getPlugins()?.add(new FilePickerPlugin());
       flutterEngine.getPlugins()?.add(new ScreenPlugin());
       flutterEngine.getPlugins()?.add(new ImagePickerPlugin());

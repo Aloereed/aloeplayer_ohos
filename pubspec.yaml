@@ -39,6 +39,8 @@ dependencies:
   uuid: ^3.0.6
   package_info_plus: ^8.1.2
   ffi: any
+  sign_in_with_huawei: ^0.0.3
+  envied: ^0.5.4
 dependency_overrides:
   audio_service:
     git:
@@ -169,6 +171,8 @@ dependency_overrides:
     path: ../media-kit/media_kit_video
 description: A new Flutter project.
 dev_dependencies:
+  envied_generator: ^0.5.4
+  build_runner: any
   flutter_lints: ^3.0.0
   flutter_test:
     sdk: flutter
@@ -176,6 +180,7 @@ environment:
   sdk: '>=3.4.0 <4.0.0'
 flutter:
   assets:
+  - .env
   - Assets/10s_silence.wav
   - Assets/icon.png
   - Assets/sweet_video.png
@@ -184,4 +189,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 3.0.3+80
+version: 3.0.3+129

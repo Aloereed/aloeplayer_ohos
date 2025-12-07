@@ -23,24 +23,24 @@ import 'audio_handler.dart';
 
 // 键盘快捷键枚举
 enum PlayerHotkey {
-  playPause,        // 播放/暂停
-  seekForward,      // 快进5秒
-  seekBackward,     // 快退5秒
-  seekForwardLong,  // 快进30秒
+  playPause, // 播放/暂停
+  seekForward, // 快进5秒
+  seekBackward, // 快退5秒
+  seekForwardLong, // 快进30秒
   seekBackwardLong, // 快退30秒
-  volumeUp,         // 音量增加
-  volumeDown,       // 音量减少
-  toggleMute,       // 静音切换
+  volumeUp, // 音量增加
+  volumeDown, // 音量减少
+  toggleMute, // 静音切换
   toggleFullscreen, // 全屏切换
-  speedUp,          // 加速
-  speedDown,        // 减速
-  speedReset,       // 恢复正常速度
-  nextVideo,        // 下一个视频
-  previousVideo,    // 上一个视频
-  screenshot,       // 截图
-  toggleSubtitle,   // 字幕切换
-  toggleDanmaku,    // 弹幕切换
-  quit,             // 退出
+  speedUp, // 加速
+  speedDown, // 减速
+  speedReset, // 恢复正常速度
+  nextVideo, // 下一个视频
+  previousVideo, // 上一个视频
+  screenshot, // 截图
+  toggleSubtitle, // 字幕切换
+  toggleDanmaku, // 弹幕切换
+  quit, // 退出
 }
 
 // 播放列表排序类型枚举
@@ -317,6 +317,8 @@ class _MPVPlayerState extends State<MPVPlayer>
   Timer? _doubleTapTimer;
   Offset? _lastTapPosition;
   bool _isDoubleTap = false;
+  Timer? _hideTimer;
+  bool _isMouseHovering = false;
 
   // 音量调节
   double _systemVolume = 7.5;
@@ -360,6 +362,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   // 缓冲相关
   bool _isBuffering = false;
+  // removed _isPcModeEnabled per user request to fetch fresh every time
 
   // Audio Service 相关
   MediaItem? _currentMediaItem;
@@ -369,6 +372,40 @@ class _MPVPlayerState extends State<MPVPlayer>
   // methodchannel
   static const MethodChannel _methodChannel1 =
       MethodChannel('samples.flutter.dev/downloadplugin');
+
+  Future<bool> _getIsPcMode() async {
+    try {
+      final context = this.context;
+      if (Platform.isAndroid || Platform.isIOS) return false;
+      bool userEnabled = await _settingsService.getUsePcMode(context);
+      if (!userEnabled) return false;
+      if (!mounted) return false;
+      return MediaQuery.of(context).size.width > 800;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> _pickVideoFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: [
+        'mp4',
+        'mkv',
+        'avi',
+        'mov',
+        'flv',
+        'wmv',
+        'webm',
+        'ts'
+      ],
+    );
+
+    if (result != null) {
+      final file = File(result.files.single.path!);
+      _openMedia(file.path);
+    }
+  }
 
   @override
   void initState() {
@@ -1043,7 +1080,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       // 处理file:// URI
       filePath = convertUriToPath(filePath);
       resolvedPath = await resolveLnkFile(filePath);
-    } else{
+    } else {
       // 本地文件需要解析.lnk
       resolvedPath = await resolveLnkFile(filePath);
     }
@@ -1263,10 +1300,21 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   void _resetHideTimer() {
+    _hideTimer?.cancel();
     _controlsAnimationController.forward();
-    Future.delayed(const Duration(seconds: 3), () {
-      if (player.state.playing && !_showSettings) {
+
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted &&
+          player.state.playing &&
+          !_showSettings &&
+          !_showPlaylist &&
+          !_isMouseHovering) {
         _controlsAnimationController.reverse();
+        if (mounted) {
+          setState(() {
+            _showControls = false;
+          });
+        }
       }
     });
   }
@@ -1279,6 +1327,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         _resetHideTimer();
       } else {
         _controlsAnimationController.reverse();
+        _hideTimer?.cancel();
       }
     });
   }
@@ -1932,6 +1981,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     _speedAdjustTimer?.cancel(); // 清理定时器
     _brightnessSliderTimer?.cancel(); // 清理亮度调节计时器
     _doubleTapTimer?.cancel(); // 清理双击检测定时器
+    _hideTimer?.cancel(); // 清理自动隐藏定时器
     _controlsAnimationController.dispose();
     _fadeAnimationController.dispose();
 
@@ -1970,303 +2020,624 @@ class _MPVPlayerState extends State<MPVPlayer>
       onShortcutPressed: _handleHotkey,
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: GestureDetector(
-          onTapDown: (details) {
-            _toggleControls();
+        body: MouseRegion(
+          onEnter: (_) async {
+            if (await _getIsPcMode()) _isMouseHovering = true;
           },
-        onDoubleTapDown: (details) {
-          final screenWidth = MediaQuery.of(context).size.width;
-          final tapPosition = details.globalPosition;
+          onExit: (_) async {
+            if (await _getIsPcMode()) _isMouseHovering = false;
+          },
+          onHover: (_) async {
+            if (await _getIsPcMode()) _resetHideTimer();
+          },
+          child: GestureDetector(
+            onTapDown: (details) {
+              _toggleControls();
+            },
+            onDoubleTapDown: (details) {
+              final screenWidth = MediaQuery.of(context).size.width;
+              final tapPosition = details.globalPosition;
 
-          // 判断双击位置并执行相应操作
-          if (tapPosition.dx < screenWidth / 4) {
-            // 左侧1/4区域：快退10秒
-            player.seek(player.state.position - const Duration(seconds: 10));
-          } else if (tapPosition.dx > screenWidth * 3 / 4) {
-            // 右侧1/4区域：快进10秒
-            player.seek(player.state.position + const Duration(seconds: 10));
-          } else {
-            // 中间区域：播放/暂停
-            if (player.state.playing) {
-              player.pause();
-            } else {
-              player.play();
-            }
-          }
-        },
-        onLongPressStart: (details) {
-          // 长按开始，默认2倍速
-          setState(() {
-            _isLongPressing = true;
-            _isAdjustingSpeed = false; // 初始状态为未调整
-            _tempSpeed = 2.0;
-            _lastSignificantSpeed = 2.0; // 记录初始速度
-            _longPressStartPosition = details.globalPosition;
-          });
-          player.setRate(_tempSpeed);
-
-          // 取消之前的定时器
-          _speedAdjustTimer?.cancel();
-        },
-        onLongPressMoveUpdate: (details) {
-          // 长按移动，根据水平滑动距离调整速度
-          if (_longPressStartPosition != null) {
-            final delta =
-                details.globalPosition.dx - _longPressStartPosition!.dx;
-            // 向左滑减速到1.0x，向右滑加速到3x
-            // delta范围：-100到100像素对应1.0x到3x
-            final speed = (2.0 + (delta / 100.0) * 0.5).clamp(1.0, 3.0);
-
-            // 检查速度是否有显著变化（变化超过0.1x）
-            final hasSignificantChange =
-                (speed - _lastSignificantSpeed).abs() >= 0.1;
-
-            if (hasSignificantChange) {
+              // 判断双击位置并执行相应操作
+              if (tapPosition.dx < screenWidth / 4) {
+                // 左侧1/4区域：快退10秒
+                player
+                    .seek(player.state.position - const Duration(seconds: 10));
+              } else if (tapPosition.dx > screenWidth * 3 / 4) {
+                // 右侧1/4区域：快进10秒
+                player
+                    .seek(player.state.position + const Duration(seconds: 10));
+              } else {
+                // 中间区域：播放/暂停
+                if (player.state.playing) {
+                  player.pause();
+                } else {
+                  player.play();
+                }
+              }
+            },
+            onLongPressStart: (details) {
+              // 长按开始，默认2倍速
               setState(() {
-                _tempSpeed = speed;
-                _isAdjustingSpeed = true; // 有显著变化时才为true
-                _lastSignificantSpeed = speed; // 更新上次显著速度
+                _isLongPressing = true;
+                _isAdjustingSpeed = false; // 初始状态为未调整
+                _tempSpeed = 2.0;
+                _lastSignificantSpeed = 2.0; // 记录初始速度
+                _longPressStartPosition = details.globalPosition;
               });
               player.setRate(_tempSpeed);
 
               // 取消之前的定时器
               _speedAdjustTimer?.cancel();
+            },
+            onLongPressMoveUpdate: (details) {
+              // 长按移动，根据水平滑动距离调整速度
+              if (_longPressStartPosition != null) {
+                final delta =
+                    details.globalPosition.dx - _longPressStartPosition!.dx;
+                // 向左滑减速到1.0x，向右滑加速到3x
+                // delta范围：-100到100像素对应1.0x到3x
+                final speed = (2.0 + (delta / 100.0) * 0.5).clamp(1.0, 3.0);
 
-              // 启动新的定时器，1秒内没有显著变化则设置为false
-              _speedAdjustTimer = Timer(const Duration(seconds: 1), () {
-                if (mounted) {
+                // 检查速度是否有显著变化（变化超过0.1x）
+                final hasSignificantChange =
+                    (speed - _lastSignificantSpeed).abs() >= 0.1;
+
+                if (hasSignificantChange) {
                   setState(() {
-                    _isAdjustingSpeed = false;
+                    _tempSpeed = speed;
+                    _isAdjustingSpeed = true; // 有显著变化时才为true
+                    _lastSignificantSpeed = speed; // 更新上次显著速度
                   });
+                  player.setRate(_tempSpeed);
+
+                  // 取消之前的定时器
+                  _speedAdjustTimer?.cancel();
+
+                  // 启动新的定时器，1秒内没有显著变化则设置为false
+                  _speedAdjustTimer = Timer(const Duration(seconds: 1), () {
+                    if (mounted) {
+                      setState(() {
+                        _isAdjustingSpeed = false;
+                      });
+                    }
+                  });
+                } else {
+                  // 没有显著变化，只更新速度但不改变_isAdjustingSpeed
+                  setState(() {
+                    _tempSpeed = speed;
+                  });
+                  player.setRate(_tempSpeed);
                 }
-              });
-            } else {
-              // 没有显著变化，只更新速度但不改变_isAdjustingSpeed
+              }
+            },
+            onLongPressEnd: (details) {
+              // 长按结束，恢复原速度
+              _speedAdjustTimer?.cancel(); // 取消定时器
               setState(() {
-                _tempSpeed = speed;
+                _isLongPressing = false;
+                _isAdjustingSpeed = false; // 长按结束时设置为false
+                _longPressStartPosition = null;
               });
-              player.setRate(_tempSpeed);
-            }
-          }
-        },
-        onLongPressEnd: (details) {
-          // 长按结束，恢复原速度
-          _speedAdjustTimer?.cancel(); // 取消定时器
-          setState(() {
-            _isLongPressing = false;
-            _isAdjustingSpeed = false; // 长按结束时设置为false
-            _longPressStartPosition = null;
-          });
-          player.setRate(_playbackSpeed);
-        },
-        // 修改 onHorizontalDragUpdate 和 onHorizontalDragEnd 方法
-        onHorizontalDragStart: (details) {
-          if (!_isLongPressing) {
-            // 记录拖动开始时的播放位置和屏幕位置
-            setState(() {
-              _dragStartPosition = player.state.position;
-              _dragStartOffset = details.globalPosition;
-              _seeking = true;
-            });
-          }
-        },
-        onHorizontalDragUpdate: (details) {
-          if (!_isLongPressing &&
-              _dragStartPosition != null &&
-              _dragStartOffset != null) {
-            // 水平滑动快进/快退
-            // 计算相对于起始位置的总距离
-            final totalDelta = details.globalPosition.dx - _dragStartOffset!.dx;
-
-            // 使用更合理的系数：每100像素约10秒
-            final seekSeconds = (totalDelta * 10 / 100).round();
-            final newPosition =
-                _dragStartPosition! + Duration(seconds: seekSeconds);
-
-            // 确保新位置在有效范围内
-            final clampedPosition = Duration(
-              milliseconds: newPosition.inMilliseconds
-                  .clamp(0, player.state.duration.inMilliseconds),
-            );
-
-            setState(() {
-              _seekPosition = clampedPosition;
-            });
-          }
-        },
-        onHorizontalDragEnd: (details) {
-          if (!_isLongPressing && _seekPosition != null) {
-            player.seek(_seekPosition!);
-            setState(() {
-              _seeking = false;
-              _seekPosition = null;
-              _dragStartPosition = null;
-              _dragStartOffset = null;
-            });
-          } else if (_dragStartPosition != null) {
-            setState(() {
-              _seeking = false;
-              _dragStartPosition = null;
-              _dragStartOffset = null;
-            });
-          }
-        },
-
-        // 垂直滑动相关
-        onVerticalDragStart: (details) {
-          if (!_isLongPressing) {
-            setState(() => _isVerticalDragging = true);
-          }
-        },
-        onVerticalDragUpdate: (details) async {
-          if (!_isLongPressing && _isVerticalDragging) {
-            // 获取滑动的起始位置
-            double screenWidth = MediaQuery.of(context).size.width;
-            double touchX = details.localPosition.dx;
-            // 判断滑动区域
-            if (touchX < screenWidth / 3) {
-              // 左侧 1/3 区域：调整亮度
-              double delta = details.primaryDelta ?? 0;
-              double currentBrightness = (await Screen.brightness) ?? 0.5;
-              if (delta < 0) {
-                // 上滑增加亮度
-                currentBrightness =
-                    (currentBrightness + 0.005).clamp(0.0, 0.99);
-              } else if (delta > 0) {
-                // 下滑减少亮度
-                currentBrightness =
-                    (currentBrightness - 0.005).clamp(0.0, 0.99);
+              player.setRate(_playbackSpeed);
+            },
+            // 修改 onHorizontalDragUpdate 和 onHorizontalDragEnd 方法
+            onHorizontalDragStart: (details) {
+              if (!_isLongPressing) {
+                // 记录拖动开始时的播放位置和屏幕位置
+                setState(() {
+                  _dragStartPosition = player.state.position;
+                  _dragStartOffset = details.globalPosition;
+                  _seeking = true;
+                });
               }
-              // 设置亮度
-              Screen.setBrightness(currentBrightness);
-              // 显示亮度滑块
-              setState(() => _showBrightnessSlider = true);
-              // 重启计时器
-              _brightnessSliderTimer?.start();
-            } else if (touchX > screenWidth * 2 / 3) {
-              // 右侧 1/3 区域：调整音量
-              double delta = details.primaryDelta ?? 0;
-              if (delta < 0) {
-                // 上滑增加音量
-                setSystemVolume(0.005);
-              } else if (delta > 0) {
-                // 下滑减少音量
-                setSystemVolume(-0.005);
+            },
+            onHorizontalDragUpdate: (details) {
+              if (!_isLongPressing &&
+                  _dragStartPosition != null &&
+                  _dragStartOffset != null) {
+                // 水平滑动快进/快退
+                // 计算相对于起始位置的总距离
+                final totalDelta =
+                    details.globalPosition.dx - _dragStartOffset!.dx;
+
+                // 使用更合理的系数：每100像素约10秒
+                final seekSeconds = (totalDelta * 10 / 100).round();
+                final newPosition =
+                    _dragStartPosition! + Duration(seconds: seekSeconds);
+
+                // 确保新位置在有效范围内
+                final clampedPosition = Duration(
+                  milliseconds: newPosition.inMilliseconds
+                      .clamp(0, player.state.duration.inMilliseconds),
+                );
+
+                setState(() {
+                  _seekPosition = clampedPosition;
+                });
               }
-            }
-          }
-        },
-        onVerticalDragEnd: (details) {
-          if (!_isLongPressing) {
-            setState(() => _isVerticalDragging = false);
-          }
-        },
-        child: Stack(
-          children: [
-            // 视频播放器
-            Stack(
+            },
+            onHorizontalDragEnd: (details) {
+              if (!_isLongPressing && _seekPosition != null) {
+                player.seek(_seekPosition!);
+                setState(() {
+                  _seeking = false;
+                  _seekPosition = null;
+                  _dragStartPosition = null;
+                  _dragStartOffset = null;
+                });
+              } else if (_dragStartPosition != null) {
+                setState(() {
+                  _seeking = false;
+                  _dragStartPosition = null;
+                  _dragStartOffset = null;
+                });
+              }
+            },
+
+            // 垂直滑动相关
+            onVerticalDragStart: (details) {
+              if (!_isLongPressing) {
+                setState(() => _isVerticalDragging = true);
+              }
+            },
+            onVerticalDragUpdate: (details) async {
+              if (!_isLongPressing && _isVerticalDragging) {
+                // 获取滑动的起始位置
+                double screenWidth = MediaQuery.of(context).size.width;
+                double touchX = details.localPosition.dx;
+                // 判断滑动区域
+                if (touchX < screenWidth / 3) {
+                  // 左侧 1/3 区域：调整亮度
+                  double delta = details.primaryDelta ?? 0;
+                  double currentBrightness = (await Screen.brightness) ?? 0.5;
+                  if (delta < 0) {
+                    // 上滑增加亮度
+                    currentBrightness =
+                        (currentBrightness + 0.005).clamp(0.0, 0.99);
+                  } else if (delta > 0) {
+                    // 下滑减少亮度
+                    currentBrightness =
+                        (currentBrightness - 0.005).clamp(0.0, 0.99);
+                  }
+                  // 设置亮度
+                  Screen.setBrightness(currentBrightness);
+                  // 显示亮度滑块
+                  setState(() => _showBrightnessSlider = true);
+                  // 重启计时器
+                  _brightnessSliderTimer?.start();
+                } else if (touchX > screenWidth * 2 / 3) {
+                  // 右侧 1/3 区域：调整音量
+                  double delta = details.primaryDelta ?? 0;
+                  if (delta < 0) {
+                    // 上滑增加音量
+                    setSystemVolume(0.005);
+                  } else if (delta > 0) {
+                    // 下滑减少音量
+                    setSystemVolume(-0.005);
+                  }
+                }
+              }
+            },
+            onVerticalDragEnd: (details) {
+              if (!_isLongPressing) {
+                setState(() => _isVerticalDragging = false);
+              }
+            },
+            child: Stack(
               children: [
-                Positioned.fill(
-                  child: Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()
-                      ..scale(_mirror ? -_zoom : _zoom, _zoom),
-                    child: Video(
-                      controller: controller,
-                      controls: NoVideoControls,
-                      pauseUponEnteringBackgroundMode:
-                          !_backgroundPlayEnabled,
+                // 视频播放器
+                Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()
+                          ..scale(_mirror ? -_zoom : _zoom, _zoom),
+                        child: Video(
+                          controller: controller,
+                          controls: NoVideoControls,
+                          pauseUponEnteringBackgroundMode:
+                              !_backgroundPlayEnabled,
+                        ),
+                      ),
                     ),
+                    // 弹幕层
+                    Positioned.fill(
+                      child: DanmakuScreen(
+                        key: _danmuKey,
+                        createdController: (DanmakuController e) {
+                          _danmakuController = e;
+                        },
+                        option: DanmakuOption(
+                          fontSize: _danmakuFontSize,
+                          fontWeight: _danmakuFontWeight,
+                          opacity: _danmakuOpacity,
+                          duration: _danmakuDuration,
+                          showStroke: _danmakuShowStroke,
+                          hideScroll: _danmakuHideScroll,
+                          hideTop: _danmakuHideTop,
+                          hideBottom: _danmakuHideBottom,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // 长按无极调速指示器
+                if (_isLongPressing) _buildSpeedIndicator(),
+
+                // 高斯模糊背景控制层
+                AnimatedBuilder(
+                  animation: _controlsAnimationController,
+                  builder: (context, child) {
+                    return IgnorePointer(
+                      ignoring: _controlsAnimationController.value == 0,
+                      child: Opacity(
+                        opacity: _controlsAnimationController.value,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: Column(
+                    children: [
+                      FutureBuilder<bool>(
+                        future: _getIsPcMode(),
+                        initialData: false,
+                        builder: (context, snapshot) {
+                          return (snapshot.data == true)
+                              ? _buildPcMenuBar()
+                              : _buildTopBar();
+                        },
+                      ),
+                      const Spacer(),
+                      _buildBottomControls(),
+                    ],
                   ),
                 ),
-                // 弹幕层
-                Positioned.fill(
-                  child: DanmakuScreen(
-                    key: _danmuKey,
-                    createdController: (DanmakuController e) {
-                      _danmakuController = e;
-                    },
-                    option: DanmakuOption(
-                      fontSize: _danmakuFontSize,
-                      fontWeight: _danmakuFontWeight,
-                      opacity: _danmakuOpacity,
-                      duration: _danmakuDuration,
-                      showStroke: _danmakuShowStroke,
-                      hideScroll: _danmakuHideScroll,
-                      hideTop: _danmakuHideTop,
-                      hideBottom: _danmakuHideBottom,
+
+                // 快进/快退提示
+                if (_seeking && _seekPosition != null) _buildSeekIndicator(),
+
+                // 缓冲指示器
+                if (_isBuffering) _buildBufferingIndicator(),
+
+                // 设置面板背景遮罩（用于点击关闭）
+                if (_showSettings)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _showSettings = false),
+                      child: Container(color: Colors.transparent),
                     ),
+                  ),
+
+                // 播放列表背景遮罩（用于点击关闭）
+                if (_showPlaylist)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _showPlaylist = false),
+                      child: Container(color: Colors.transparent),
+                    ),
+                  ),
+
+                // 设置面板
+                if (_showSettings) _buildSettingsPanel(),
+
+                // 播放列表
+                if (_showPlaylist) _buildPlaylistPanel(),
+
+                // 亮度滑块
+                if (_showBrightnessSlider) _buildBrightnessSlider(),
+
+                // Offstage包装的VolumeExample组件
+                Offstage(
+                  offstage: _volumeExample == null,
+                  child: SizedBox(
+                    width: 1,
+                    height: 1,
+                    child: _volumeExample!,
                   ),
                 ),
               ],
             ),
-
-            // 长按无极调速指示器
-            if (_isLongPressing) _buildSpeedIndicator(),
-
-            // 高斯模糊背景控制层
-            AnimatedBuilder(
-              animation: _controlsAnimationController,
-              builder: (context, child) {
-                return Opacity(
-                  opacity: _controlsAnimationController.value,
-                  child: child,
-                );
-              },
-              child: Column(
-                children: [
-                  _buildTopBar(),
-                  const Spacer(),
-                  _buildBottomControls(),
-                ],
-              ),
-            ),
-
-            // 快进/快退提示
-            if (_seeking && _seekPosition != null) _buildSeekIndicator(),
-
-            // 缓冲指示器
-            if (_isBuffering) _buildBufferingIndicator(),
-
-            // 设置面板背景遮罩（用于点击关闭）
-            if (_showSettings)
-              Positioned.fill(
-                child: GestureDetector(
-                  onTap: () => setState(() => _showSettings = false),
-                  child: Container(color: Colors.transparent),
-                ),
-              ),
-
-            // 播放列表背景遮罩（用于点击关闭）
-            if (_showPlaylist)
-              Positioned.fill(
-                child: GestureDetector(
-                  onTap: () => setState(() => _showPlaylist = false),
-                  child: Container(color: Colors.transparent),
-                ),
-              ),
-
-            // 设置面板
-            if (_showSettings) _buildSettingsPanel(),
-
-            // 播放列表
-            if (_showPlaylist) _buildPlaylistPanel(),
-
-            // 亮度滑块
-            if (_showBrightnessSlider) _buildBrightnessSlider(),
-
-            // Offstage包装的VolumeExample组件
-            Offstage(
-              offstage: _volumeExample == null,
-              child: SizedBox(
-                width: 1,
-                height: 1,
-                child: _volumeExample!,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildMenuButton(String title, List<PopupMenuEntry<dynamic>> items) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        popupMenuTheme: PopupMenuThemeData(
+          color: Colors.grey[900],
+          textStyle: const TextStyle(color: Colors.white),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      child: PopupMenuButton(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Text(title,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16)),
+        ),
+        itemBuilder: (context) => items,
+        offset: const Offset(0, 40),
+      ),
+    );
+  }
+
+  Widget _buildPcMenuBar() {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        // height: 56, // remove fixed height
+
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withOpacity(0.9), // 更深的背景
+              Colors.black.withOpacity(0.5),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          // Ensure it doesn't overlap status bar
+          bottom: false,
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+                tooltip: '返回',
+              ),
+              // FILE
+              _buildMenuButton(
+                '文件',
+                [
+                  PopupMenuItem(
+                    child: ListTile(
+                      leading: const Icon(Icons.file_open, color: Colors.white),
+                      title: const Text('打开文件',
+                          style: TextStyle(color: Colors.white)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _pickVideoFile();
+                      },
+                    ),
+                  ),
+                  PopupMenuItem(
+                    child: ListTile(
+                      leading:
+                          const Icon(Icons.exit_to_app, color: Colors.white),
+                      title: const Text('退出',
+                          style: TextStyle(color: Colors.white)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              // PLAYBACK
+              _buildMenuButton('播放', [
+                PopupMenuItem(
+                  child: ListTile(
+                    leading: Icon(
+                        player.state.playing ? Icons.pause : Icons.play_arrow,
+                        color: Colors.white),
+                    title: Text(player.state.playing ? '暂停' : '播放',
+                        style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (player.state.playing)
+                        player.pause();
+                      else
+                        player.play();
+                    },
+                  ),
+                ),
+                PopupMenuItem(
+                  child: ListTile(
+                    leading: const Icon(Icons.stop, color: Colors.white),
+                    title:
+                        const Text('停止', style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      player.pause();
+                      player.seek(Duration.zero);
+                    },
+                  ),
+                ),
+                PopupMenuItem(
+                  child: ListTile(
+                    leading: const Icon(Icons.speed, color: Colors.white),
+                    title: Text('播放速度 (${_playbackSpeed}x)',
+                        style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      // 循环切换速度: 0.5 -> 1.0 -> 1.5 -> 2.0 -> 3.0 -> 0.5
+                      double newSpeed;
+                      if (_playbackSpeed == 0.5)
+                        newSpeed = 1.0;
+                      else if (_playbackSpeed == 1.0)
+                        newSpeed = 1.25;
+                      else if (_playbackSpeed == 1.25)
+                        newSpeed = 1.5;
+                      else if (_playbackSpeed == 1.5)
+                        newSpeed = 2.0;
+                      else if (_playbackSpeed == 2.0)
+                        newSpeed = 3.0;
+                      else
+                        newSpeed = 0.5;
+
+                      setState(() => _playbackSpeed = newSpeed);
+                      player.setRate(newSpeed);
+                      _showSpeedToast();
+                    },
+                  ),
+                ),
+                PopupMenuItem(
+                  child: ListTile(
+                    leading: const Icon(Icons.loop, color: Colors.white),
+                    title: Text(
+                        _loopMode == PlaylistMode.none
+                            ? '循环模式 (关闭)'
+                            : _loopMode == PlaylistMode.single
+                                ? '循环模式 (单曲)'
+                                : '循环模式 (列表)',
+                        style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      // Toggle mode
+                      PlaylistMode newMode;
+                      if (_loopMode == PlaylistMode.none)
+                        newMode = PlaylistMode.single;
+                      else if (_loopMode == PlaylistMode.single)
+                        newMode = PlaylistMode.loop;
+                      else
+                        newMode = PlaylistMode.none;
+
+                      setState(() => _loopMode = newMode);
+                      player.setPlaylistMode(newMode);
+                    },
+                  ),
+                ),
+              ]),
+              // VIDEO
+              _buildMenuButton('视频', [
+                PopupMenuItem(
+                  child: ListTile(
+                    leading: Icon(
+                        _isFullScreen
+                            ? Icons.fullscreen_exit
+                            : Icons.fullscreen,
+                        color: Colors.white),
+                    title: Text(_isFullScreen ? '退出全屏' : '全屏',
+                        style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _toggleFullScreen();
+                    },
+                  ),
+                ),
+                PopupMenuItem(
+                  child: ListTile(
+                    // Toggle Mirror
+                    leading: const Icon(Icons.flip, color: Colors.white),
+                    title: Text('镜像 ${_mirror ? "(开)" : "(关)"}',
+                        style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _mirror = !_mirror);
+                    },
+                  ),
+                ),
+                PopupMenuItem(
+                  child: ListTile(
+                    leading: const Icon(Icons.camera_alt, color: Colors.white),
+                    title:
+                        const Text('截图', style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _takeScreenshot();
+                    },
+                  ),
+                ),
+              ]),
+              // AUDIO
+              _buildMenuButton('音频', [
+                PopupMenuItem(
+                  child: ListTile(
+                    leading: const Icon(Icons.audiotrack, color: Colors.white),
+                    title: const Text('选择音轨',
+                        style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showAudioTrackDialog();
+                    },
+                  ),
+                ),
+                PopupMenuItem(
+                  child: ListTile(
+                    leading: Icon(
+                        player.state.volume == 0
+                            ? Icons.volume_off
+                            : Icons.volume_up,
+                        color: Colors.white),
+                    title:
+                        const Text('静音', style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (player.state.volume > 0) {
+                        _lastVolume = player.state.volume;
+                        player.setVolume(0.0);
+                      } else {
+                        player.setVolume(_lastVolume > 0 ? _lastVolume : 1.0);
+                      }
+                    },
+                  ),
+                ),
+              ]),
+              // SUBTITLE
+              _buildMenuButton('字幕', [
+                PopupMenuItem(
+                  child: ListTile(
+                    leading:
+                        const Icon(Icons.closed_caption, color: Colors.white),
+                    title: const Text('选择字幕',
+                        style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showSubtitleTrackDialog();
+                    },
+                  ),
+                ),
+                PopupMenuItem(
+                  child: ListTile(
+                    leading:
+                        const Icon(Icons.file_present, color: Colors.white),
+                    title: const Text('加载外部字幕',
+                        style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openSubtitleFile();
+                    },
+                  ),
+                ),
+                PopupMenuItem(
+                  child: ListTile(
+                    leading: const Icon(Icons.comment, color: Colors.white),
+                    title: Text('弹幕 ${_danmakuOn ? "(开)" : "(关)"}',
+                        style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _danmakuOn = !_danmakuOn);
+                    },
+                  ),
+                ),
+              ]),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.playlist_play, color: Colors.white),
+                onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
+                tooltip: '播放列表',
+              ),
+              IconButton(
+                // Settings (Advanced)
+                icon: const Icon(Icons.settings, color: Colors.white),
+                onPressed: () => setState(() => _showSettings = !_showSettings),
+                tooltip: '设置',
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
