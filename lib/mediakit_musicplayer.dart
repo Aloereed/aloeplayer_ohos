@@ -4,7 +4,8 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:audio_metadata_reader/audio_metadata_reader.dart' hide AudioMetadata;
+import 'package:audio_metadata_reader/audio_metadata_reader.dart'
+    hide AudioMetadata;
 import 'package:media_kit/media_kit.dart';
 import 'settings.dart';
 import 'mediakit_audio_service.dart';
@@ -50,11 +51,9 @@ class BlurredIconButton extends StatelessWidget {
             icon: Icon(icon, size: iconSize, color: iconColor),
             onPressed: onPressed,
             style: ButtonStyle(
-              backgroundColor:
-                  MaterialStateProperty.all(Colors.transparent),
+              backgroundColor: MaterialStateProperty.all(Colors.transparent),
               shape: MaterialStateProperty.all(const CircleBorder()),
-              overlayColor:
-                  MaterialStateProperty.all(Colors.transparent),
+              overlayColor: MaterialStateProperty.all(Colors.transparent),
               iconColor: MaterialStateProperty.all(iconColor),
             ),
           ),
@@ -70,7 +69,8 @@ class MediaKitMusicPlayerPage extends StatefulWidget {
   MediaKitMusicPlayerPage({super.key, required this.filePath, this.player});
 
   @override
-  State<MediaKitMusicPlayerPage> createState() => _MediaKitMusicPlayerPageState();
+  State<MediaKitMusicPlayerPage> createState() =>
+      _MediaKitMusicPlayerPageState();
 }
 
 class _MediaKitMusicPlayerPageState extends State<MediaKitMusicPlayerPage>
@@ -339,7 +339,15 @@ class _MediaKitMusicPlayerPageState extends State<MediaKitMusicPlayerPage>
     }
 
     String folderPath = path.substring(0, path.lastIndexOf('/'));
-    List<String> excludeExts = ['lrc', 'srt', 'ux_store', 'jpg', 'pdf', 'png', 'bmp'];
+    List<String> excludeExts = [
+      'lrc',
+      'srt',
+      'ux_store',
+      'jpg',
+      'pdf',
+      'png',
+      'bmp'
+    ];
     List<String> includeExts = ['mp3', 'm4a', 'flac', 'ogg'];
 
     if (folderPath.startsWith(
@@ -659,9 +667,7 @@ class _MediaKitMusicPlayerPageState extends State<MediaKitMusicPlayerPage>
     final isTabletLayout = screenWidth > 600;
 
     return Scaffold(
-      body: isTabletLayout
-          ? _buildTabletLayout()
-          : _buildPhoneLayout(),
+      body: isTabletLayout ? _buildTabletLayout() : _buildPhoneLayout(),
     );
   }
 
@@ -1198,12 +1204,13 @@ class _MediaKitMusicPlayerPageState extends State<MediaKitMusicPlayerPage>
               });
             },
           ),
-          _buildOptionButton(
-            icon: Icons.favorite_border_rounded,
-            onPressed: () {
-              // TODO: 添加收藏功能
-            },
-          ),
+          // 收藏功能已隐藏
+          // _buildOptionButton(
+          //   icon: Icons.favorite_border_rounded,
+          //   onPressed: () {
+          //     // TODO: 添加收藏功能
+          //   },
+          // ),
           _buildOptionButton(
             icon: Icons.playlist_play_rounded,
             onPressed: () {
@@ -1378,9 +1385,8 @@ class _MediaKitMusicPlayerPageState extends State<MediaKitMusicPlayerPage>
                 : Colors.transparent,
             border: Border(
               left: BorderSide(
-                color: isCurrentPlaying
-                    ? Colors.greenAccent
-                    : Colors.transparent,
+                color:
+                    isCurrentPlaying ? Colors.greenAccent : Colors.transparent,
                 width: 3,
               ),
             ),
@@ -1759,7 +1765,8 @@ class _MediaKitMusicPlayerPageState extends State<MediaKitMusicPlayerPage>
                     : (_loopMode == MediaKitLoopMode.random
                         ? Icons.shuffle
                         : Icons.stop)),
-            color: _loopMode == MediaKitLoopMode.off ? Colors.white : Colors.blue,
+            color:
+                _loopMode == MediaKitLoopMode.off ? Colors.white : Colors.blue,
             onPressed: () {
               setState(() {
                 switch (_loopMode) {

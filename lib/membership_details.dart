@@ -16,7 +16,7 @@ class MembershipDetailsDialog extends StatefulWidget {
 
 class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
   bool _isLoading = true;
-  List<Product> _products = [];
+  // List<Product> _products = []; // 暂时隐藏产品列表
   Map<String, List<Subscription>> _subscriptions = {};
 
   @override
@@ -28,11 +28,11 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final products = await widget.membershipService.fetchProducts();
+      // final products = await widget.membershipService.fetchProducts(); // 暂时不获取产品列表
       final subs = await widget.membershipService.fetchMySubscriptions();
       if (mounted) {
         setState(() {
-          _products = products;
+          // _products = products; // 暂时不设置产品列表
           _subscriptions = subs;
           _isLoading = false;
         });
@@ -136,111 +136,155 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
                         ),
                       ),
                       SizedBox(height: 20),
-                      Row(
-                        children: [
-                          Text(
-                            '订阅套餐',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+                      // ========== 订阅套餐表格（暂时隐藏，需要时取消注释） ==========
+                      // Row(
+                      //   children: [
+                      //     Text(
+                      //       '订阅套餐',
+                      //       style: TextStyle(
+                      //         fontSize: 16,
+                      //         fontWeight: FontWeight.bold,
+                      //       ),
+                      //     ),
+                      //     SizedBox(width: 8),
+                      //     Text(
+                      //       '(IAP暂未开通)',
+                      //       style: TextStyle(
+                      //         fontSize: 14,
+                      //         color: Colors.orange[700],
+                      //         fontWeight: FontWeight.w500,
+                      //       ),
+                      //     ),
+                      //   ],
+                      // ),
+                      // SizedBox(height: 12),
+                      // Flexible(
+                      //   child: ListView.builder(
+                      //     shrinkWrap: true,
+                      //     itemCount: _products.length,
+                      //     itemBuilder: (context, index) {
+                      //       final product = _products[index];
+                      //       return Padding(
+                      //         padding: EdgeInsets.only(bottom: 12),
+                      //         child: Container(
+                      //           decoration: BoxDecoration(
+                      //             border: Border.all(color: Colors.grey[300]!),
+                      //             borderRadius: BorderRadius.circular(12),
+                      //           ),
+                      //           child: Padding(
+                      //             padding: EdgeInsets.all(16),
+                      //             child: Row(
+                      //               mainAxisAlignment:
+                      //                   MainAxisAlignment.spaceBetween,
+                      //               children: [
+                      //                 Expanded(
+                      //                   child: Column(
+                      //                     crossAxisAlignment:
+                      //                         CrossAxisAlignment.start,
+                      //                     children: [
+                      //                       Text(
+                      //                         product.name,
+                      //                         style: TextStyle(
+                      //                           fontSize: 16,
+                      //                           fontWeight: FontWeight.bold,
+                      //                         ),
+                      //                       ),
+                      //                       SizedBox(height: 4),
+                      //                       Text(
+                      //                         product.description,
+                      //                         style: TextStyle(
+                      //                           fontSize: 12,
+                      //                           color: Colors.grey[600],
+                      //                         ),
+                      //                       ),
+                      //                     ],
+                      //                   ),
+                      //                 ),
+                      //                 SizedBox(width: 12),
+                      //                 Column(
+                      //                   crossAxisAlignment:
+                      //                       CrossAxisAlignment.end,
+                      //                   children: [
+                      //                     Text(
+                      //                       '¥${product.price}',
+                      //                       style: TextStyle(
+                      //                         fontSize: 18,
+                      //                         fontWeight: FontWeight.bold,
+                      //                         color: Theme.of(context)
+                      //                             .primaryColor,
+                      //                       ),
+                      //                     ),
+                      //                     SizedBox(height: 8),
+                      //                     ElevatedButton(
+                      //                       onPressed: null, // Disabled
+                      //                       style: ElevatedButton.styleFrom(
+                      //                         backgroundColor: Colors.grey[300],
+                      //                         foregroundColor: Colors.grey[600],
+                      //                         disabledBackgroundColor:
+                      //                             Colors.grey[300],
+                      //                         disabledForegroundColor:
+                      //                             Colors.grey[600],
+                      //                         padding: EdgeInsets.symmetric(
+                      //                             horizontal: 16, vertical: 8),
+                      //                         minimumSize: Size(0, 32),
+                      //                         shape: RoundedRectangleBorder(
+                      //                           borderRadius:
+                      //                               BorderRadius.circular(16),
+                      //                         ),
+                      //                       ),
+                      //                       child: Text('购买'),
+                      //                     ),
+                      //                   ],
+                      //                 ),
+                      //               ],
+                      //             ),
+                      //           ),
+                      //         ),
+                      //       );
+                      //     },
+                      //   ),
+                      // ),
+                      // ========== 暂无套餐提示（临时显示，启用上面代码时删除此部分） ==========
+                      Container(
+                        width: double.infinity,
+                        padding:
+                            EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.orange.withOpacity(0.3),
+                            width: 2,
                           ),
-                          SizedBox(width: 8),
-                          Text(
-                            '(IAP暂未开通)',
-                            style: TextStyle(
-                              fontSize: 14,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 48,
                               color: Colors.orange[700],
-                              fontWeight: FontWeight.w500,
                             ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 12),
-                      Flexible(
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: _products.length,
-                          itemBuilder: (context, index) {
-                            final product = _products[index];
-                            return Padding(
-                              padding: EdgeInsets.only(bottom: 12),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey[300]!),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              product.name,
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              product.description,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      SizedBox(width: 12),
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            '¥${product.price}',
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color: Theme.of(context)
-                                                  .primaryColor,
-                                            ),
-                                          ),
-                                          SizedBox(height: 8),
-                                          ElevatedButton(
-                                            onPressed: null, // Disabled
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.grey[300],
-                                              foregroundColor: Colors.grey[600],
-                                              disabledBackgroundColor:
-                                                  Colors.grey[300],
-                                              disabledForegroundColor:
-                                                  Colors.grey[600],
-                                              padding: EdgeInsets.symmetric(
-                                                  horizontal: 16, vertical: 8),
-                                              minimumSize: Size(0, 32),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                              ),
-                                            ),
-                                            child: Text('购买'),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                            SizedBox(height: 16),
+                            Text(
+                              '暂无可供购买的套餐',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange[800],
                               ),
-                            );
-                          },
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'IAP功能暂未开通',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
                       ),
                       SizedBox(height: 16),
