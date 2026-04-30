@@ -353,6 +353,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   bool _backgroundPlayEnabled = true;
   bool _useSeekToLatest = false;
   bool _usePlaylist = true;
+  int _mpvHardwareDecoding = 0;
   bool _isInBackground = false;
   AppLifecycleState? _lastLifecycleState;
 
@@ -538,14 +539,41 @@ class _MPVPlayerState extends State<MPVPlayer>
       _backgroundPlayEnabled = await _settingsService.getBackgroundPlay();
       _useSeekToLatest = await _settingsService.getUseSeekToLatest();
       _usePlaylist = await _settingsService.getUsePlaylist();
+      _mpvHardwareDecoding =
+          await _settingsService.getMpvHardwareDecoding();
       print('后台播放设置: $_backgroundPlayEnabled');
       print('使用上次播放位置: $_useSeekToLatest');
       print('启用库内同级文件夹播放列表导入: $_usePlaylist');
+      print('MPV硬件解码模式: $_mpvHardwareDecoding');
     } catch (e) {
       print('初始化设置时发生错误: $e');
       _backgroundPlayEnabled = true; // 默认启用
       _useSeekToLatest = false; // 默认不启用
       _usePlaylist = true; // 默认启用
+      _mpvHardwareDecoding = 0; // 默认关闭
+    }
+  }
+
+  String _mpvHardwareDecodingOption(int mode) {
+    switch (mode) {
+      case 1:
+        return 'auto-safe';
+      case 2:
+        return 'auto';
+      default:
+        return 'no';
+    }
+  }
+
+  Future<void> _applyMpvHardwareDecoding() async {
+    try {
+      _mpvHardwareDecoding =
+          await _settingsService.getMpvHardwareDecoding();
+      final hwdec = _mpvHardwareDecodingOption(_mpvHardwareDecoding);
+      await (player.platform as dynamic).setProperty('hwdec', hwdec);
+      print('MPV硬件解码已设置为: $hwdec');
+    } catch (e) {
+      print('设置MPV硬件解码时发生错误: $e');
     }
   }
 
@@ -1104,6 +1132,8 @@ class _MPVPlayerState extends State<MPVPlayer>
     }
 
     final playlist = Playlist(mediaList, index: _currentIndex);
+
+    await _applyMpvHardwareDecoding();
 
     // 打开播放列表
     await player.open(playlist);

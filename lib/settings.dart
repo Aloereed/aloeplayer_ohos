@@ -515,6 +515,7 @@ class SettingsService {
   static const String _playerSelectionShownKey = 'player_selection_shown';
   static const String _httpMaxRangeLengthKey = 'http_max_range_length';
   static const String _usePcMode = 'use_pc_mode';
+  static const String _mpvHardwareDecodingKey = 'mpv_hardware_decoding';
 
   // 获取应用版本信息
   static Future<PackageInfo> getPackageInfo() async {
@@ -775,6 +776,17 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     // 默认值为 10MB
     return prefs.getInt(_httpMaxRangeLengthKey) ?? 10;
+  }
+
+  Future<void> saveMpvHardwareDecoding(int mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_mpvHardwareDecodingKey, mode);
+  }
+
+  Future<int> getMpvHardwareDecoding() async {
+    final prefs = await SharedPreferences.getInstance();
+    final mode = prefs.getInt(_mpvHardwareDecodingKey) ?? 0;
+    return (mode >= 0 && mode <= 2) ? mode : 0;
   }
 
   Future<void> saveUsePcMode(bool usePcMode) async {
@@ -2027,6 +2039,27 @@ class _SettingsTabState extends State<SettingsTab> {
               subtitle: '仅限从视频库进入',
               trailing: _buildSwitchFuture(_settingsService.getHdrForHdr(),
                   (v) => _settingsService.saveHdrForHdr(v)),
+            ),
+            _buildListTileFuture<int>(
+              context: context,
+              icon: Icons.memory,
+              title: 'MPV硬件解码',
+              subtitle: '对全新MPV生效',
+              future: _settingsService.getMpvHardwareDecoding(),
+              builder: (val) => DropdownButton<int>(
+                  value: val,
+                  underline: SizedBox(),
+                  items: [
+                    DropdownMenuItem(value: 0, child: Text('关闭')),
+                    DropdownMenuItem(value: 1, child: Text('自动(推荐)')),
+                    DropdownMenuItem(value: 2, child: Text('强制自动')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      _settingsService.saveMpvHardwareDecoding(v);
+                      setState(() {});
+                    }
+                  }),
             ),
             _buildListTileFuture<int>(
               context: context,
