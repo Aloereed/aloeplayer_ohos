@@ -2587,6 +2587,44 @@ void _showAboutDialog(BuildContext context) {
                   SizedBox(height: 12),
                   _buildCompactShortcutList(context, isDarkMode),
                   SizedBox(height: 24),
+                  _buildSectionTitle(context, '致谢', isDarkMode),
+                  SizedBox(height: 12),
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4),
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          '感谢 ',
+                          style: TextStyle(
+                            color:
+                                isDarkMode ? Colors.white70 : Colors.black87,
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () => launchUrl(
+                            Uri.parse('https://github.com/dex2oat/mpv'),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          child: Text(
+                            'dex2oat/mpv',
+                            style: TextStyle(
+                              color: Colors.lightBlue,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          ' 带来的硬解 MPV。',
+                          style: TextStyle(
+                            color:
+                                isDarkMode ? Colors.white70 : Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 24),
                   _buildSectionTitle(context, '备案和许可', isDarkMode),
                   SizedBox(height: 12),
                   InkWell(
