@@ -35,6 +35,9 @@ $env:HOS_SDK_HOME = $devEcoSdk
 $env:DEVECO_SDK_HOME = $devEcoSdk
 $env:NODE_HOME = $devEcoNode
 $env:PUB_CACHE = Join-Path $projectRoot ".dart_tool\pub-cache"
+# Skip Git LFS smudge during dependency checkout. Some upstream example assets
+# reference unavailable LFS objects, while they are not needed by this app build.
+$env:GIT_LFS_SKIP_SMUDGE = "1"
 $env:Path = "$FlutterRoot\bin;$devEcoNode;$devEcoOhpm;$devEcoHvigor;$env:Path"
 
 # 函数: 检查是否有代码变更并更新版本号

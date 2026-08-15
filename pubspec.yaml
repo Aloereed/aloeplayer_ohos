@@ -186,9 +186,15 @@ dependency_overrides:
       ref: br_package_info_plus-v8.1.0_ohos
   win32: 5.5.4
   media_kit:
-    path: ../media-kit/media_kit
+    git:
+      path: media_kit
+      ref: feat-ohos
+      url: https://github.com/ErBWs/media-kit.git
   media_kit_video:
-    path: ../media-kit/media_kit_video
+    git:
+      path: media_kit_video
+      ref: feat-ohos
+      url: https://github.com/ErBWs/media-kit.git
 description: A new Flutter project.
 dev_dependencies:
   envied_generator: ^0.5.4
