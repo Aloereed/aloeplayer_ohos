@@ -13,9 +13,7 @@ class ThemeProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   bool _pcMode = false;
 
-  ThemeProvider() {
-    _loadSettings();
-  }
+  ThemeProvider();
 
   ThemeMode get themeMode => _themeMode;
   bool get pcMode => _pcMode;
@@ -36,7 +34,7 @@ class ThemeProvider extends ChangeNotifier {
     await prefs.setBool('pc_mode', enabled);
   }
 
-  Future<void> _loadSettings() async {
+  Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
 
     // Load Theme Mode

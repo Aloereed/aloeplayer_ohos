@@ -5,8 +5,37 @@ param(
 
     [Parameter(Mandatory=$false, Position=1)]
     [ValidateSet("debug", "release")]
-    [string]$Config
+    [string]$Config,
+
+    [string]$FlutterRoot = "E:\source\flutter_327",
+
+    [string]$DevEcoRoot = "E:\Huawei\DevEco_Studio"
 )
+
+$ErrorActionPreference = "Stop"
+$projectRoot = $PSScriptRoot
+$flutterCommand = Join-Path $FlutterRoot "bin\flutter.bat"
+$devEcoSdk = Join-Path $DevEcoRoot "sdk"
+$devEcoNode = Join-Path $DevEcoRoot "tools\node"
+$devEcoOhpm = Join-Path $DevEcoRoot "tools\ohpm\bin"
+$devEcoHvigor = Join-Path $DevEcoRoot "tools\hvigor\bin"
+$preparePluginsScript = Join-Path $projectRoot "tool\prepare_ohos_plugins.ps1"
+
+if (-not (Test-Path -LiteralPath $flutterCommand)) {
+    throw "Flutter executable not found: $flutterCommand"
+}
+if (-not (Test-Path -LiteralPath $preparePluginsScript)) {
+    throw "OHOS plugin preparation script not found: $preparePluginsScript"
+}
+
+# Keep the complete Pub cache on the workspace drive. This avoids Hvigor 6.x
+# rejecting plugins whose generated paths resolve through a cross-drive cache.
+$env:FLUTTER_ROOT = $FlutterRoot
+$env:HOS_SDK_HOME = $devEcoSdk
+$env:DEVECO_SDK_HOME = $devEcoSdk
+$env:NODE_HOME = $devEcoNode
+$env:PUB_CACHE = Join-Path $projectRoot ".dart_tool\pub-cache"
+$env:Path = "$FlutterRoot\bin;$devEcoNode;$devEcoOhpm;$devEcoHvigor;$env:Path"
 
 # 函数: 检查是否有代码变更并更新版本号
 function Update-VersionIfChanged {
@@ -60,7 +89,7 @@ function Update-VersionIfChanged {
     }
 }
 
-# 设置默认配置
+# 设置默认签名配置；实际 Flutter 构建始终为 Release。
 if (-not $Config) {
     if ($BuildType -eq "hap") {
         $Config = "debug"
@@ -69,7 +98,7 @@ if (-not $Config) {
     }
 }
 
-# 检查代码变更并更新版本号
+# 每次构建按项目既定规则自动递增版本号。
 Update-VersionIfChanged
 
 # 定义路径
@@ -93,13 +122,32 @@ Write-Host "使用配置: $Config"
 Write-Host "复制 $buildProfileSource 到 $buildProfilePath"
 Copy-Item $buildProfileSource $buildProfilePath -Force
 
-# 执行构建命令
-$buildCommand = "flutter build $BuildType --release"
-Write-Host "执行构建命令: $buildCommand"
-Write-Host "----------------------------------------"
-
 try {
-    Invoke-Expression $buildCommand
+    Write-Host "Flutter SDK: $FlutterRoot" -ForegroundColor Cyan
+    & $flutterCommand --version
+    if ($LASTEXITCODE -ne 0) {
+        throw "无法执行指定 Flutter SDK"
+    }
+
+    # Phase 1: always resolve dependencies. Iterations can add, remove, or
+    # upgrade packages normally; pubspec.lock remains authoritative.
+    Write-Host "----------------------------------------"
+    Write-Host "阶段 1/3: 解析 Dart 依赖" -ForegroundColor Cyan
+    & $flutterCommand pub get
+    if ($LASTEXITCODE -ne 0) {
+        throw "flutter pub get 失败，退出代码: $LASTEXITCODE"
+    }
+
+    # Flutter 3.41 OHOS rewrites plugin metadata during pub get. Normalize and
+    # localize paths before Hvigor consumes that generated file.
+    Write-Host "阶段 2/3: 准备 OHOS 插件路径" -ForegroundColor Cyan
+    & $preparePluginsScript -ProjectRoot $projectRoot
+
+    # --no-pub is intentional only in this second phase: dependencies were
+    # refreshed immediately above, and another implicit pub get would overwrite
+    # the normalized OHOS metadata.
+    Write-Host "阶段 3/3: Release 构建" -ForegroundColor Cyan
+    & $flutterCommand build $BuildType --release --no-pub
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -eq 0) {

@@ -1,4 +1,6 @@
 dependencies:
+  audio_service: any
+  audio_session: any
   audio_metadata_reader: ^1.1.0
   canvas_danmaku: ^0.2.6
   chewie:
@@ -11,17 +13,22 @@ dependencies:
   flutter_lyric: ^2.0.4+6
   flutter_speed_dial: any
   flutter_subtitle: ^0.0.5
+  fluttertoast: any
   http: null
   lpinyin: any
   lrc: any
   marquee: any
-  flutter_secure_storage: any
+  media_info: any
+  media_kit: any
+  media_kit_video: any
+  flutter_secure_storage: 9.2.4
   google_fonts: any
   ns_danmaku:
     git:
       ref: master
       url: https://github.com/xiaoyaocz/flutter_ns_danmaku.git
   path: null
+  path_provider: any
   provider: ^6.0.5
   rxdart: '>=0.26.0 <0.29.0'
   simple_gesture_detector: ^0.2.1
@@ -36,10 +43,23 @@ dependencies:
   shelf: ^1.4.1
   shelf_router: ^1.1.4
   screenshot: ^3.0.0
+  screen: any
+  share_plus: any
+  shared_preferences: any
+  sqflite: any
+  url_launcher: any
   uuid: ^3.0.6
+  video_player: any
+  video_thumbnail_ohos: any
+  wakelock: any
+  wakelock_plus: any
+  webview_flutter: any
   package_info_plus: ^8.1.2
   ffi: any
   sign_in_with_huawei: ^0.0.3
+  file_picker_ohos: any
+  file_selector: any
+  image_picker: any
   envied: ^0.5.4
 dependency_overrides:
   audio_service:
@@ -188,4 +208,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 3.1.0+142
+version: 3.1.0+143

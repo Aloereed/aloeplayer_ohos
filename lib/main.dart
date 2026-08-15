@@ -35,6 +35,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:simple_gesture_detector/simple_gesture_detector.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_ohos/shared_preferences_ohos.dart';
+import 'package:file_selector_ohos/file_selector_ohos.dart';
+import 'package:image_picker_ohos/image_picker_ohos.dart';
+import 'package:sqflite/sqflite.dart' show SqflitePlugin;
+import 'package:url_launcher_ohos/url_launcher_ohos.dart';
+import 'package:webview_flutter_ohos/webview_flutter_ohos.dart';
 import 'package:flutter_subtitle/flutter_subtitle.dart' hide Subtitle;
 import 'package:path/path.dart' as path;
 import 'videolibrary.dart';
@@ -64,17 +70,15 @@ import 'widgets/splash_screen.dart';
 import 'widgets/animated_widgets.dart';
 
 // late MyAudioHandler audioHandler;
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 初始化 MediaKit
-  MediaKit.ensureInitialized();
-
-  // 加载 HTTP 服务配置
-  await HttpServiceSettings.loadSettings();
-
-  // 初始化会员服务
-  await MembershipService().initialize();
+  // Flutter 3.41 OHOS currently omits dartPluginClass entries from the
+  // generated Dart registrant. Register those federated implementations
+  // explicitly before any package resolves its platform singleton.
+  if (Platform.operatingSystem == 'ohos') {
+    _registerOhosDartPlugins();
+  }
 
   // audioHandler = await AudioService.init(
   //   builder: () => MyAudioHandler(),
@@ -186,12 +190,52 @@ void main() async {
     );
   };
 
+  final themeProvider = ThemeProvider();
+  debugPrint('[startup] runApp');
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => ThemeProvider(),
+    ChangeNotifierProvider.value(
+      value: themeProvider,
       child: MyApp(),
     ),
   );
+
+  // 原生插件可能尚未就绪。先让纯 Flutter Splash 完成首帧，再初始化服务。
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    debugPrint('[startup] first frame rendered');
+    unawaited(_initializeAfterFirstFrame(themeProvider));
+  });
+}
+
+void _registerOhosDartPlugins() {
+  SharedPreferencesOhos.registerWith();
+  FileSelectorOhos.registerWith();
+  ImagePickerOhos.registerWith();
+  SqflitePlugin.registerWith();
+  UrlLauncherOhos.registerWith();
+  OhosWebViewPlatform.registerWith();
+  debugPrint('[startup] registered OHOS Dart platform implementations');
+}
+
+Future<void> _initializeAfterFirstFrame(ThemeProvider themeProvider) async {
+  Future<void> runStep(String name, FutureOr<void> Function() action) async {
+    try {
+      debugPrint('[startup] initializing $name');
+      await Future<void>.sync(action).timeout(const Duration(seconds: 8));
+      debugPrint('[startup] initialized $name');
+    } catch (error, stackTrace) {
+      debugPrint('[startup] $name failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  // 每一项独立失败，避免某个插件阻塞其余初始化或首屏。
+  await runStep('theme settings', themeProvider.initialize);
+  await runStep('MediaKit', MediaKit.ensureInitialized);
+  await runStep('Wakelock', () async {
+    await Wakelock.enable();
+  });
+  await runStep('HTTP settings', HttpServiceSettings.loadSettings);
+  await runStep('membership', () => MembershipService().initialize());
 }
 
 class MyApp extends StatefulWidget {
@@ -206,16 +250,23 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _checkFirstLaunch();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_checkFirstLaunch());
+    });
   }
 
   Future<void> _checkFirstLaunch() async {
-    final prefs = await SharedPreferences.getInstance();
-    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
-
-    setState(() {
-      _showOnboarding = !hasSeenOnboarding;
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 8));
+      final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+      if (!mounted) return;
+      setState(() {
+        _showOnboarding = !hasSeenOnboarding;
+      });
+    } catch (error) {
+      debugPrint('[startup] first-launch check failed: $error');
+    }
   }
 
   void _completeSplash() {
@@ -235,7 +286,6 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    Wakelock.enable();
 
     // 构建主界面
     final homeScreen = _showOnboarding
@@ -313,7 +363,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // 圆角设置
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 2,
         shadowColor: Colors.black.withOpacity(0.1),
         shape: RoundedRectangleBorder(
@@ -580,7 +630,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // 对话框主题
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: Colors.white,
         elevation: 8,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -679,7 +729,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // 卡片主题
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: const Color(0xFF1D1D1D),
         elevation: 4,
         shadowColor: Colors.black.withOpacity(0.4),
@@ -947,7 +997,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // 对话框主题
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: const Color(0xFF1D1D1D),
         elevation: 8,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -1015,14 +1065,10 @@ class _MyAppState extends State<MyApp> {
       theme: lightTheme, // 使用自定义的浅蓝色主题
       darkTheme: darkTheme,
       themeMode: themeProvider.themeMode,
-      home: Stack(
-        children: [
-          // 主界面 - 始终存在，在后台预加载
-          homeScreen,
-          // Splash 屏幕 - 覆盖在上面
-          if (_showSplash) SplashScreen(onComplete: _completeSplash),
-        ],
-      ),
+      // Splash 阶段不要创建 HomeScreen；其 initState 会访问多个原生插件。
+      home: _showSplash
+          ? SplashScreen(onComplete: _completeSplash)
+          : homeScreen,
     );
   }
 }
