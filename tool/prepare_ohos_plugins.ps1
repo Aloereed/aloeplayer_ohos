@@ -29,6 +29,65 @@ function Test-IsUnderPath([string]$Candidate, [string]$Parent) {
     )
 }
 
+function Repair-MediaKitVideoSurfaceDispose([string]$PluginRoot) {
+    $videoOutputPath = Join-Path $PluginRoot (
+        'ohos\src\main\ets\com\alexmercerind\media_kit_video\VideoOutput.ets'
+    )
+    if (-not (Test-Path -LiteralPath $videoOutputPath)) {
+        throw "media_kit_video VideoOutput source not found: $videoOutputPath"
+    }
+
+    $content = Get-Content -LiteralPath $videoOutputPath -Raw
+    $doubleRelease = @'
+      this.surfaceProducer.release();
+      this.onSurfaceDestroyed();
+'@
+    $singleRelease = @'
+      // onSurfaceDestroyed notifies mpv before releasing the texture once.
+      this.onSurfaceDestroyed();
+'@
+
+    if ($content.Contains($doubleRelease)) {
+        $content = $content.Replace($doubleRelease, $singleRelease)
+        Set-Content -LiteralPath $videoOutputPath -Value $content -Encoding utf8 -NoNewline
+        Write-Host 'Patched media_kit_video duplicate SurfaceTextureEntry release.' -ForegroundColor DarkCyan
+    }
+}
+
+function Repair-MediaKitNativeDispose([string]$MediaKitVideoRoot) {
+    $mediaKitRoot = Join-Path (Split-Path -Parent $MediaKitVideoRoot) 'media_kit'
+    $nativePlayerPath = Join-Path $mediaKitRoot 'lib\src\player\native\player\real.dart'
+    if (-not (Test-Path -LiteralPath $nativePlayerPath)) {
+        throw "media_kit native player source not found: $nativePlayerPath"
+    }
+
+    $content = Get-Content -LiteralPath $nativePlayerPath -Raw
+    $unsafeDispose = @'
+      Initializer(mpv).dispose(ctx);
+
+      Future.delayed(const Duration(seconds: 5), () {
+        mpv.mpv_terminate_destroy(ctx);
+      });
+'@
+    $safeDispose = @'
+      // Stop libmpv from scheduling new Dart callbacks before disposal. Keep
+      // the NativeCallable alive until mpv is fully terminated so callbacks
+      // already queued on the Dart event loop remain valid.
+      mpv.mpv_set_wakeup_callback(ctx, nullptr, nullptr);
+
+      Future.delayed(const Duration(seconds: 5), () {
+        mpv.mpv_terminate_destroy(ctx);
+        Initializer(mpv).dispose(ctx);
+      });
+'@
+
+    if ($content.Contains($unsafeDispose)) {
+        $content = $content.Replace($unsafeDispose, $safeDispose)
+        Set-Content -LiteralPath $nativePlayerPath -Value $content -Encoding utf8 -NoNewline
+        Write-Host 'Patched media_kit wakeup callback disposal ordering.' -ForegroundColor DarkCyan
+    }
+}
+
 $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
 $ohosPlugins = @($metadata.plugins.ohos)
 
@@ -53,7 +112,7 @@ foreach ($plugin in $ohosPlugins) {
 
     $sourceDrive = [System.IO.Path]::GetPathRoot($sourceRoot)
     $projectDrive = [System.IO.Path]::GetPathRoot($projectPath)
-    $isPubCachePath = $sourceRoot -match '[\\/]\.pub-cache[\\/]'
+    $isPubCachePath = $sourceRoot -match '[\\/]\.?pub-cache[\\/]'
     $isDifferentDrive = -not $sourceDrive.Equals(
         $projectDrive,
         [System.StringComparison]::OrdinalIgnoreCase
@@ -71,8 +130,16 @@ foreach ($plugin in $ohosPlugins) {
         if (Test-Path -LiteralPath $destinationRoot) {
             Remove-Item -LiteralPath $destinationRoot -Recurse -Force
         }
-        New-Item -ItemType Directory -Path $destinationRoot -Force | Out-Null
-        Copy-Item -LiteralPath $sourceOhos -Destination $destinationOhos -Recurse -Force
+        New-Item -ItemType Directory -Path $destinationOhos -Force | Out-Null
+        Get-ChildItem -LiteralPath $sourceOhos -Force |
+            Where-Object { $_.Name -notin @('oh_modules', 'build', '.hvigor') } |
+            ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName -Destination $destinationOhos -Recurse -Force
+            }
+        if ([string]$plugin.name -eq 'media_kit_video') {
+            Repair-MediaKitNativeDispose $sourceRoot
+            Repair-MediaKitVideoSurfaceDispose $destinationRoot
+        }
         $plugin.path = $destinationRoot.TrimEnd('\') + '\'
         Write-Host "Staged OHOS plugin: $($plugin.name)" -ForegroundColor DarkCyan
     } else {

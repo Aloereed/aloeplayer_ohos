@@ -7,6 +7,16 @@ param(
     [string]$DeviceId
 )
 
+$ErrorActionPreference = "Stop"
+$projectRoot = $PSScriptRoot
+$preparePluginsScript = Join-Path $projectRoot "tool\prepare_ohos_plugins.ps1"
+$env:PUB_CACHE = Join-Path $projectRoot ".dart_tool\pub-cache"
+$env:GIT_LFS_SKIP_SMUDGE = "1"
+
+if (-not (Test-Path -LiteralPath $preparePluginsScript)) {
+    throw "OHOS plugin preparation script not found: $preparePluginsScript"
+}
+
 # 函数: 检查是否有代码变更并更新版本号
 function Update-VersionIfChanged {
     # 检查是否在 git 仓库中
@@ -84,14 +94,24 @@ Write-Host "复制 $buildProfileSource 到 $buildProfilePath"
 Copy-Item $buildProfileSource $buildProfilePath -Force
 
 # 执行运行命令
-$runCommand = "flutter run --release -d $DeviceId"
+$runCommand = "flutter run --release --no-pub -d $DeviceId"
 Write-Host "执行运行命令: $runCommand"
 Write-Host "目标设备: $DeviceId"
 Write-Host "----------------------------------------"
 
 try {
     dart run build_runner build --delete-conflicting-outputs
-    Invoke-Expression $runCommand
+    if ($LASTEXITCODE -ne 0) {
+        throw "build_runner 失败，退出代码: $LASTEXITCODE"
+    }
+
+    flutter pub get
+    if ($LASTEXITCODE -ne 0) {
+        throw "flutter pub get 失败，退出代码: $LASTEXITCODE"
+    }
+
+    & $preparePluginsScript -ProjectRoot $projectRoot
+    flutter run --release --no-pub -d $DeviceId
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -eq 0) {
