@@ -1,3 +1,6 @@
+import 'services/mpv_image_enhancement.dart';
+import 'services/player_image_backend.dart';
+import 'widgets/image_enhancement_sheet.dart';
 import 'pages/native_pip_page.dart';
 import 'services/subtitle_matcher.dart';
 import 'services/playback_tools_store.dart';
@@ -266,6 +269,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   late final Player player;
   late final VideoController controller;
+  late final MpvImageEnhancer _imageEnhancer;
   late AnimationController _controlsAnimationController;
   late AnimationController _fadeAnimationController;
 
@@ -475,6 +479,19 @@ class _MPVPlayerState extends State<MPVPlayer>
       ),
     );
     controller = VideoController(player);
+    _imageEnhancer = MpvImageEnhancer(backend: PlayerImageBackend(player, controller));
+    _subscriptions.add(player.stream.videoParams.listen((video) {
+      final rotated = video.rotate == 90 || video.rotate == 270;
+      _imageEnhancer.videoChanged(width: (rotated ? video.dh : video.dw) ?? 0,
+        height: (rotated ? video.dw : video.dh) ?? 0, gamma: video.gamma,
+        format: video.hwPixelformat ?? video.pixelformat);
+    }));
+    _subscriptions.add(player.stream.log.listen((log) {
+      if ((log.level == 'error' || log.level == 'fatal') && RegExp(r'shader|glsl', caseSensitive: false).hasMatch(log.text)) {
+        _imageEnhancer.shaderFailed();
+      }
+    }));
+    _imageEnhancer.initialize();
     _initializeMedia();
 
     // 监听播放状态
@@ -2043,6 +2060,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   @override
   void dispose() {
     _disposing = true;
+    _imageEnhancer.dispose();
     PlaybackSleepTimer.instance.detach(this);
     _flushPosition();
     for (final subscription in _subscriptions) { subscription.cancel(); }
@@ -3056,6 +3074,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                           onChanged: _toggleBackgroundPlay,
                         ),
                         if (Platform.operatingSystem == 'ohos') ListTile(leading: const Icon(Icons.picture_in_picture_alt, color: Colors.white), title: const Text('系统画中画', style: TextStyle(color: Colors.white)), onTap: _openSystemPip),
+                        ListTile(leading: const Icon(Icons.auto_awesome_outlined, color: Colors.white), title: const Text('超分与画质', style: TextStyle(color: Colors.white)), onTap: () => showImageEnhancementSheet(context, _imageEnhancer)),
                         ListTile(leading: const Icon(Icons.tune, color: Colors.white), title: const Text('字幕同步、书签与章节', style: TextStyle(color: Colors.white)), onTap: _showPlaybackTools),
                         ListTile(leading: const Icon(Icons.bedtime_outlined, color: Colors.white), title: const Text('定时停止', style: TextStyle(color: Colors.white)), onTap: () => showSleepTimer(context)),
                         _buildSettingItem(

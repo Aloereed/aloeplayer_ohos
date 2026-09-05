@@ -139,6 +139,7 @@ foreach ($plugin in $ohosPlugins) {
         if ([string]$plugin.name -eq 'media_kit_video') {
             Repair-MediaKitNativeDispose $sourceRoot
             Repair-MediaKitVideoSurfaceDispose $destinationRoot
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ohos_patches\ohos_video_controller.dart') -Destination (Join-Path $sourceRoot 'lib\src\video_controller\ohos_video_controller\real.dart') -Force
         }
         if ([string]$plugin.name -eq 'video_thumbnail_ohos') {
             Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ohos_patches\VideoThumbnailOhosPlugin.ets') -Destination (Join-Path $destinationOhos 'src\main\ets\components\plugin\VideoThumbnailOhosPlugin.ets') -Force
