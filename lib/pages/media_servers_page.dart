@@ -45,16 +45,20 @@ class _MediaServersPageState extends State<MediaServersPage> {
       })),
     ]));
 }
+Future<MediaServerConnection?> showMediaServerLogin(BuildContext context, {MediaServerConnection? existing, String kind = 'Jellyfin'}) =>
+  showDialog<MediaServerConnection>(context: context, builder: (_) => _LoginDialog(existing: existing, kind: kind));
+
 class _LoginDialog extends StatefulWidget {
   final MediaServerConnection? existing;
-  const _LoginDialog({this.existing});
+  final String kind;
+  const _LoginDialog({this.existing, this.kind = 'Jellyfin'});
   @override State<_LoginDialog> createState() => _LoginDialogState();
 }
 class _LoginDialogState extends State<_LoginDialog> {
   late final TextEditingController _url = TextEditingController(text: widget.existing?.url ?? '');
   late final TextEditingController _user = TextEditingController(text: widget.existing?.username ?? '');
   final _password = TextEditingController();
-  late String _kind = widget.existing?.kind ?? 'Jellyfin';
+  late String _kind = widget.existing?.kind ?? widget.kind;
   bool _busy = false;
   String? _error;
   @override void dispose() { _url.dispose(); _user.dispose(); _password.dispose(); super.dispose(); }

@@ -1,3 +1,5 @@
+import '../services/media_server_client.dart';
+import '../widgets/media_source_card.dart';
 import 'media_servers_page.dart';
 import 'catalog_page.dart';
 import 'downloads_page.dart';
@@ -19,8 +21,9 @@ class ServersPage extends StatefulWidget {
 class _ServersPageState extends State<ServersPage> {
   final ServerConfigService _configService = ServerConfigService();
   List<ServerConfig> _servers = [];
+  List<MediaServerConnection> _mediaServers = [];
   bool _isLoading = true;
-  String? _activeConfigId;
+  String? _activeConfigId, _error;
 
   @override
   void initState() {
@@ -30,344 +33,335 @@ class _ServersPageState extends State<ServersPage> {
 
   Future<void> _loadServers() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
       final servers = await _configService.getAllConfigs();
-      final activeId = await _configService.getActiveConfigId();
-      if (!mounted) return;
-      setState(() {
-        _servers = servers;
-        _activeConfigId = activeId;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      _showError('加载服务器配置失败: $e');
+      final media = await MediaServerStore.load();
+      final active = await _configService.getActiveConfigId();
+      if (mounted)
+        setState(() {
+          _servers = servers;
+          _mediaServers = media;
+          _activeConfigId = active;
+        });
+    } catch (_) {
+      if (mounted) setState(() => _error = '暂时无法读取媒体来源，请重试');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _showError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+  void _showError(String text) {
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  void _showSuccess(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
-    );
-  }
-
-  Future<void> _addOrEditServer([ServerConfig? existing]) async {
+  Future<void> _addFileServer(
+      {ServerConfig? existing, ServerType type = ServerType.webdav}) async {
     final result = await showDialog<ServerConfig>(
-      context: context,
-      builder: (context) => _ServerConfigDialog(existing: existing),
-    );
-
-    if (result != null) {
-      try {
-        await _configService.saveConfig(result);
-        _showSuccess(existing == null ? '服务器添加成功' : '服务器更新成功');
-        await _loadServers();
-      } catch (e) {
-        _showError('保存服务器配置失败: $e');
-      }
+        context: context,
+        builder: (_) =>
+            _ServerConfigDialog(existing: existing, initialType: type));
+    if (result == null) return;
+    try {
+      await _configService.saveConfig(result);
+      await _loadServers();
+    } catch (_) {
+      _showError('保存失败，请检查存储权限后重试');
     }
   }
 
-  Future<void> _deleteServer(ServerConfig config) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除服务器 "${config.name}" 吗?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
-        await _configService.deleteConfig(config.id);
-        _showSuccess('服务器已删除');
-        await _loadServers();
-      } catch (e) {
-        _showError('删除服务器失败: $e');
-      }
+  Future<void> _addMediaServer(
+      {MediaServerConnection? existing, String kind = 'Jellyfin'}) async {
+    final result =
+        await showMediaServerLogin(context, existing: existing, kind: kind);
+    if (result == null) return;
+    try {
+      await MediaServerStore.save(result);
+      await _loadServers();
+    } catch (_) {
+      _showError('保存媒体服务器失败，请重试');
     }
   }
 
-  Future<void> _connectToServer(ServerConfig config) async {
-    // 设置为活动配置
-    await _configService.setActiveConfigId(config.id);
-
-    // 导航到文件浏览器
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => BrowserPage(serverConfig: config),
-        ),
-      );
+  Future<void> _remove(String name, Future<void> Function() remove) async {
+    final yes = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+                title: const Text('移除媒体来源？'),
+                content: Text('从 AloePlayer 移除“$name”，服务器上的文件会保留。'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('取消')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('移除'))
+                ]));
+    if (yes != true) return;
+    try {
+      await remove();
+      await _loadServers();
+    } catch (_) {
+      _showError('移除失败，请重试');
     }
   }
 
+  Future<void> _connect(ServerConfig server) async {
+    try {
+      await _configService.setActiveConfigId(server.id);
+      if (!mounted) return;
+      setState(() => _activeConfigId = server.id);
+      await Navigator.push(context,
+          MaterialPageRoute(builder: (_) => BrowserPage(serverConfig: server)));
+    } catch (_) {
+      _showError('无法打开此来源，请检查配置');
+    }
+  }
+
+  Future<void> _chooseSource() async {
+    final kind = await showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        constraints: const BoxConstraints(maxWidth: 620),
+        builder: (ctx) => SafeArea(
+            child: SingleChildScrollView(
+                child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('添加媒体来源',
+                              style: Theme.of(ctx).textTheme.headlineSmall),
+                          const SizedBox(height: 8),
+                          const Text('连接家中的 NAS，或登录自己的影视服务器。'),
+                          const SizedBox(height: 20),
+                          for (final source in _sourceTypes)
+                            ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 6),
+                                leading: Icon(source.icon),
+                                title: Text(source.name),
+                                subtitle: Text(source.description),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => Navigator.pop(ctx, source.name)),
+                        ])))));
+    if (!mounted || kind == null) return;
+    if (kind == 'SMB' || kind == 'WebDAV')
+      await _addFileServer(
+          type: kind == 'SMB' ? ServerType.smb : ServerType.webdav);
+    else
+      await _addMediaServer(kind: kind);
+  }
+
+  static const _sourceTypes = [
+    (name: 'WebDAV', description: 'NAS、网盘与远程文件夹', icon: Icons.cloud_outlined),
+    (name: 'SMB', description: '局域网共享文件夹', icon: Icons.folder_shared_outlined),
+    (
+      name: 'Jellyfin',
+      description: '海报、分类与观看进度',
+      icon: Icons.video_library_outlined
+    ),
+    (name: 'Emby', description: '连接个人影视媒体库', icon: Icons.movie_filter_outlined),
+  ];
+  Widget _quickAction(IconData icon, String title, Widget page) => ActionChip(
+      avatar: Icon(icon, size: 19),
+      label: Text(title),
+      padding: const EdgeInsets.all(8),
+      onPressed: () =>
+          Navigator.push(context, MaterialPageRoute(builder: (_) => page)));
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context), colors = Theme.of(context).colorScheme;
+    final cards = <Widget>[
+      for (final server in _servers)
+        MediaSourceCard(
+            name: server.name,
+            address:
+                '${server.host}${server.initialPath == '/' ? '' : server.initialPath}',
+            protocol: server.type == ServerType.smb ? 'SMB' : 'WebDAV',
+            icon: server.type == ServerType.smb
+                ? Icons.folder_shared_outlined
+                : Icons.cloud_outlined,
+            active: server.id == _activeConfigId,
+            onOpen: () => _connect(server),
+            onEdit: () => _addFileServer(existing: server),
+            onRemove: () => _remove(
+                server.name, () => _configService.deleteConfig(server.id))),
+      for (final server in _mediaServers)
+        MediaSourceCard(
+            name: server.name,
+            address: server.url,
+            protocol: server.kind,
+            icon: Icons.video_library_outlined,
+            onOpen: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => MediaServerBrowser(connection: server))),
+            onEdit: () => _addMediaServer(existing: server),
+            onRemove: () =>
+                _remove(server.name, () => MediaServerStore.remove(server.id))),
+    ];
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('媒体库'),
-        actions: [IconButton(tooltip: 'Jellyfin / Emby', icon: const Icon(Icons.dns), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MediaServersPage()))), IconButton(tooltip: '海报媒体库', icon: const Icon(Icons.movie_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogPage()))), IconButton(tooltip: '继续观看', icon: const Icon(Icons.play_circle_outline), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContinueWatchingPage()))), IconButton(tooltip: '下载任务', icon: const Icon(Icons.download), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage())))],
-        elevation: 0,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _servers.isEmpty
-              ? _buildEmptyState()
-              : _buildServerList(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _addOrEditServer(),
-        icon: const Icon(Icons.add),
-        label: const Text('添加服务器'),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.storage_outlined, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            '还没有添加服务器',
-            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '支持 SMB 和 WebDAV 协议(推荐WebDAV)',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildServerList() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _servers.length,
-      itemBuilder: (context, index) {
-        final server = _servers[index];
-        final isActive = server.id == _activeConfigId;
-
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.only(bottom: 12),
-          child: InkWell(
-            onTap: () => _connectToServer(server),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(title: const Text('媒体库'), actions: [
+        IconButton(
+            tooltip: '刷新媒体来源',
+            onPressed: _isLoading ? null : _loadServers,
+            icon: const Icon(Icons.refresh_rounded))
+      ]),
+      body: RefreshIndicator(
+          onRefresh: _loadServers,
+          child: LayoutBuilder(builder: (context, constraints) {
+            final inset = constraints.maxWidth < 600 ? 16.0 : 32.0;
+            return ListView(
+                padding: EdgeInsets.fromLTRB(inset, 8, inset, 100),
+                physics: const AlwaysScrollableScrollPhysics(),
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: isActive
-                              ? Theme.of(context).primaryColor
-                              : server.type == ServerType.smb
-                                  ? Colors.blue[300]
-                                  : Colors.purple[300],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          server.type == ServerType.smb
-                              ? Icons.folder_shared
-                              : Icons.cloud,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                  Center(
+                      child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1200),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    server.name,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: server.type == ServerType.smb
-                                        ? Colors.blue
-                                        : Colors.purple,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    server.type == ServerType.smb ? 'SMB' : 'WebDAV',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                if (isActive) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(24),
                                     decoration: BoxDecoration(
-                                      color: Theme.of(context).primaryColor,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Text(
-                                      '当前',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              server.type == ServerType.webdav
-                                  ? server.webdavUrl
-                                  : server.host,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == 'edit') {
-                            _addOrEditServer(server);
-                          } else if (value == 'delete') {
-                            _deleteServer(server);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit, size: 20),
-                                SizedBox(width: 8),
-                                Text('编辑'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete, size: 20, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('删除', style: TextStyle(color: Colors.red)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Icon(Icons.person, size: 16, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Text(
-                        server.username,
-                        style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                      ),
-                      const SizedBox(width: 16),
-                      Icon(Icons.folder, size: 16, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          server.initialPath,
-                          style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (server.lastConnected != null) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 4),
-                        Text(
-                          '最后连接: ${_formatDateTime(server.lastConnected!)}',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+                                        color: colors.primaryContainer
+                                            .withValues(alpha: .45),
+                                        borderRadius:
+                                            BorderRadius.circular(24)),
+                                    child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text('你的媒体，汇聚于此',
+                                              style: theme
+                                                  .textTheme.headlineSmall
+                                                  ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w700)),
+                                          const SizedBox(height: 10),
+                                          Text('收藏本地影片，连接远程媒体库，接着上次的进度继续观看。',
+                                              style: theme.textTheme.bodyMedium
+                                                  ?.copyWith(
+                                                      color: colors
+                                                          .onSurfaceVariant)),
+                                          const SizedBox(height: 20),
+                                          Wrap(
+                                              spacing: 10,
+                                              runSpacing: 10,
+                                              children: [
+                                                _quickAction(
+                                                    Icons.play_circle_outline,
+                                                    '继续观看',
+                                                    const ContinueWatchingPage()),
+                                                _quickAction(
+                                                    Icons.movie_outlined,
+                                                    '本地海报库',
+                                                    const CatalogPage()),
+                                                _quickAction(
+                                                    Icons.download_outlined,
+                                                    '下载任务',
+                                                    const DownloadsPage()),
+                                              ]),
+                                        ])),
+                                const SizedBox(height: 28),
+                                Wrap(
+                                    alignment: WrapAlignment.spaceBetween,
+                                    spacing: 16,
+                                    runSpacing: 12,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                          '媒体来源${cards.isEmpty ? '' : ' · ${cards.length}'}',
+                                          style: theme.textTheme.titleLarge
+                                              ?.copyWith(
+                                                  fontWeight: FontWeight.w700)),
+                                      FilledButton.icon(
+                                          onPressed: _chooseSource,
+                                          icon: const Icon(Icons.add),
+                                          label: const Text('添加来源')),
+                                    ]),
+                                const SizedBox(height: 16),
+                                if (_isLoading) const LinearProgressIndicator(),
+                                if (_error != null)
+                                  Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 16),
+                                      child: Text(_error!,
+                                          style:
+                                              TextStyle(color: colors.error))),
+                                if (!_isLoading &&
+                                    _error == null &&
+                                    cards.isEmpty)
+                                  Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 16),
+                                      child: Text('还没有连接媒体来源。选择一种方式开始：',
+                                          style: theme.textTheme.bodyMedium)),
+                                LayoutBuilder(builder: (_, box) {
+                                  final columns = box.maxWidth >= 1000
+                                      ? 3
+                                      : box.maxWidth >= 650
+                                          ? 2
+                                          : 1;
+                                  final width =
+                                      (box.maxWidth - 16 * (columns - 1)) /
+                                          columns;
+                                  return Wrap(
+                                      spacing: 16,
+                                      runSpacing: 16,
+                                      children: [
+                                        for (final card in cards)
+                                          SizedBox(width: width, child: card),
+                                        if (!_isLoading &&
+                                            _error == null &&
+                                            cards.isEmpty)
+                                          for (final source in _sourceTypes)
+                                            SizedBox(
+                                                width: width,
+                                                child: MediaSourceCard(
+                                                    name: '添加 ${source.name}',
+                                                    address: source.description,
+                                                    protocol: source.name,
+                                                    icon: source.icon,
+                                                    onOpen: () {
+                                                      if (source.name ==
+                                                              'SMB' ||
+                                                          source.name ==
+                                                              'WebDAV')
+                                                        _addFileServer(
+                                                            type: source.name ==
+                                                                    'SMB'
+                                                                ? ServerType.smb
+                                                                : ServerType
+                                                                    .webdav);
+                                                      else
+                                                        _addMediaServer(
+                                                            kind: source.name);
+                                                    })),
+                                      ]);
+                                }),
+                                if (cards.isNotEmpty)
+                                  Padding(
+                                      padding: const EdgeInsets.only(top: 20),
+                                      child: Text(
+                                          '支持 WebDAV、SMB、Jellyfin 和 Emby',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                  color: colors
+                                                      .onSurfaceVariant))),
+                              ]))),
+                ]);
+          })),
     );
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return '刚刚';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes}分钟前';
-    } else if (difference.inDays < 1) {
-      return '${difference.inHours}小时前';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}天前';
-    } else {
-      return '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')}';
-    }
   }
 }
 
@@ -375,7 +369,9 @@ class _ServersPageState extends State<ServersPage> {
 class _ServerConfigDialog extends StatefulWidget {
   final ServerConfig? existing;
 
-  const _ServerConfigDialog({this.existing});
+  final ServerType initialType;
+  const _ServerConfigDialog(
+      {this.existing, this.initialType = ServerType.webdav});
 
   @override
   State<_ServerConfigDialog> createState() => _ServerConfigDialogState();
@@ -402,11 +398,11 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
   @override
   void initState() {
     super.initState();
-    _serverType = widget.existing?.type ?? ServerType.smb;
+    _serverType = widget.existing?.type ?? widget.initialType;
     _nameController = TextEditingController(text: widget.existing?.name ?? '');
     _hostController = TextEditingController(text: widget.existing?.host ?? '');
-    _portController = TextEditingController(
-        text: widget.existing?.port?.toString() ?? '');
+    _portController =
+        TextEditingController(text: widget.existing?.port?.toString() ?? '');
     _usernameController =
         TextEditingController(text: widget.existing?.username ?? '');
     _passwordController =
@@ -621,7 +617,8 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
               Card(
                 elevation: 1,
                 child: ExpansionTile(
-                  leading: const Icon(Icons.settings_outlined, color: Colors.blue),
+                  leading:
+                      const Icon(Icons.settings_outlined, color: Colors.blue),
                   title: const Text(
                     'SMB 高级选项',
                     style: TextStyle(fontWeight: FontWeight.w500),
@@ -636,7 +633,8 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
                   },
                   children: [
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       child: Column(
                         children: [
                           SwitchListTile(
@@ -677,7 +675,8 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.info_outline, size: 18, color: Colors.blue),
+                                const Icon(Icons.info_outline,
+                                    size: 18, color: Colors.blue),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(

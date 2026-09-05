@@ -21,3 +21,10 @@
 - 两项页面测试通过：返回最新进度和暂停状态；缺少回调时退出无限加载状态。HAP 编译通过并校验产物时间。
 - 实机重点：本地 MP4 / MKV、网络视频，自动开启、悬浮窗暂停、返回、重复进入；原生 AVPlayer 不支持的编码应报错后返回 mpv。
 - 参考：[官方 PiP API](https://developer.huawei.com/consumer/cn/doc/doccenter-capabilities/api/js-apis-pipwindow)；Surface 生命周期依据本机 SDK xcomponent.d.ts。
+
+## 19 — 统一媒体库来源与响应式首页
+
+- Jellyfin / Emby 移入媒体库主界面，与 SMB / WebDAV 平级显示；统一添加来源选择器，保留各自账户存储格式。
+- 带文字的继续观看、海报库、下载入口；来源卡片按宽度显示 1–3 列，支持编辑、移除、上次使用标记。
+- 空库直接展示四种连接方式，读取失败显示可重试状态，不伪装成没有数据。
+- 320 / 1280 宽度与大字号测试通过，相关静态分析无错误，HAP 编译和时间戳校验通过。
