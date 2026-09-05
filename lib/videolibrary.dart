@@ -1,3 +1,4 @@
+import 'widgets/video_library_tile.dart';
 import 'widgets/local_import_sheet.dart';
 import 'services/disk_thumbnail_cache.dart';
 import 'services/video_thumbnail_loader.dart';
@@ -354,6 +355,12 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 搜索框焦点控制
   final FocusNode _searchFocusNode = FocusNode();
+  final TextEditingController _searchTextController = TextEditingController();
+  final Map<String, int> _fileSizes = {};
+  final Map<String, Future<void>> _permissionRequests = {};
+  final Set<String> _activeShortcutUris = {};
+  int _loadGeneration = 0;
+  String? _libraryError;
   bool _isSearchFocused = false;
 
 // 存储已选中的文件
@@ -418,6 +425,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   @override
   void dispose() {
     _searchFocusNode.dispose();
+    _searchTextController.dispose();
     super.dispose();
   }
 
@@ -653,60 +661,48 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   Future<void> _loadItems() async {
+    final generation = ++_loadGeneration;
     final directory = Directory(_currentPath);
-    List<File> files = [];
-    List<Directory> directories = [];
-
-    disableThumbnail = await _settingsService.getDisableThumbnail();
-
-    if (await directory.exists()) {
-      final items = await directory.list().toList();
-      for (final item in items) {
-        _modifiedTimes[item.path] = (await item.stat()).modified;
-      }
-      for (var item in items) {
-        if (item.path.contains('.aloe-part-')) continue;
-        if (item is File) {
-          String extension = path.extension(item.path).toLowerCase();
-          // 排除 .srt 和 .ass 文件
-          if (extension != '.srt' &&
-              extension != '.ass' &&
-              extension != '.jpg' &&
-              extension != '.png' &&
-              extension != '.jpeg' &&
-              extension != '.gif' &&
-              extension != '.bmp' &&
-              extension != '.aac' &&
-              extension != '.pdf' &&
-              !item.path.contains('.ux_store') &&
-              !item.path.contains('.trashed')) {
-            if (extension == '.lnk') {
-              // 作为string读取lnk文件为uri
-              String uri = await item.readAsString();
-              if (!uri.contains(':')) {
-                uri = "file://docs" + uri;
-                uri = Uri.parse(uri).toString();
-              }
-              _settingsService.activatePersistPermission(uri);
-            }
-            files.add(item);
-          }
-        } else if (item is Directory) {
-          directories.add(item);
+    if (mounted) setState(() { _isLoading = true; _libraryError = null; });
+    try {
+      final files = <File>[];
+      final directories = <Directory>[];
+      final sizes = <String, int>{};
+      final times = <String, DateTime>{};
+      disableThumbnail = await _settingsService.getDisableThumbnail();
+      if (await directory.exists()) {
+        await for (final item in directory.list(followLinks: false)) {
+          if (!mounted || generation != _loadGeneration) return;
+          if (item.path.contains('.aloe-part-') || item.path.contains('.ux_store') || item.path.contains('.trashed')) continue;
+          final stat = await item.stat();
+          sizes[item.path] = stat.size; times[item.path] = stat.modified;
+          if (item is Directory) directories.add(item);
+          if (item is File && !const {'.srt', '.ass', '.jpg', '.png', '.jpeg', '.gif', '.bmp', '.aac', '.pdf'}.contains(path.extension(item.path).toLowerCase())) files.add(item);
         }
       }
+      if (!mounted || generation != _loadGeneration) return;
+      _fileSizes..clear()..addAll(sizes);
+      _modifiedTimes..clear()..addAll(times);
+      _videoFiles = files; _directories = directories; _allItems = [...directories, ...files];
+      _applyFavoritesFilter(); _sortItems(needRefresh: false);
+      await _loadFavoriteStatus();
+    } catch (_) {
+      if (mounted && generation == _loadGeneration) {
+        _libraryError = '暂时无法读取此文件夹，请检查文件权限后刷新';
+        _allItems = []; _filteredItems = [];
+      }
+    } finally {
+      if (mounted && generation == _loadGeneration) setState(() => _isLoading = false);
     }
-    if (!mounted) return;
-    _videoFiles = files;
-    _directories = directories;
-    // _filteredItems = [...directories, ...files]; // 初始化时显示所有文件和文件夹
-    _allItems = [...directories, ...files]; // 保存所有项目
-    setState(() {
-      // 根据筛选条件设置显示的项目
-      _applyFavoritesFilter();
-    });
-    _sortItems(needRefresh: false);
-    await _loadFavoriteStatus();
+  }
+
+  Future<void> _activateShortcut(File file) {
+    if (!file.path.endsWith('.lnk')) return Future.value();
+    return _permissionRequests.putIfAbsent(file.path, () => (() async {
+      final source = (await file.readAsString()).trim();
+      final uri = pathToUri(source);
+      if (!_activeShortcutUris.contains(uri) && await _settingsService.activatePersistPermission(uri)) _activeShortcutUris.add(uri);
+    })().whenComplete(() { _permissionRequests.remove(file.path); }));
   }
 
   // 应用收藏筛选
@@ -1022,6 +1018,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   Future<Uint8List?> _loadVideoThumbnail(File file) async {
     if (disableThumbnail) return null;
     try {
+      await _activateShortcut(file);
       _thumbnailLoader ??= VideoThumbnailLoader(
         disk: _diskThumbnails, memory: _thumbnailCache,
         library: Directory(_videoDirPath),
@@ -1038,6 +1035,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       return false;
     }
     try {
+      await _activateShortcut(file);
       String filePath = file.path;
       if (_hdrCache.containsKey(filePath)) {
         return _hdrCache[filePath] ?? false;
@@ -1117,7 +1115,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     if (file.path.endsWith('.lnk')) {
       // 读取文件内容
       realFilePath = await file.readAsString();
-      _settingsService.activatePersistPermission(pathToUri(realFilePath));
+      await _activateShortcut(file);
     }
     final _platform = const MethodChannel('samples.flutter.dev/ffmpegplugin');
     // 调用方法 getBatteryLevel
@@ -1183,14 +1181,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 获取文件大小
   String _getFileSize(File file) {
-    String filePath = file.path;
-    // 检查file是否是".lnk"文件
-    if (file.path.endsWith('.lnk')) {
-      // 读取文件内容
-      filePath = file.readAsStringSync();
-      _settingsService.activatePersistPermission(pathToUri(filePath));
-    }
-    final sizeInBytes = File(filePath).lengthSync();
+    if (file.path.endsWith('.lnk')) return '快捷方式';
+    final sizeInBytes = _fileSizes[file.path];
+    if (sizeInBytes == null) return '—';
     if (sizeInBytes < 1024) {
       return '$sizeInBytes B';
     } else if (sizeInBytes < 1024 * 1024) {
@@ -1201,7 +1194,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   String _getFileDate(File file) {
-    final fileDate = file.lastModifiedSync();
+    final fileDate = _modifiedTimes[file.path];
+    if (fileDate == null) return '—';
     final now = DateTime.now();
     final difference = now.difference(fileDate);
     if (difference.inDays > 30) {
@@ -1343,899 +1337,63 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final isPcMode = themeProvider.pcMode;
-
-    return WillPopScope(
-        onWillPop: () async {
-          if (_videoDirPath != _currentPath) {
-            _navigateUp();
-            return false;
-          } else {
-            return true;
-          }
-        },
-        child: Scaffold(
-          backgroundColor: Theme.of(context).brightness == Brightness.dark
-              ? Color(0xFF121212)
-              : Color(0xFFF5F5F5),
-          appBar: isPcMode
-              ? null // Hide AppBar in PC mode, use custom Toolbar
-              : AppBar(
-                  elevation: 0,
-                  backgroundColor:
-                      Theme.of(context).brightness == Brightness.dark
-                          ? Color(0xFF121212)
-                          : Color(0xFFF5F5F5),
-                  titleSpacing: 0,
-                  title: AnimatedContainer(
-                    duration: Duration(milliseconds: 300),
-                    width: double.infinity,
-                    height: _isSearchFocused ? 48 : 40, // 焦点状态下增加高度
-                    margin: EdgeInsets.symmetric(
-                      horizontal: _isSearchFocused ? 8 : 16, // 焦点状态下减少边距
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey[800]
-                          : Colors.white,
-                      borderRadius:
-                          BorderRadius.circular(_isSearchFocused ? 24 : 20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black
-                              .withOpacity(_isSearchFocused ? 0.15 : 0.1),
-                          blurRadius: _isSearchFocused ? 8 : 5,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: TextField(
-                        focusNode: _searchFocusNode,
-                        decoration: InputDecoration(
-                          hintText: '搜索视频...',
-                          border: InputBorder.none,
-                          prefixIcon: Icon(
-                            Icons.search,
-                            color:
-                                Theme.of(context).brightness != Brightness.dark
-                                    ? Colors.grey[800]!.withOpacity(0.7)
-                                    : Colors.white.withOpacity(0.7),
-                            size: _isSearchFocused ? 24 : 22,
-                          ),
-                          suffixIcon:
-                              _isSearchFocused && _searchQuery.isNotEmpty
-                                  ? IconButton(
-                                      icon: Icon(
-                                        Icons.clear,
-                                        color: Theme.of(context).brightness !=
-                                                Brightness.dark
-                                            ? Colors.grey[800]!.withOpacity(0.7)
-                                            : Colors.white.withOpacity(0.7),
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _searchQuery = '';
-                                        });
-                                        _filterItems('');
-                                      },
-                                    )
-                                  : null,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                          hintStyle: TextStyle(color: Colors.grey),
-                        ),
-                        style: TextStyle(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white
-                              : Colors.black87,
-                          fontSize: _isSearchFocused ? 16 : 15,
-                        ),
-                        onChanged: (value) {
-                          setState(() {
-                            _searchQuery = value;
-                          });
-                          _filterItems(value);
-                        },
-                      ),
-                    ),
-                  ),
-                  bottom: PreferredSize(
-                    preferredSize: Size.fromHeight(1),
-                    child: Divider(height: 1, color: Colors.transparent),
-                  ),
-                  actions: [
-                    if (_isMultiSelectMode) ...[
-                      IconButton(
-                        icon: Icon(Icons.delete),
-                        tooltip: '删除选中项目',
-                        onPressed: _selectedItems.isEmpty
-                            ? null
-                            : () {
-                                _showDeleteConfirmationDialog();
-                              },
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.close,
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.white
-                                    : Colors.black),
-                        tooltip: '退出多选',
-                        onPressed: () {
-                          setState(() {
-                            _isMultiSelectMode = false;
-                            _selectedItems.clear();
-                          });
-                        },
-                      ),
-                    ] else ...[
-                      if (_searchQuery.isEmpty)
-                        AnimatedSwitcher(
-                          duration: Duration(milliseconds: 300),
-                          child: IconButton(
-                            key: ValueKey<bool>(_isGridView),
-                            icon: Icon(
-                              _isGridView
-                                  ? Icons.list_rounded
-                                  : Icons.grid_view_rounded,
-                              color: Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? Colors.white
-                                  : Colors.black,
-                            ),
-                            tooltip: _isGridView ? "列表视图" : "网格视图",
-                            onPressed: () {
-                              setState(() {
-                                _isGridView = !_isGridView;
-                              });
-                            },
-                          ),
-                        ),
-                      AnimatedSwitcher(
-                        duration: Duration(milliseconds: 300),
-                        child: IconButton(
-                          key: ValueKey<bool>(_showOnlyFavorites),
-                          icon: Icon(
-                            _showOnlyFavorites
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            color: _showOnlyFavorites
-                                ? Colors.red
-                                : Theme.of(context).brightness ==
-                                        Brightness.dark
-                                    ? Colors.white
-                                    : Colors.black,
-                          ),
-                          tooltip: _showOnlyFavorites ? "显示全部" : "只看收藏",
-                          onPressed: () {
-                            setState(() {
-                              _showOnlyFavorites = !_showOnlyFavorites;
-                              _applyFavoritesFilter();
-                            });
-
-                            // 显示切换状态提示
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    _showOnlyFavorites ? '只显示收藏视频' : '显示全部视频'),
-                                behavior: SnackBarBehavior.floating,
-                                width: 160,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      Visibility(
-                        visible: _currentPath != _videoDirPath,
-                        child: IconButton(
-                          icon: Icon(Icons.arrow_upward_rounded,
-                              color: Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? Colors.white
-                                  : Colors.black),
-                          tooltip: "返回上级",
-                          onPressed: _navigateUp,
-                        ),
-                      ),
-                      if (_searchQuery.isEmpty)
-                        IconButton(
-                          tooltip: '添加视频', icon: const Icon(Icons.add_rounded),
-                          onPressed: () => _showAddOptionsDialog(context),
-                        ),
-                      // IconButton(
-                      //   icon: Icon(Icons.refresh_rounded,
-                      //       color: Theme.of(context).brightness == Brightness.dark
-                      //           ? Colors.white
-                      //           : Colors.black),
-                      //   tooltip: "刷新",
-                      //   onPressed: () {
-                      //     // Add loading indicator
-                      //     _loadItems();
-                      //   },
-                      // ),
-                      PopupMenuButton<Map<String, dynamic>>(
-                        tooltip: '排序方式',
-                        icon: Icon(
-                          Icons.sort,
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white
-                              : Colors.black,
-                        ),
-                        elevation: 0, // Remove default shadow
-                        offset: const Offset(
-                            0, 10), // Give it some space from the icon
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        color: Colors
-                            .transparent, // Make default background transparent
-                        onSelected: (Map<String, dynamic> option) {
-                          setState(() {
-                            _currentSortType = option['type'];
-                            _currentSortOrder = option['order'];
-                            _sortItems();
-                          });
-                        },
-                        itemBuilder: (context) => [
-                          // Custom popup menu with glassmorphism effect
-                          PopupMenuItem(
-                            padding: EdgeInsets.zero,
-                            value: null, // This won't be selectable
-                            enabled: false,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(
-                                    sigmaX: 10.0, sigmaY: 10.0),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.black.withOpacity(0.6)
-                                        : Colors.white.withOpacity(0.7),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.white.withOpacity(0.2)
-                                          : Colors.white.withOpacity(0.5),
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 8.0),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // Title
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 16.0,
-                                            vertical: 8.0,
-                                          ),
-                                          child: Text(
-                                            '选择排序方式',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                              color: Theme.of(context)
-                                                          .brightness ==
-                                                      Brightness.dark
-                                                  ? Colors.white
-                                                  : Colors.black87,
-                                            ),
-                                          ),
-                                        ),
-                                        const Divider(height: 1, thickness: 1),
-
-                                        // Menu Items
-                                        _buildSortMenuItem(
-                                          context,
-                                          '原始顺序',
-                                          SortType.none,
-                                          SortOrder.ascending,
-                                        ),
-                                        _buildSortMenuItem(
-                                          context,
-                                          '文件名 (A-Z)',
-                                          SortType.name,
-                                          SortOrder.ascending,
-                                        ),
-                                        _buildSortMenuItem(
-                                          context,
-                                          '文件名 (Z-A)',
-                                          SortType.name,
-                                          SortOrder.descending,
-                                        ),
-                                        _buildSortMenuItem(
-                                          context,
-                                          '最早修改日期在前',
-                                          SortType.modifiedDate,
-                                          SortOrder.ascending,
-                                        ),
-                                        _buildSortMenuItem(
-                                          context,
-                                          '最近修改日期在前',
-                                          SortType.modifiedDate,
-                                          SortOrder.descending,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      IconButton(
-                        icon: Icon(Icons.checklist,
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.white
-                                    : Colors.black),
-                        tooltip: '进入多选模式',
-                        onPressed: () {
-                          setState(() {
-                            _isMultiSelectMode = true;
-                            _selectedItems.clear();
-                          });
-                        },
-                      ),
-                    ],
-                  ],
-                ),
-          body: Column(
-            children: [
-              if (isPcMode) _buildPcToolbar(context),
-              // 筛选模式提示条
-              if (_showOnlyFavorites && !isPcMode)
-                Container(
-                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                  color: Colors.red.withOpacity(0.1),
-                  child: Row(
-                    children: [
-                      Icon(Icons.favorite, size: 18, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text(
-                        '已筛选：仅显示收藏视频',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.red,
-                        ),
-                      ),
-                      Spacer(),
-                      TextButton(
-                        child: Text('取消筛选'),
-                        onPressed: () {
-                          setState(() {
-                            _showOnlyFavorites = false;
-                            _applyFavoritesFilter();
-                          });
-                        },
-                        style: TextButton.styleFrom(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          foregroundColor: Colors.red,
-                          minimumSize: Size(0, 0),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // 原有主体内容
-              Expanded(
-                child: _isLoading
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text("加载中...",
-                                style: TextStyle(color: Colors.grey)),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () async {
-                          await _loadItems();
-                        },
-                        child: _filteredItems.isEmpty
-                            ? ListView(
-                                // 包装在ListView中使RefreshIndicator在空状态下也能工作
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                children: [_buildEmptyStateView()])
-                            : _isGridView
-                                ? _buildGridView()
-                                : _buildListView(),
-                      ),
-              ),
-            ],
-          ),
-          floatingActionButton: isPcMode ? null : _buildSpeedDial(),
-        ));
-  }
-
-  Widget _buildPcToolbar(BuildContext context) {
-    if (_isMultiSelectMode) {
-      // Contextual Action Bar for Multi-Select Mode
-      return Container(
-        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).primaryColor.withOpacity(0.1),
-          border: Border(
-              bottom:
-                  BorderSide(color: Theme.of(context).dividerColor, width: 1)),
-        ),
-        child: Row(
-          children: [
-            IconButton(
-              icon: Icon(Icons.close),
-              onPressed: () {
-                setState(() {
-                  _isMultiSelectMode = false;
-                  _selectedItems.clear();
-                });
-              },
-              tooltip: "退出多选",
-            ),
-            SizedBox(width: 16),
-            Text(
-              '已选择 ${_selectedItems.length} 项',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-            Spacer(),
-            // Select All Checkbox (Optional convenience)
-            Row(
-              children: [
-                Checkbox(
-                  value: _selectedItems.length == _filteredItems.length &&
-                      _filteredItems.isNotEmpty,
-                  onChanged: (value) {
-                    setState(() {
-                      if (value == true) {
-                        _selectedItems = Set.from(_filteredItems);
-                      } else {
-                        _selectedItems.clear();
-                      }
-                    });
-                  },
-                ),
-                Text("全选"),
-              ],
-            ),
-            SizedBox(width: 24),
-            // View Toggles (Keep these accessible)
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Theme.of(context).dividerColor),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.grid_view_rounded,
-                      color: _isGridView
-                          ? Theme.of(context).primaryColor
-                          : Colors.grey,
-                    ),
-                    tooltip: '网格视图',
-                    onPressed: () {
-                      if (!_isGridView) {
-                        setState(() {
-                          _isGridView = true;
-                        });
-                      }
-                    },
-                  ),
-                  Container(
-                    width: 1,
-                    height: 24,
-                    color: Theme.of(context).dividerColor,
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.list_rounded,
-                      color: !_isGridView
-                          ? Theme.of(context).primaryColor
-                          : Colors.grey,
-                    ),
-                    tooltip: '列表视图',
-                    onPressed: () {
-                      if (_isGridView) {
-                        setState(() {
-                          _isGridView = false;
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(width: 24),
-            // Delete Action
-            ElevatedButton.icon(
-              icon: Icon(Icons.delete, size: 18),
-              label: Text("删除"),
-              onPressed: _selectedItems.isEmpty
-                  ? null
-                  : () {
-                      _showDeleteConfirmationDialog();
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
+    final desktop = Provider.of<ThemeProvider>(context).pcMode && MediaQuery.sizeOf(context).width >= 840;
+    final theme = Theme.of(context);
+    return CallbackShortcuts(bindings: {
+      const SingleActivator(LogicalKeyboardKey.keyF, control: true): () => _searchFocusNode.requestFocus(),
+    }, child: WillPopScope(onWillPop: () async {
+      if (_isMultiSelectMode) { setState(() { _isMultiSelectMode = false; _selectedItems.clear(); }); return false; }
+      if (_videoDirPath != _currentPath) { _navigateUp(); return false; }
+      return true;
+    }, child: Scaffold(
+      appBar: AppBar(
+        leading: _currentPath != _videoDirPath ? IconButton(tooltip: '返回上一级', onPressed: _navigateUp, icon: const Icon(Icons.arrow_back)) : null,
+        title: Text(_currentPath == _videoDirPath ? '视频库' : path.basename(_currentPath), maxLines: 1, overflow: TextOverflow.ellipsis),
+        actions: [IconButton(tooltip: '刷新视频库', onPressed: _loadItems, icon: const Icon(Icons.refresh_rounded)),
+          if (desktop) Padding(padding: const EdgeInsets.only(right: 20), child: FilledButton.icon(
+            onPressed: () => _showAddOptionsDialog(context), icon: const Icon(Icons.add), label: const Text('添加视频')))],
+      ),
+      body: Column(children: [
+        Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 4), child: TextField(
+          controller: _searchTextController, focusNode: _searchFocusNode, onChanged: _filterItems,
+          decoration: InputDecoration(hintText: '搜索当前文件夹', prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: _searchQuery.isEmpty ? null : IconButton(tooltip: '清除搜索', onPressed: () {
+              _searchTextController.clear(); _filterItems('');
+            }, icon: const Icon(Icons.close)),
+            filled: true, fillColor: theme.colorScheme.surfaceContainerLow,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none)),
+        )),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), child: Row(children: [
+          if (_isMultiSelectMode) ...[
+            Expanded(child: Text('已选择 ${_selectedItems.length} 项')),
+            IconButton(tooltip: '删除选中项目', onPressed: _selectedItems.isEmpty ? null : _showDeleteConfirmationDialog, icon: const Icon(Icons.delete_outline)),
+            IconButton(tooltip: '退出多选', onPressed: () => setState(() { _isMultiSelectMode = false; _selectedItems.clear(); }), icon: const Icon(Icons.close)),
+          ] else ...[
+            FilterChip(label: const Text('收藏'), avatar: const Icon(Icons.favorite_border, size: 18), selected: _showOnlyFavorites,
+              onSelected: (value) => setState(() { _showOnlyFavorites = value; _applyFavoritesFilter(); })),
+            const SizedBox(width: 8), Expanded(child: Text('${_filteredItems.length} 项', maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall)),
+            IconButton(tooltip: _isGridView ? '切换列表视图' : '切换网格视图', icon: Icon(_isGridView ? Icons.view_list_outlined : Icons.grid_view_rounded),
+              onPressed: () => setState(() => _isGridView = !_isGridView)),
+            PopupMenuButton<String>(tooltip: '排序方式', icon: const Icon(Icons.sort_rounded),
+              onSelected: (value) => setState(() {
+                if (value == 'direction') _currentSortOrder = _currentSortOrder == SortOrder.ascending ? SortOrder.descending : SortOrder.ascending;
+                else _currentSortType = SortType.values.firstWhere((type) => type.name == value);
+                _sortItems();
+              }), itemBuilder: (_) => [
+                for (final type in SortType.values) CheckedPopupMenuItem(value: type.name, checked: _currentSortType == type, child: Text(_getSortTypeName(type))),
+                const PopupMenuDivider(), PopupMenuItem(value: 'direction', child: Text(_currentSortOrder == SortOrder.ascending ? '改为降序' : '改为升序')),
+              ]),
+            IconButton(tooltip: '多选管理', onPressed: () => setState(() { _isMultiSelectMode = true; _selectedItems.clear(); }), icon: const Icon(Icons.checklist_rounded)),
           ],
-        ),
-      );
-    }
-
-    // Normal Toolbar
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final bool isNarrow = constraints.maxWidth < 900;
-
-        return Container(
-          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            border: Border(
-                bottom: BorderSide(
-                    color: Theme.of(context).dividerColor, width: 1)),
-          ),
-          child: Row(
-            children: [
-              // Path breadcrumb or Title
-              IconButton(
-                icon: Icon(Icons.arrow_back),
-                onPressed: _currentPath != _videoDirPath ? _navigateUp : null,
-                tooltip: '返回上一级',
-              ),
-              SizedBox(width: 8),
-              if (!isNarrow) ...[
-                Text(
-                  _currentPath == _videoDirPath
-                      ? '视频库'
-                      : path.basename(_currentPath),
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                Spacer(),
-              ] else ...[
-                Expanded(
-                  child: Text(
-                    _currentPath == _videoDirPath
-                        ? '视频库'
-                        : path.basename(_currentPath),
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                SizedBox(width: 8),
-              ],
-
-              // Search Bar
-              Flexible(
-                fit: FlexFit.loose,
-                child: Container(
-                  constraints: BoxConstraints(maxWidth: 300, minWidth: 150),
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                  ),
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      Icon(Icons.search, size: 20, color: Colors.grey),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: '搜索...',
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onChanged: (value) {
-                            setState(() {
-                              _searchQuery = value;
-                            });
-                            _filterItems(value);
-                          },
-                        ),
-                      ),
-                      if (_searchQuery.isNotEmpty)
-                        IconButton(
-                          icon: Icon(Icons.clear, size: 16),
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(),
-                          onPressed: () {
-                            setState(() {
-                              _searchQuery = '';
-                            });
-                            _filterItems('');
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(width: 16),
-
-              // Add Button (Primary Action) - Always visible
-              ElevatedButton.icon(
-                onPressed: () {
-                  _showAddOptionsDialog(context);
-                },
-                icon: Icon(
-                  Icons.add,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black,
-                ),
-                label: Text(isNarrow ? '添加' : '添加视频'),
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: isNarrow ? 12 : 20, vertical: 16),
-                  textStyle: TextStyle(fontSize: 16),
-                ),
-              ),
-              SizedBox(width: 16),
-
-              if (isNarrow) ...[
-                // Collapsed Menu
-                PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert),
-                  tooltip: "更多选项",
-                  itemBuilder: (BuildContext context) =>
-                      <PopupMenuEntry<String>>[
-                    PopupMenuItem<String>(
-                      enabled: false,
-                      child: StatefulBuilder(
-                        builder: (context, setState) {
-                          return Row(
-                            children: [
-                              Text('只看收藏',
-                                  style: TextStyle(
-                                      color: Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge
-                                          ?.color)),
-                              Spacer(),
-                              Switch(
-                                value: _showOnlyFavorites,
-                                onChanged: (val) {
-                                  // Update parent state
-                                  this.setState(() {
-                                    _showOnlyFavorites = val;
-                                    _applyFavoritesFilter();
-                                  });
-                                  // Update local menu state
-                                  setState(() {});
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                    PopupMenuDivider(),
-                    PopupMenuItem<String>(
-                      child: ListTile(
-                        leading: Icon(Icons.sort, size: 20),
-                        title:
-                            Text('排序: ${_getSortTypeName(_currentSortType)}'),
-                        contentPadding: EdgeInsets.zero,
-                        onTap: () {
-                          Navigator.pop(context);
-                          setState(() {
-                            if (_currentSortType == SortType.name) {
-                              _currentSortType = SortType.modifiedDate;
-                            } else {
-                              _currentSortType = SortType.name;
-                            }
-                            _sortItems();
-                          });
-                        },
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      child: ListTile(
-                        leading: Icon(
-                            _isGridView ? Icons.list : Icons.grid_view,
-                            size: 20),
-                        title: Text(_isGridView ? '切换到列表视图' : '切换到网格视图'),
-                        contentPadding: EdgeInsets.zero,
-                        onTap: () {
-                          Navigator.pop(context);
-                          setState(() {
-                            _isGridView = !_isGridView;
-                          });
-                        },
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      child: ListTile(
-                        leading: Icon(Icons.refresh, size: 20),
-                        title: Text('刷新'),
-                        contentPadding: EdgeInsets.zero,
-                        onTap: () {
-                          Navigator.pop(context);
-                          _loadItems();
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ] else ...[
-                // Full Layout Actions
-                FilterChip(
-                  label: Text('收藏'),
-                  selected: _showOnlyFavorites,
-                  onSelected: (bool value) {
-                    setState(() {
-                      _showOnlyFavorites = value;
-                      _applyFavoritesFilter();
-                    });
-                  },
-                  avatar: Icon(
-                    _showOnlyFavorites ? Icons.favorite : Icons.favorite_border,
-                    size: 16,
-                    color: _showOnlyFavorites
-                        ? Colors.red
-                        : Theme.of(context).iconTheme.color,
-                  ),
-                ),
-                SizedBox(width: 16),
-                PopupMenuButton<SortType>(
-                  tooltip: '排序',
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Theme.of(context).dividerColor),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.sort, size: 18),
-                        SizedBox(width: 8),
-                        Text(_getSortTypeName(_currentSortType)),
-                        SizedBox(width: 4),
-                        Icon(Icons.arrow_drop_down, size: 18),
-                      ],
-                    ),
-                  ),
-                  onSelected: (newValue) {
-                    setState(() {
-                      if (_currentSortType == newValue) {
-                        _currentSortOrder =
-                            _currentSortOrder == SortOrder.ascending
-                                ? SortOrder.descending
-                                : SortOrder.ascending;
-                      } else {
-                        _currentSortType = newValue;
-                        _currentSortOrder = SortOrder.ascending;
-                      }
-                      _sortItems();
-                    });
-                  },
-                  itemBuilder: (BuildContext context) =>
-                      <PopupMenuEntry<SortType>>[
-                    const PopupMenuItem<SortType>(
-                      value: SortType.name,
-                      child: Text('按名称'),
-                    ),
-                    const PopupMenuItem<SortType>(
-                      value: SortType.modifiedDate,
-                      child: Text('按修改时间'),
-                    ),
-                  ],
-                ),
-                SizedBox(width: 16),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          Icons.grid_view_rounded,
-                          color: _isGridView
-                              ? Theme.of(context).primaryColor
-                              : Colors.grey,
-                        ),
-                        tooltip: '网格视图',
-                        onPressed: () {
-                          if (!_isGridView) {
-                            setState(() {
-                              _isGridView = true;
-                            });
-                          }
-                        },
-                      ),
-                      Container(
-                        width: 1,
-                        height: 24,
-                        color: Theme.of(context).dividerColor,
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.list_rounded,
-                          color: !_isGridView
-                              ? Theme.of(context).primaryColor
-                              : Colors.grey,
-                        ),
-                        tooltip: '列表视图',
-                        onPressed: () {
-                          if (_isGridView) {
-                            setState(() {
-                              _isGridView = false;
-                            });
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(width: 16),
-                IconButton(
-                  icon: Icon(Icons.refresh),
-                  tooltip: '刷新',
-                  onPressed: () {
-                    _loadItems();
-                  },
-                ),
-                SizedBox(width: 16),
-                // Entry to Multi-Select Mode (Always visible if space permits, or move to menu?)
-                // Let's keep it visible or put in menu if narrow?
-                // For now, keep visible as user wants it.
-                Tooltip(
-                  message: "多选模式",
-                  child: IconButton(
-                    icon: Icon(Icons.checklist_rtl_rounded),
-                    onPressed: () {
-                      setState(() {
-                        _isMultiSelectMode = true;
-                        _selectedItems.clear();
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
-    );
+        ])),
+        if (_libraryError != null) Padding(padding: const EdgeInsets.all(16), child: Text(_libraryError!, style: TextStyle(color: theme.colorScheme.error))),
+        Expanded(child: _isLoading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(
+          onRefresh: _loadItems, child: _filteredItems.isEmpty
+            ? ListView(physics: const AlwaysScrollableScrollPhysics(), children: [Padding(padding: const EdgeInsets.symmetric(vertical: 60), child: _buildEmptyStateView())])
+            : _isGridView ? _buildGridView() : _buildListView())),
+      ]),
+      floatingActionButton: desktop || _isMultiSelectMode ? null : _buildSpeedDial(),
+    )));
   }
 
   String _getSortTypeName(SortType type) {
@@ -2273,62 +1431,17 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   Widget _buildEmptyStateView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            _showOnlyFavorites
-                ? Icons.favorite_border
-                : Icons.videocam_off_rounded,
-            size: 80,
-            color: Colors.grey.withOpacity(0.5),
-          ),
-          SizedBox(height: 16),
-          Text(
-            _showOnlyFavorites ? '暂无收藏视频' : '暂无视频',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          SizedBox(height: 8),
-          if (_showOnlyFavorites)
-            TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _showOnlyFavorites = false;
-                  _applyFavoritesFilter();
-                });
-              },
-              icon: Icon(
-                Icons.visibility,
-                color: Colors.lightBlue,
-              ),
-              label: Text(
-                '显示全部视频',
-                style: TextStyle(color: Colors.lightBlue),
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).primaryColor,
-              ),
-            )
-          else
-            TextButton.icon(
-              onPressed: () => _showAddOptionsDialog(context),
-              icon: Icon(
-                Icons.add,
-                color: Colors.lightBlue,
-              ),
-              label: Text('添加视频'),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.lightBlue,
-              ),
-            ),
-        ],
-      ),
-    );
+    final filtered = _searchQuery.isNotEmpty || _showOnlyFavorites;
+    return Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(filtered ? Icons.search_off_rounded : Icons.video_library_outlined, size: 64, color: Theme.of(context).colorScheme.primary),
+      const SizedBox(height: 20), Text(filtered ? '没有匹配的视频' : '添加你的第一部视频', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 12), Text(filtered ? '试试其他关键词，或清除筛选条件。' : '复制到媒体库，或创建不占视频空间的快捷方式。',
+        textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 24), FilledButton.icon(onPressed: filtered ? () {
+        _searchTextController.clear(); setState(() { _searchQuery = ''; _showOnlyFavorites = false; _applyFavoritesFilter(); });
+      } : () => _showAddOptionsDialog(context), icon: Icon(filtered ? Icons.filter_alt_off_outlined : Icons.add),
+        label: Text(filtered ? '清除筛选' : '添加视频')),
+    ]));
   }
 
   void _showDeleteConfirmationDialog() {
@@ -2387,104 +1500,31 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     _loadItems();
   }
 
-  Widget _buildGridView() {
-    DeviceInfo di = getDeviceInfo(context);
-    final isTablet = di.isTablet;
-    final isLandscape = di.isLandscape;
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final isPcMode = themeProvider.pcMode;
-
-    int ncols = 5;
-    double childAspectRatio = 0.85;
-
-    if (isPcMode) {
-      // PC Mode configuration
-      // Use LayoutBuilder to be more responsive in future, but for now fixed adaptation
-      if (MediaQuery.of(context).size.width > 1200) {
-        ncols = 6;
-      } else {
-        ncols = 4;
-      }
-      childAspectRatio = 1.0; // Square-ish or wider for PC details
-    } else if (isTablet) {
-      if (isLandscape) {
-        ncols = 5;
-      } else {
-        ncols = 4;
-      }
-    } else {
-      if (isLandscape) {
-        ncols = 3;
-      } else {
-        ncols = 2;
-      }
-    }
-
-    return AnimatedSwitcher(
-      duration: Duration(milliseconds: 300),
-      switchInCurve: Curves.easeOut,
-      switchOutCurve: Curves.easeIn,
-      child: Column(
-        children: [
-          if (_isMultiSelectMode)
-            Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: _selectedItems.length == _filteredItems.length &&
-                        _filteredItems.isNotEmpty,
-                    tristate: _selectedItems.isNotEmpty &&
-                        _selectedItems.length < _filteredItems.length,
-                    onChanged: (value) {
-                      setState(() {
-                        if (value == true) {
-                          _selectedItems = Set.from(_filteredItems);
-                        } else {
-                          _selectedItems.clear();
-                        }
-                      });
-                    },
-                  ),
-                  Text('全选'),
-                  Spacer(),
-                  Text('已选择 ${_selectedItems.length} 项'),
-                ],
-              ),
-            ),
-          Expanded(
-            child: GridView.builder(
-              cacheExtent: 500,
-              key: ValueKey<String>('grid'),
-              padding: EdgeInsets.all(isPcMode ? 24 : 12),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: ncols,
-                crossAxisSpacing: isPcMode ? 20 : 12,
-                mainAxisSpacing: isPcMode ? 20 : 12,
-                childAspectRatio: childAspectRatio,
-              ),
-              itemCount: _filteredItems.length,
-              itemBuilder: (context, index) {
-                final file = _filteredItems[index];
-                Widget card;
-                if (file is Directory) {
-                  card = _buildFolderCard(file);
-                } else {
-                  card = _buildVideoCard(file);
-                }
-
-                if (_isMultiSelectMode) {
-                  return _wrapWithCheckbox(card, file);
-                } else {
-                  return card;
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildGridView() => LayoutBuilder(builder: (context, box) {
+    final desktop = Provider.of<ThemeProvider>(context).pcMode;
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    final gap = desktop ? 16.0 : 12.0;
+    final minimum = (desktop ? 220.0 : 132.0) * scale.clamp(1.0, 1.6);
+    final columns = ((box.maxWidth - 32 + gap) / (minimum + gap)).floor().clamp(1, 8);
+    final tileWidth = (box.maxWidth - 32 - gap * (columns - 1)) / columns;
+    return Column(children: [
+      if (_isMultiSelectMode) _selectionSummary(),
+      Expanded(child: GridView.builder(cacheExtent: 500, key: const PageStorageKey('video-grid'),
+        physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, crossAxisSpacing: gap,
+          mainAxisSpacing: gap, mainAxisExtent: tileWidth * 9 / 16 + 48 * scale + 44),
+        itemCount: _filteredItems.length, itemBuilder: (context, index) {
+          final file = _filteredItems[index];
+          final card = file is Directory ? _buildFolderCard(file) : _buildVideoCard(file);
+          return _isMultiSelectMode ? _wrapWithCheckbox(card, file) : card;
+        })),
+    ]);
+  });
+  Widget _selectionSummary() => Row(children: [
+    Checkbox(value: _selectedItems.length == _filteredItems.length && _filteredItems.isNotEmpty,
+      onChanged: (all) => setState(() { _selectedItems = all == true ? Set.from(_filteredItems) : {}; })),
+    const Text('全选'),
+  ]);
 
   Widget _buildListView() {
     return AnimatedSwitcher(
@@ -2564,7 +1604,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               }
             });
           },
-          child: child,
+          child: IgnorePointer(child: child),
         ),
         Positioned(
           top: 8,
@@ -2616,7 +1656,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         ),
         // 原始的列表项占据剩余空间
         Expanded(
-          child: child,
+          child: GestureDetector(onTap: () => setState(() {
+            if (!_selectedItems.remove(file)) _selectedItems.add(file);
+          }), child: IgnorePointer(child: child)),
         ),
       ],
     );
@@ -3208,1012 +2250,24 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     );
   }
 
-  Widget _buildVideoCard(File file, {bool isListView = false}) {
-    final fileName = path.basename(file.path);
-    // Modified extension handling for .lnk files
-    String videoExtension = path.extension(file.path).toLowerCase();
-    bool isShortcut = videoExtension == '.lnk';
-
-    // If it's a shortcut (.lnk), try to get the original extension
-    if (isShortcut) {
-      // Extract the original extension before .lnk
-      final nameWithoutLnk = fileName.substring(0, fileName.length - 4);
-      final originalExtension = path.extension(nameWithoutLnk).toLowerCase();
-      if (originalExtension.isNotEmpty) {
-        videoExtension = originalExtension;
-      }
-    }
-
-    final heroTag = 'video-${file.path}';
-    // Add this function to get the history progress from HistoryService
-    Future<double> _getHistoryProgress(String filePath) async {
-      Duration duration = await _getVideoDuration(File(filePath));
-      final historyItem = await historyService.getHistoryByPath(filePath);
-      if (historyItem == null || duration.inMilliseconds <= 0) {
-        return 0.0;
-      }
-      // Calculate progress percentage (capped at 98% to indicate not complete)
-      double progress = historyItem.lastPosition / duration.inMilliseconds;
-      // print('[history] $filePath $progress');
-      return progress > 0.98 ? 0.98 : progress;
-    }
-
-    if (isListView) {
-      final themeProvider = Provider.of<ThemeProvider>(context);
-      final isPcMode = themeProvider.pcMode;
-
-      if (isPcMode) {
-        return HoverableBuilder(builder: (context, isHovered) {
-          return Hero(
-            tag: heroTag,
-            child: Card(
-              margin: EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-              elevation: isHovered ? 4 : 0,
-              color: isHovered
-                  ? Theme.of(context).cardColor
-                  : Colors
-                      .transparent, // Transparent by default for "table row" look
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(
-                    color: isHovered
-                        ? Theme.of(context).dividerColor
-                        : Colors.transparent),
-              ),
-              child: InkWell(
-                onTap: () {
-                  widget.getopenfile(file.path);
-                  widget.startPlayerPage(context);
-                },
-                onLongPress: () => _showVideoOptionsBottomSheet(file),
-                onSecondaryTap: () => _showVideoOptionsBottomSheet(file),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      // Thumbnail
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Container(
-                          width: 100,
-                          height: 56, // 16:9 ratio approx
-                          color: Colors.black,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              FutureBuilder<Uint8List?>(
-                                future: _getVideoThumbnail(file),
-                                builder: (context, snapshot) {
-                                  if (snapshot.hasData) {
-                                    return Image.memory(snapshot.data!,
-                                        fit: BoxFit.cover);
-                                  }
-                                  return Center(
-                                      child: Icon(Icons.movie,
-                                          size: 20, color: Colors.white54));
-                                },
-                              ),
-                              if (isHovered)
-                                Container(
-                                  color: Colors.black26,
-                                  child: Center(
-                                    child: Icon(Icons.play_circle_fill,
-                                        size: 24, color: Colors.white),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 16),
-                      // Name
-                      Expanded(
-                        flex: 3,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              fileName,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (isShortcut)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2.0),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.link,
-                                        size: 12, color: Colors.blue),
-                                    SizedBox(width: 4),
-                                    Text("快捷方式",
-                                        style: TextStyle(
-                                            fontSize: 10, color: Colors.blue)),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      // Duration
-                      Expanded(
-                        flex: 1,
-                        child: FutureBuilder<Duration?>(
-                          future: _getVideoDuration(file),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData)
-                              return Text("--:--",
-                                  style: TextStyle(color: Colors.grey));
-                            final d = snapshot.data!;
-                            return Text(
-                                '${d.inHours > 0 ? '${d.inHours}:' : ''}${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}',
-                                style: TextStyle(
-                                    fontSize: 13, color: Colors.grey));
-                          },
-                        ),
-                      ),
-                      // Size
-                      Expanded(
-                        flex: 1,
-                        child: Text(
-                          _getFileSize(file),
-                          style: TextStyle(fontSize: 13, color: Colors.grey),
-                        ),
-                      ),
-                      // Date
-                      Expanded(
-                        flex: 1,
-                        child: Text(
-                          _getFileDate(file).split(' ')[0], // Show date only
-                          style: TextStyle(fontSize: 13, color: Colors.grey),
-                        ),
-                      ),
-                      // Actions
-                      IconButton(
-                        icon: Icon(Icons.more_horiz),
-                        onPressed: () => _showVideoOptionsBottomSheet(file),
-                        tooltip: "更多选项",
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        });
-      }
-
-      return RepaintBoundary(
-        child: Hero(
-          tag: heroTag,
-          child: Card(
-            margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            elevation: 1,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: ListTile(
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: 70,
-                  height: 70,
-                  color: Colors.black,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      FutureBuilder<Uint8List?>(
-                        future: _getVideoThumbnail(file),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return Container(
-                              color: Colors.grey.withOpacity(0.2),
-                              child: Center(
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white70),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }
-                          if (snapshot.hasError || snapshot.data == null) {
-                            return Center(
-                              child: Icon(Icons.movie_outlined,
-                                  size: 30, color: Colors.white54),
-                            );
-                          }
-                          return Image.memory(
-                            snapshot.data!,
-                            fit: BoxFit.cover,
-                          );
-                        },
-                      ),
-                      // History progress bar for list view
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        child: FutureBuilder<double>(
-                          future: _getHistoryProgress(file.path),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData || snapshot.data == 0.0) {
-                              return SizedBox.shrink();
-                            }
-                            return Container(
-                              height: 3,
-                              child: LinearProgressIndicator(
-                                value: snapshot.data,
-                                backgroundColor: Colors.grey.withOpacity(0.3),
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.redAccent),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(4),
-                            ),
-                          ),
-                          child: Text(
-                            videoExtension,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Shortcut indicator for .lnk files
-                      if (isShortcut)
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.7),
-                              borderRadius: BorderRadius.only(
-                                bottomLeft: Radius.circular(4),
-                              ),
-                            ),
-                            child: Icon(
-                              Icons.link,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      // HDR indicator for list view
-                      FutureBuilder<bool>(
-                        future: _getHdr(file),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                                  ConnectionState.done &&
-                              snapshot.data == true) {
-                            return Positioned(
-                              top: 0,
-                              left: 0,
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 4, vertical: 2),
-                                decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Colors.amber.shade700,
-                                        Colors.orange.shade900
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.only(
-                                      bottomRight: Radius.circular(4),
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black26,
-                                        blurRadius: 2,
-                                        offset: Offset(0, 1),
-                                      )
-                                    ]),
-                                child: Text(
-                                  'HDR',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }
-                          return SizedBox.shrink();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      fileName,
-                      style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              subtitle: FutureBuilder<Duration?>(
-                future: _getVideoDuration(file),
-                builder: (context, snapshot) {
-                  final fileSize = _getFileSize(file);
-                  final fileDateString = _getFileDate(file);
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    final hours = '';
-                    final minutes = '00:';
-                    final seconds = '00';
-                    return Row(
-                      children: [
-                        Icon(Icons.access_time,
-                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                        SizedBox(width: 4),
-                        Text(
-                          '$hours$minutes$seconds',
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                        SizedBox(width: 12),
-                        Icon(Icons.sd_storage,
-                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                        SizedBox(width: 4),
-                        Text(
-                          fileSize,
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                        SizedBox(width: 12),
-                        Icon(Icons.date_range,
-                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                        SizedBox(width: 4),
-                        Text(
-                          fileDateString,
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                      ],
-                    );
-                  }
-                  if (snapshot.hasError || snapshot.data == null) {
-                    final hours = '';
-                    final minutes = '00:';
-                    final seconds = '00';
-                    return Row(
-                      children: [
-                        Icon(Icons.access_time,
-                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                        SizedBox(width: 4),
-                        Text(
-                          '$hours$minutes$seconds',
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                        SizedBox(width: 12),
-                        Icon(Icons.sd_storage,
-                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                        SizedBox(width: 4),
-                        Text(
-                          fileSize,
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                        SizedBox(width: 12),
-                        Icon(Icons.date_range,
-                            size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                        SizedBox(width: 4),
-                        Text(
-                          fileDateString,
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                      ],
-                    );
-                  }
-                  final duration = snapshot.data!;
-                  final hours =
-                      duration.inHours > 0 ? '${duration.inHours}:' : '';
-                  final minutes =
-                      '${(duration.inMinutes % 60).toString().padLeft(2, '0')}:';
-                  final seconds =
-                      '${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
-                  return Row(
-                    children: [
-                      Icon(Icons.access_time,
-                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                      SizedBox(width: 4),
-                      Text(
-                        '$hours$minutes$seconds',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.sd_storage,
-                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                      SizedBox(width: 4),
-                      Text(
-                        fileSize,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.date_range,
-                          size: 14, color: Colors.lightBlue.withOpacity(0.7)),
-                      SizedBox(width: 4),
-                      Text(
-                        fileDateString,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              trailing: IconButton(
-                icon: Icon(Icons.more_vert, color: Colors.grey[600]),
-                onPressed: () => _showVideoOptionsBottomSheet(file),
-              ),
-              onTap: () {
-                widget.getopenfile(file.path);
-                widget.startPlayerPage(context);
-              },
-              onLongPress: () => _showVideoOptionsBottomSheet(file),
-            ),
-          ),
-        ),
-      );
-    } else {
-      // Grid view layout
-      final themeProvider = Provider.of<ThemeProvider>(context);
-      final isPcMode = themeProvider.pcMode;
-
-      if (isPcMode) {
-        return HoverableBuilder(builder: (context, isHovered) {
-          return RepaintBoundary(
-            child: Hero(
-              tag: heroTag,
-              child: Card(
-                elevation: isHovered ? 8 : 2,
-                shadowColor: isHovered ? Colors.black45 : null,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: InkWell(
-                  onTap: () {
-                    widget.getopenfile(file.path);
-                    widget.startPlayerPage(context);
-                  },
-                  onLongPress: () => _showVideoOptionsBottomSheet(file),
-                  onSecondaryTap: () => _showVideoOptionsBottomSheet(file),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Transform.scale(
-                    scale: isHovered ? 1.02 : 1.0,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Thumbnail Area
-                        ClipRRect(
-                          borderRadius:
-                              BorderRadius.vertical(top: Radius.circular(12)),
-                          child: AspectRatio(
-                            aspectRatio: 16 / 9,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                // ... standard image loading ...
-                                FutureBuilder<Uint8List?>(
-                                    future: _getVideoThumbnail(file),
-                                    builder: (context, snapshot) {
-                                      if (!snapshot.hasData)
-                                        return Container(color: Colors.black12);
-                                      return Image.memory(snapshot.data!,
-                                          fit: BoxFit.cover);
-                                    }),
-                                if (isHovered)
-                                  Container(
-                                    color: Colors.black26,
-                                    child: Center(
-                                      child: Icon(Icons.play_circle_fill,
-                                          size: 48, color: Colors.white),
-                                    ),
-                                  ),
-                                // Duration
-                                Positioned(
-                                  bottom: 4,
-                                  right: 4,
-                                  child: FutureBuilder<Duration?>(
-                                      future: _getVideoDuration(file),
-                                      builder: (context, snapshot) {
-                                        if (!snapshot.hasData)
-                                          return SizedBox.shrink();
-                                        final d = snapshot.data!;
-                                        final text =
-                                            '${d.inHours > 0 ? '${d.inHours}:' : ''}${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
-                                        return Container(
-                                          padding: EdgeInsets.symmetric(
-                                              horizontal: 4, vertical: 2),
-                                          decoration: BoxDecoration(
-                                              color: Colors.black54,
-                                              borderRadius:
-                                                  BorderRadius.circular(4)),
-                                          child: Text(text,
-                                              style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 10)),
-                                        );
-                                      }),
-                                ),
-                                // HDR Indicator
-                                FutureBuilder<bool>(
-                                  future: _getHdr(file),
-                                  builder: (context, snapshot) {
-                                    if (snapshot.data == true) {
-                                      return Positioned(
-                                        top: 8,
-                                        left: 8,
-                                        child: Container(
-                                          padding: EdgeInsets.symmetric(
-                                              horizontal: 4, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.orange,
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            'HDR',
-                                            style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold),
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    return SizedBox.shrink();
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        // Info Area
-                        Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Stack(
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(fileName,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14)),
-                                    SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        Text(
-                                            _getFileSize(file) +
-                                                ' • ' +
-                                                _getFileDate(file),
-                                            style: TextStyle(
-                                                color: Colors.grey,
-                                                fontSize: 11)),
-                                      ],
-                                    ),
-                                    Spacer(),
-                                    // Progress bar
-                                    FutureBuilder<double>(
-                                        future: _getHistoryProgress(file.path),
-                                        builder: (context, snapshot) {
-                                          if (!snapshot.hasData ||
-                                              snapshot.data == 0.0)
-                                            return SizedBox.shrink();
-                                          return LinearProgressIndicator(
-                                            value: snapshot.data,
-                                            valueColor: AlwaysStoppedAnimation(
-                                                Colors.redAccent),
-                                            backgroundColor:
-                                                Colors.grey.withOpacity(0.2),
-                                          );
-                                        })
-                                  ],
-                                ),
-                                if (isHovered)
-                                  Positioned(
-                                    right: -10,
-                                    top: -10,
-                                    child: IconButton(
-                                      icon: Icon(Icons.more_vert),
-                                      onPressed: () =>
-                                          _showVideoOptionsBottomSheet(file),
-                                    ),
-                                  )
-                              ],
-                            ),
-                          ),
-                        )
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        });
-      }
-
-      // Mobile Grid View Implementation
-      return RepaintBoundary(
-        child: Hero(
-          tag: heroTag,
-          child: Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: InkWell(
-              onTap: () {
-                widget.getopenfile(file.path);
-                widget.startPlayerPage(context);
-              },
-              onLongPress: () => _showVideoOptionsBottomSheet(file),
-              borderRadius: BorderRadius.circular(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12),
-                    ),
-                    child: Stack(
-                      children: [
-                        AspectRatio(
-                          aspectRatio: 16 / 9,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              FutureBuilder<Uint8List?>(
-                                future: _getVideoThumbnail(file),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return Container(
-                                      color: Colors.grey.withOpacity(0.2),
-                                      child: Center(
-                                        child: SizedBox(
-                                          width: 30,
-                                          height: 30,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                                    Colors.white70),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                  if (snapshot.hasError ||
-                                      snapshot.data == null) {
-                                    return Container(
-                                      color: Colors.grey[800],
-                                      child: Center(
-                                        child: Icon(Icons.movie_outlined,
-                                            size: 40, color: Colors.white54),
-                                      ),
-                                    );
-                                  }
-                                  return Image.memory(
-                                    snapshot.data!,
-                                    fit: BoxFit.cover,
-                                  );
-                                },
-                              ),
-                              // Extension tag
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.6),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    videoExtension,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // HDR indicator for grid view (now positioned below shortcut if present)
-                              FutureBuilder<bool>(
-                                future: _getHdr(file),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState ==
-                                          ConnectionState.done &&
-                                      snapshot.data == true) {
-                                    return Positioned(
-                                      top: isShortcut
-                                          ? 36
-                                          : 8, // Position below the shortcut indicator if present
-                                      left: 8,
-                                      child: Container(
-                                        padding: EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 3),
-                                        decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                Colors.amber.shade600,
-                                                Colors.orange.shade900
-                                              ],
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black38,
-                                                blurRadius: 3,
-                                                offset: Offset(0, 1),
-                                              )
-                                            ]),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.hdr_on_rounded,
-                                                size: 12, color: Colors.white),
-                                            SizedBox(width: 2),
-                                            Text(
-                                              'HDR',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                  return SizedBox.shrink();
-                                },
-                              ),
-                              Positioned.fill(
-                                child: Center(
-                                  child: Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.5),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Icon(
-                                      Icons.play_arrow_rounded,
-                                      color: Colors.white,
-                                      size: 30,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                left: 0,
-                                right: 0,
-                                child: FutureBuilder<Duration?>(
-                                  future: _getVideoDuration(file),
-                                  builder: (context, snapshot) {
-                                    if (snapshot.connectionState ==
-                                            ConnectionState.waiting ||
-                                        snapshot.hasError ||
-                                        snapshot.data == null) {
-                                      return SizedBox();
-                                    }
-                                    final duration = snapshot.data!;
-                                    final hours = duration.inHours > 0
-                                        ? '${duration.inHours}:'
-                                        : '';
-                                    final minutes =
-                                        '${(duration.inMinutes % 60).toString().padLeft(2, '0')}:';
-                                    final seconds =
-                                        '${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
-                                    return Container(
-                                      padding: EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: Alignment.bottomCenter,
-                                          end: Alignment.topCenter,
-                                          colors: [
-                                            Colors.black.withOpacity(0.7),
-                                            Colors.transparent,
-                                          ],
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.access_time,
-                                              size: 12, color: Colors.white70),
-                                          SizedBox(width: 4),
-                                          Text(
-                                            '$hours$minutes$seconds',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Add history progress bar below the thumbnail
-                        Positioned(
-                          top: (16 /
-                              9 *
-                              100), // Position right below the 16/9 aspect ratio thumbnail
-                          left: 0,
-                          right: 0,
-                          child: FutureBuilder<double>(
-                            future: _getHistoryProgress(file.path),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData || snapshot.data == 0.0) {
-                                return SizedBox(
-                                    height:
-                                        3); // Keep consistent height even if no progress
-                              }
-                              return Container(
-                                height: 3,
-                                child: LinearProgressIndicator(
-                                  value: snapshot.data,
-                                  backgroundColor: Colors.grey.withOpacity(0.3),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.redAccent),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.all(10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  fileName,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (isShortcut)
-                                Container(
-                                  margin: EdgeInsets.only(left: 4),
-                                  padding: EdgeInsets.all(2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                  child: Icon(
-                                    Icons.link,
-                                    size: 10,
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          Spacer(),
-                          // Show watched percentage if available
-                          FutureBuilder<double>(
-                            future: _getHistoryProgress(file.path),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData || snapshot.data == 0.0) {
-                                return Text(
-                                  _getFileSize(file) + " " + _getFileDate(file),
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey[600],
-                                  ),
-                                );
-                              }
-                              // Display percentage watched
-                              final percentage = (snapshot.data! * 100).toInt();
-                              return Row(
-                                children: [
-                                  Icon(Icons.play_circle_outline,
-                                      size: 10, color: Colors.redAccent),
-                                  SizedBox(width: 2),
-                                  Text(
-                                    '$percentage% 已观看',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.redAccent,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Spacer(),
-                                  Text(
-                                    _getFileSize(file),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+  Future<VideoTileInfo> _tileInfo(File file) async {
+    try {
+      final duration = await _getVideoDuration(file);
+      final history = await historyService.getHistoryByPath(file.path);
+      final hdr = await _getHdr(file);
+      final progress = history == null || duration.inMilliseconds <= 0 ? 0.0
+        : (history.lastPosition / duration.inMilliseconds).clamp(0.0, 1.0);
+      return VideoTileInfo(duration: duration, progress: progress, hdr: hdr);
+    } catch (_) { return const VideoTileInfo(); }
   }
+  Widget _buildVideoCard(File file, {bool isListView = false}) => RepaintBoundary(child: VideoLibraryTile(
+    key: ValueKey(file.path), name: path.basename(file.path).replaceFirst(RegExp(r'\.lnk$'), ''),
+    details: _getFileSize(file), list: isListView, shortcut: file.path.endsWith('.lnk'),
+    favorite: _favoriteStatus[file.path] ?? false,
+    thumbnail: _getVideoThumbnail(file), info: _tileInfo(file),
+    onPlay: () { widget.getopenfile(file.path); widget.startPlayerPage(context); },
+    onOptions: () => _showVideoOptionsBottomSheet(file), onFavorite: () => _toggleFavorite(file),
+  ));
 
   void _handleVideoAction(String value, File file) {
     switch (value) {

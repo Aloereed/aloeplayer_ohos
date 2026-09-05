@@ -1,3 +1,4 @@
+import 'widgets/responsive_app_shell.dart';
 /*
  * @Author: 
  * @Date: 2025-01-07 22:27:23
@@ -1503,53 +1504,15 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final scaffold = Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        appBar: (themeProvider.pcMode || _isFullScreen || true)
-            ? null
-            : AppBar(
-                backgroundColor: Theme.of(context).cardColor,
-                title: Container(
-                  height: 36,
-                  child: TextField(
-                    decoration: InputDecoration(
-                        hintText: "搜索媒体",
-                        prefixIcon: Icon(
-                          Icons.search,
-                          size: 20,
-                        ),
-                        filled: true,
-                        fillColor: Theme.of(context).canvasColor,
-                        contentPadding: EdgeInsets.zero,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide.none)),
-                  ),
-                ),
-                actions: [
-                  IconButton(
-                      icon: Icon(Icons.cast),
-                      tooltip: "投屏",
-                      onPressed: () {
-                        // Implement cast functionality
-                      }),
-                  IconButton(
-                      icon: Icon(Icons.history),
-                      tooltip: "历史记录",
-                      onPressed: () {
-                        // Implement history functionality
-                      }),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 16.0),
-                    child: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.blue.shade100,
-                      child: Icon(Icons.person, size: 20, color: Colors.blue),
-                    ),
-                  )
-                ],
-              ),
-        body: PageView(
+    return WillPopScope(onWillPop: _onWillPop, child: ResponsiveAppShell(
+      desktop: themeProvider.pcMode, fullScreen: _isFullScreen,
+      selectedIndex: _selectedIndex,
+      onSelected: (index) {
+        setState(() => _selectedIndex = index);
+        if (themeProvider.pcMode) { _pageController.jumpToPage(index); }
+        else { _pageController.animateToPage(index, duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic); }
+      },
+      child: PageView(
           controller: _pageController,
           onPageChanged: (index) {
             setState(() {
@@ -1598,87 +1561,7 @@ class _HomeScreenState extends State<HomeScreen>
             SettingsTab(),
           ],
         ),
-        bottomNavigationBar: (themeProvider.pcMode || _isFullScreen)
-            ? null
-            : AnimatedBottomNavBar(
-                currentIndex: _selectedIndex,
-                onTap: (index) {
-                  setState(() {
-                    _selectedIndex = index;
-                  });
-                  _pageController.animateToPage(
-                    index,
-                    duration: Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                  );
-                },
-                items: const [
-                  BottomNavItem(
-                    icon: Icons.video_library,
-                    label: '视频库',
-                  ),
-                  BottomNavItem(
-                    icon: Icons.library_music,
-                    label: '音频库',
-                  ),
-                  BottomNavItem(
-                    icon: Icons.library_books,
-                    label: '网络媒体库',
-                  ),
-                  BottomNavItem(
-                    icon: Icons.settings,
-                    label: '设置',
-                  ),
-                ],
-              ));
-
-    if (themeProvider.pcMode && !_isFullScreen) {
-      return WillPopScope(
-        onWillPop: _onWillPop,
-        child: Scaffold(
-          body: Row(
-            children: [
-              NavigationRail(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: (index) {
-                  setState(() {
-                    _selectedIndex = index;
-                  });
-                  _pageController.animateToPage(
-                    index,
-                    duration: Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                  );
-                },
-                labelType: NavigationRailLabelType.all,
-                destinations: const [
-                  NavigationRailDestination(
-                    icon: Icon(Icons.video_library),
-                    label: Text('视频库'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.library_music),
-                    label: Text('音频库'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.library_books),
-                    label: Text('媒体库'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.settings),
-                    label: Text('设置'),
-                  ),
-                ],
-              ),
-              VerticalDivider(thickness: 1, width: 1),
-              Expanded(child: scaffold),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return WillPopScope(onWillPop: _onWillPop, child: scaffold);
+    ));
   }
 }
 
