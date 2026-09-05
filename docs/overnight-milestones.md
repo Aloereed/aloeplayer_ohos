@@ -1,5 +1,7 @@
 # Overnight implementation — 2026-09-06
 
+This document records the first round (00–16). Follow-up fixes, UI changes and FSR (17–28) are in [round2-milestones.md](round2-milestones.md). The newest packages and current checks are linked from [morning-verification.md](morning-verification.md).
+
 All HAP builds use the installed Flutter 3.41 OHOS SDK at `E:\source\flutter_327`, outside the sandbox. No debugging device is connected.
 
 Artifacts are kept in `build/milestones/<milestone>/` with unsigned/signed HAPs when produced, timestamps, SHA-256 hashes, source commit and worktree state. The canonical build output remains `ohos/entry/build/default/outputs/default/entry-default-unsigned.hap`.
