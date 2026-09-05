@@ -125,7 +125,7 @@ export class CastView extends PlatformView implements MethodCallHandler {
     // 注册消息通道
     this.methodChannel = new MethodChannel(message, `com.aloereed.aloeplayer/castView${viewId}`, StandardMethodCodec.INSTANCE);
     this.methodChannel.setMethodCallHandler(this);
-    this.numValue = args['initParams'] as string;
+    this.numValue = ((args as Map<string, Object>).get('initParams') as string) ?? '';
     // 检查是否包含分隔符
     if (this.numValue && this.numValue.includes('|||')) {
       const parts = this.numValue.split('|||');

@@ -122,3 +122,11 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - build.ps1 accepts -Offline, -Locked and -NoVersionBump. HAP success now also requires a refreshed canonical unsigned output timestamp.
 - Archiving cross-checks embedded HAP versionCode against pubspec.yaml and records bundle/API versions, SDK identity and lock-file hash.
 - Twenty-nine tests passed; application analysis has no errors; an offline, enforced-lockfile HAP build passed with canonical timestamp verification.
+
+## Milestone 16 — native bridge and PiP checkpoints
+
+- Verified current Flutter OHOS StandardMessageCodec decodes creation parameters as Map. PiP, cast, HDR and FFmpeg native views now read Map entries; PiP converts nested authentication headers to the system MediaSource format.
+- PiP emits progress checkpoints every five seconds and on playback state changes, so history/server progress can survive leaving the app. Lock-screen play/pause/seek controls target the active native decoder; next/previous are held while PiP owns playback.
+- Browser callbacks and catalog retry feedback received final lifecycle guards.
+- Twenty-nine tests passed, application analysis has no errors; offline/locked native HAP build passed and canonical timestamp verified. **For PiP validation use milestone 16 or newer; earlier PiP archives used the incorrect creation-parameter access.**
+- PiP currently uses system decoding at normal speed; MPV subtitle rendering/rate preferences are not carried into that decoder.

@@ -18,6 +18,7 @@ class _CatalogPageState extends State<CatalogPage> {
   @override
   void initState() { super.initState(); catalog.initialize().catchError((_) { if (mounted) setState(() => _error = '媒体索引无法打开'); }); }
   Future<void> _scan() async {
+    setState(() => _error = null);
     try { await catalog.scan(); } catch (_) { if (mounted) setState(() => _error = '扫描失败，请重试'); }
   }
   void _open(CatalogItem item, List<CatalogItem> items) {

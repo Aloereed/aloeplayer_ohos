@@ -33,7 +33,8 @@ export class PipView extends PlatformView implements MethodCallHandler {
   private file?: fs.File;
   private uri: string;
   private initialPosition: number;
-  private headers: Record<string, string>;
+  private headers: Record<string, string> = {};
+  private lastCheckpoint: number = 0;
   private currentPosition: number = 0;
   private shouldPlay: boolean = true;
   private prepared: boolean = false;
@@ -41,11 +42,13 @@ export class PipView extends PlatformView implements MethodCallHandler {
   constructor(context: common.Context, id: number, args: ESObject, messenger: BinaryMessenger) {
     super();
     this.context = context;
-    this.uri = args['uri'] as string;
-    this.initialPosition = args['positionMs'] as number;
+    const values = args as Map<string, Object>;
+    this.uri = (values.get('uri') as string) ?? '';
+    this.initialPosition = (values.get('positionMs') as number) ?? 0;
     this.currentPosition = this.initialPosition;
-    this.shouldPlay = args['playing'] as boolean;
-    this.headers = args['headers'] as Record<string, string>;
+    this.shouldPlay = (values.get('playing') as boolean) ?? true;
+    const headers = values.get('headers') as Map<string, string>;
+    headers?.forEach((value: string, key: string) => { this.headers[key] = value; });
     this.channel = new MethodChannel(messenger, `aloeplayer/pip-view/${id}`, StandardMethodCodec.INSTANCE);
     this.channel.setMethodCallHandler(this);
   }
@@ -62,9 +65,13 @@ export class PipView extends PlatformView implements MethodCallHandler {
       if (this.disposed) { await player.release(); return; }
       this.player = player;
       player.on('error', (error: BusinessError) => { if (!this.disposed) this.channel.invokeMethod('error', '系统播放器无法打开此文件，错误码 ' + error.code); });
-      player.on('timeUpdate', (position: number) => { this.currentPosition = position; });
+      player.on('timeUpdate', (position: number) => {
+        if (position > 0 || this.initialPosition === 0) this.currentPosition = position;
+        if (Date.now() - this.lastCheckpoint >= 5000) this.emitPosition();
+      });
       player.on('stateChange', async (state: string) => {
         if (this.disposed) return;
+        if (state === 'playing' || state === 'paused' || state === 'completed') this.emitPosition();
         try {
           if (state === 'initialized') {
             player.surfaceId = this.component!.getXComponentSurfaceId();
@@ -115,10 +122,22 @@ export class PipView extends PlatformView implements MethodCallHandler {
     if (call.method === 'open') { this.requested = true; this.open(); result.success(null); }
     else if (call.method === 'startPiP') { this.startPip(result); }
     else if (call.method === 'stopPiP') { this.stopPip(result); }
+    else if (call.method === 'seek') {
+      const position = call.argument('positionMs') as number;
+      try {
+        if (this.prepared && this.player) { this.currentPosition = position; this.player.seek(position); }
+        result.success(null);
+      } catch (error) { result.error('SEEK', '无法跳转到指定位置', null); }
+    }
     else if (call.method === 'pause' || call.method === 'play') {
       this.shouldPlay = call.method === 'play'; this.changePlayback(); result.success(null);
     }
     else { result.notImplemented(); }
+  }
+  private emitPosition(): void {
+    if (this.disposed) return;
+    this.lastCheckpoint = Date.now();
+    this.channel.invokeMethod('position', { positionMs: this.currentPosition, playing: this.player?.state === 'playing' });
   }
   private async changePlayback(): Promise<void> {
     try {

@@ -854,9 +854,9 @@ export class FfmpegView extends PlatformView implements MethodCallHandler {
     // 注册消息通道
     this.methodChannel = new MethodChannel(message, `com.aloereed.aloeplayer/ffmpegView${viewId}`, StandardMethodCodec.INSTANCE);
     this.methodChannel.setMethodCallHandler(this);
-    this.numValue = args['initParams'] as string;
-    this.numValue = args['initParams'] as string;
-    this.videoMode = args['videoMode'] as boolean;
+    this.numValue = ((args as Map<string, Object>).get('initParams') as string) ?? '';
+    this.numValue = ((args as Map<string, Object>).get('initParams') as string) ?? '';
+    this.videoMode = ((args as Map<string, Object>).get('videoMode') as boolean) ?? false;
     console.log(`[FFMPEG] numValue: ${this.numValue}`)
     console.log(`[FFMPEG] videoMode: ${this.videoMode}`)
   }

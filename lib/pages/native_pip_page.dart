@@ -10,12 +10,23 @@ class PipPlaybackResult {
   const PipPlaybackResult(this.positionMs, this.playing);
 }
 
+class NativePipController {
+  MethodChannel? _channel;
+  void attach(MethodChannel channel) { _channel = channel; }
+  void detach() { _channel = null; }
+  Future<void> play() async { await _channel?.invokeMethod<void>('play'); }
+  Future<void> pause() async { await _channel?.invokeMethod<void>('pause'); }
+  Future<void> seek(Duration position) async { await _channel?.invokeMethod<void>('seek', {'positionMs': position.inMilliseconds}); }
+}
+
 class NativePipPage extends StatefulWidget {
   final String uri;
   final int positionMs;
   final Map<String, String> headers;
   final bool playing;
-  const NativePipPage({super.key, required this.uri, required this.positionMs, this.headers = const {}, this.playing = true});
+  final NativePipController? controller;
+  final void Function(PipPlaybackResult)? onPosition;
+  const NativePipPage({super.key, required this.uri, required this.positionMs, this.headers = const {}, this.playing = true, this.controller, this.onPosition});
   @override State<NativePipPage> createState() => _NativePipPageState();
 }
 class _NativePipPageState extends State<NativePipPage> {
@@ -27,9 +38,14 @@ class _NativePipPageState extends State<NativePipPage> {
   void _created(int id) {
     final channel = MethodChannel('aloeplayer/pip-view/$id');
     _channel = channel;
+    widget.controller?.attach(channel);
     PlaybackSleepTimer.instance.attach(this, () async { _timerStopped = true; await channel.invokeMethod<void>('pause'); });
     channel.setMethodCallHandler((call) async {
       if (!mounted) return;
+      if (call.method == 'position') {
+        final state = call.arguments as Map;
+        widget.onPosition?.call(PipPlaybackResult((state['positionMs'] as num).round(), state['playing'] == true));
+      }
       if (call.method == 'completed') PlaybackSleepTimer.instance.consumeEnd(this);
       if (call.method == 'ready') setState(() => _ready = true);
       if (call.method == 'error') setState(() => _error = call.arguments as String);
@@ -45,13 +61,13 @@ class _NativePipPageState extends State<NativePipPage> {
     _closing = true;
     try {
       final state = await _channel?.invokeMapMethod<String, dynamic>('stopPiP');
-      if (state != null) _returnState = PipPlaybackResult(state['positionMs'] as int, !_timerStopped && state['playing'] == true);
+      if (state != null) _returnState = PipPlaybackResult((state['positionMs'] as num).round(), !_timerStopped && state['playing'] == true);
     } catch (_) {}
     if (!mounted) return;
     setState(() => _allowPop = true);
     WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) Navigator.pop(context, _returnState ?? PipPlaybackResult(widget.positionMs, !_timerStopped && widget.playing)); });
   }
-  @override void dispose() { PlaybackSleepTimer.instance.detach(this, cancelTimer: false); _channel?.setMethodCallHandler(null); super.dispose(); }
+  @override void dispose() { widget.controller?.detach(); PlaybackSleepTimer.instance.detach(this, cancelTimer: false); _channel?.setMethodCallHandler(null); super.dispose(); }
   @override Widget build(BuildContext context) => PopScope(canPop: _allowPop, onPopInvokedWithResult: (didPop, _) { if (!didPop) _close(); },
     child: Scaffold(appBar: AppBar(title: const Text('系统画中画'), leading: IconButton(onPressed: _close, icon: const Icon(Icons.arrow_back))),
       body: Column(children: [

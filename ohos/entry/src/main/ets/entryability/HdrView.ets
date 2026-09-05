@@ -213,7 +213,7 @@ export class HdrView extends PlatformView implements MethodCallHandler {
     let that = this;
     this.methodChannel = new MethodChannel(message, `com.aloereed.aloeplayer/hdrView${viewId}`, StandardMethodCodec.INSTANCE);
     this.methodChannel.setMethodCallHandler(this);
-    this.numValue = args['initParams'] as string;
+    this.numValue = ((args as Map<string, Object>).get('initParams') as string) ?? '';
     this.videoUrl = this.numValue;
     console.log(`[hdr] init videourl: ${this.videoUrl}`)
 

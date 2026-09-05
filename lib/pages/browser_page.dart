@@ -101,7 +101,7 @@ class _BrowserPageState extends State<BrowserPage> {
       if (!await _httpService.startServer()) throw StateError('无法启动本地播放服务');
       final success = await _fileService.connect(widget.serverConfig);
 
-      if (!mounted) return;
+      if (!mounted) { await _fileService.disconnect(); return; }
       if (success) {
         setState(() => _isConnected = true);
 
@@ -135,7 +135,7 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   Future<void> _loadFiles(String path) async {
-    if (!_fileService.isConnected) return;
+    if (!mounted || !_fileService.isConnected) return;
 
     setState(() => _isLoading = true);
 

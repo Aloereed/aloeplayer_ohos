@@ -746,24 +746,23 @@ class _MPVPlayerState extends State<MPVPlayer>
       // 创建 AudioHandler 实例
       _audioHandler = await AudioService.init(
         builder: () => VideoPlayerAudioHandler(
-          onPlay: () => player.play(),
-          onPause: () => player.pause(),
+          onPlay: () => _pipController?.play() ?? player.play(),
+          onPause: () => _pipController?.pause() ?? player.pause(),
           onStop: () async {
-            player.pause();
-            await player.seek(Duration.zero);
+            if (_pipController != null) { await _pipController!.pause(); await _pipController!.seek(Duration.zero); }
+            else { await player.pause(); await player.seek(Duration.zero); }
           },
-          onSeek: (position) => player.seek(position),
+          onSeek: (position) => _pipController?.seek(position) ?? player.seek(position),
           onSetSpeed: (speed) => player.setRate(speed),
-          onFastForward: (duration) =>
-              player.seek(player.state.position + duration),
+          onFastForward: (duration) => _seekActivePlayback((_pipController != null ? _lastPosition : player.state.position) + duration),
           onRewind: (duration) {
-            final position = player.state.position - duration;
-            player.seek(position > Duration.zero ? position : Duration.zero);
+            final position = (_pipController != null ? _lastPosition : player.state.position) - duration;
+            _seekActivePlayback(position > Duration.zero ? position : Duration.zero);
           },
-          isPlaying: () => player.state.playing,
-          getCurrentPosition: () => player.state.position,
+          isPlaying: () => _pipController != null ? _pipPlaying : player.state.playing,
+          getCurrentPosition: () => _pipController != null ? _lastPosition : player.state.position,
           getDuration: () => player.state.duration,
-          getPlaybackSpeed: () => player.state.rate,
+          getPlaybackSpeed: () => _pipController != null ? 1.0 : player.state.rate,
           onPlayNext: _playNext,
           onPlayPrevious: _playPrevious,
         ),
@@ -1264,8 +1263,11 @@ class _MPVPlayerState extends State<MPVPlayer>
     } catch (_) {}
   }
 
+  Future<void> _seekActivePlayback(Duration position) => _pipController?.seek(position) ?? player.seek(position);
+  NativePipController? _pipController;
+  bool _pipPlaying = false;
   Future<void> _openSystemPip() async {
-    if (Platform.operatingSystem != 'ohos' || _openingMedia) return;
+    if (Platform.operatingSystem != 'ohos' || _openingMedia || _pipController != null) return;
     final wasPlaying = player.state.playing;
     final position = player.state.position;
     final media = _mediaFor(_currentFilePath);
@@ -1273,7 +1275,20 @@ class _MPVPlayerState extends State<MPVPlayer>
     await player.pause();
     await _flushPosition();
     if (!mounted || _disposing) return;
-    final resumed = await Navigator.push<PipPlaybackResult>(context, MaterialPageRoute(builder: (_) => NativePipPage(uri: uri, positionMs: position.inMilliseconds, playing: wasPlaying, headers: media?.httpHeaders ?? {})));
+    final pip = NativePipController();
+    _pipController = pip;
+    _pipPlaying = wasPlaying;
+    PipPlaybackResult? resumed;
+    try {
+      resumed = await Navigator.push<PipPlaybackResult>(context, MaterialPageRoute(builder: (_) => NativePipPage(uri: uri, positionMs: position.inMilliseconds, playing: wasPlaying, headers: media?.httpHeaders ?? {}, controller: pip,
+        onPosition: (state) {
+          if (_disposing || !mounted) return;
+          _lastPosition = Duration(milliseconds: state.positionMs);
+          _pipPlaying = state.playing;
+          _flushPosition();
+          _updatePlaybackState();
+        })));
+    } finally { _pipController = null; }
     if (!mounted || _disposing) return;
     PlaybackSleepTimer.instance.attach(this, () => player.pause());
     if (resumed != null) { _lastPosition = Duration(milliseconds: resumed.positionMs); await player.seek(_lastPosition); }
@@ -1318,7 +1333,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     final position = _lastPosition;
     final media = _mediaFor(_currentFilePath);
     if (media != null && widget.onPlayback != null) {
-      unawaited(widget.onPlayback!(media, position.inMilliseconds, _disposing, !_disposing && player.state.playing).catchError((_) {}));
+      unawaited(widget.onPlayback!(media, position.inMilliseconds, _disposing, !_disposing && (_pipController != null ? _pipPlaying : player.state.playing)).catchError((_) {}));
     }
     if (id.isEmpty || position <= Duration.zero) return;
     _lastCheckpoint = DateTime.now();
@@ -1326,7 +1341,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   void _updatePlaybackPosition(Duration position) {
-    if (_disposing || _openingMedia || _seeking || position <= Duration.zero) return;
+    if (_disposing || _openingMedia || _pipController != null || _seeking || position <= Duration.zero) return;
     _lastPosition = position;
     if (DateTime.now().difference(_lastCheckpoint) >= const Duration(seconds: 5)) _flushPosition();
   }
@@ -1398,12 +1413,14 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   void _playNext() {
+    if (_pipController != null) return;
     if (_playlist.isEmpty) return;
     _currentIndex = (_currentIndex + 1) % _playlist.length;
     _openMedia(_playlist[_currentIndex].path);
   }
 
   void _playPrevious() {
+    if (_pipController != null) return;
     if (_playlist.isEmpty) return;
     _currentIndex = (_currentIndex - 1 + _playlist.length) % _playlist.length;
     _openMedia(_playlist[_currentIndex].path);
