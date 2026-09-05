@@ -65,7 +65,7 @@ class _CastScreenPageState extends State<CastScreenPage> {
   }
 
   Future<void> _startScan() async {
-    setState(() async {
+    setState(() {
       _isScanning = true;
       // _castExample = _castExample = CastExample(
       //     initUri: pathToUri(widget.mediaPath) +

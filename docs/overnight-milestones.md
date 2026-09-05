@@ -72,3 +72,11 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - MPV settings now offer a system-PiP handoff page. It pauses the original decoder, creates one native XComponent/AVPlayer surface, carries the current position and HTTP authentication headers, and returns the position when leaving.
 - The native view owns PiP controls, file descriptor and AVPlayer release; capability failure remains visible and the user can return to the original decoder.
 - SDK compile corrected the exported name to ArkUI.PiPWindow. Native HAP build passed. **PiP has not been run on hardware; system decoding support differs from MPV and ASS effects are not carried into the native player.**
+
+## Milestone 09 — continuity regression fixes
+
+- Dedicated LAN listener and listener-scoped grants preserve loopback playback when sharing is toggled. WebDAV verifies Content-Range before returning bytes.
+- SMB disconnect closes active range readers before releasing the native context. UI initialization and metadata editor no longer use asynchronous setState callbacks.
+- Queue selection uses original source paths, avoiding Media URI normalization selecting the first item; files picked outside the queue are appended explicitly.
+- PiP returns position and playback state, pauses its decoder before returning, and respects sleep-timer pauses even during preparation.
+- Twenty tests passed, application analysis has no errors, native HAP build passed. Canonical unsigned HAP timestamp verified after build.

@@ -93,21 +93,35 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
   Future<void> _loadMetadata() async {
     final filename = widget.filePath;
 
-    setState(() async {
-      _titleController.text = await AudioMetadata.getTitle(filename);
-      _artistController.text = await AudioMetadata.getArtist(filename);
-      _albumController.text = await AudioMetadata.getAlbum(filename);
-      _yearController.text = (await AudioMetadata.getYear(filename)).toString();
-      _trackController.text =
-          (await AudioMetadata.getTrack(filename)).toString();
-      _discController.text = (await AudioMetadata.getDisc(filename)).toString();
-      _genreController.text = await AudioMetadata.getGenre(filename);
-      _albumArtistController.text =
-          await AudioMetadata.getAlbumArtist(filename);
-      _composerController.text = await AudioMetadata.getComposer(filename);
-      _lyricistController.text = await AudioMetadata.getLyricist(filename);
-      _commentController.text = await AudioMetadata.getComment(filename);
-      _lyricsController.text = await AudioMetadata.getLyrics(filename);
+    final values = await Future.wait<String>([
+      (() async => await AudioMetadata.getTitle(filename))(),
+      (() async => await AudioMetadata.getArtist(filename))(),
+      (() async => await AudioMetadata.getAlbum(filename))(),
+      (() async => (await AudioMetadata.getYear(filename)).toString())(),
+      (() async => (await AudioMetadata.getTrack(filename)).toString())(),
+      (() async => (await AudioMetadata.getDisc(filename)).toString())(),
+      (() async => await AudioMetadata.getGenre(filename))(),
+      (() async => await AudioMetadata.getAlbumArtist(filename))(),
+      (() async => await AudioMetadata.getComposer(filename))(),
+      (() async => await AudioMetadata.getLyricist(filename))(),
+      (() async => await AudioMetadata.getComment(filename))(),
+      (() async => await AudioMetadata.getLyrics(filename))(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _titleController.text = values[0];
+      _artistController.text = values[1];
+      _albumController.text = values[2];
+      _yearController.text = values[3];
+      _trackController.text = values[4];
+      _discController.text = values[5];
+      _genreController.text = values[6];
+      _albumArtistController.text = values[7];
+      _composerController.text = values[8];
+      _lyricistController.text = values[9];
+      _commentController.text = values[10];
+      _lyricsController.text = values[11];
+
     });
   }
 
@@ -566,9 +580,11 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
 
     // Load directories and files
     await _loadDirectoriesAndFiles();
+    if (!mounted) return;
 
     // Process metadata for categorized views
     await _processMetadata();
+    if (!mounted) return;
 
     setState(() {
       _isLoading = false;
@@ -613,6 +629,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
       }
     }
 
+    if (!mounted) return;
     setState(() {
       _audioFiles = files;
       _directories = directories;

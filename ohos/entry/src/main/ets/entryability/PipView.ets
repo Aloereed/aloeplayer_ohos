@@ -35,12 +35,16 @@ export class PipView extends PlatformView implements MethodCallHandler {
   private initialPosition: number;
   private headers: Record<string, string>;
   private currentPosition: number = 0;
+  private shouldPlay: boolean = true;
+  private prepared: boolean = false;
   private context: common.Context;
   constructor(context: common.Context, id: number, args: ESObject, messenger: BinaryMessenger) {
     super();
     this.context = context;
     this.uri = args['uri'] as string;
     this.initialPosition = args['positionMs'] as number;
+    this.currentPosition = this.initialPosition;
+    this.shouldPlay = args['playing'] as boolean;
     this.headers = args['headers'] as Record<string, string>;
     this.channel = new MethodChannel(messenger, `aloeplayer/pip-view/${id}`, StandardMethodCodec.INSTANCE);
     this.channel.setMethodCallHandler(this);
@@ -66,10 +70,11 @@ export class PipView extends PlatformView implements MethodCallHandler {
             player.surfaceId = this.component!.getXComponentSurfaceId();
             await player.prepare();
           } else if (state === 'prepared') {
+            this.prepared = true;
             if (this.initialPosition > 0 && this.initialPosition < player.duration) player.seek(this.initialPosition);
-            await player.play();
+            if (this.shouldPlay) await player.play();
             this.channel.invokeMethod('ready', player.duration);
-          } else if (state === 'completed') { this.channel.invokeMethod('completed', this.currentPosition); }
+          } else if (state === 'completed') { this.shouldPlay = false; this.channel.invokeMethod('completed', this.currentPosition); }
         } catch (error) { if (!this.disposed) this.channel.invokeMethod('error', '系统播放准备失败'); }
       });
       if (this.uri.startsWith('http://') || this.uri.startsWith('https://')) {
@@ -90,8 +95,8 @@ export class PipView extends PlatformView implements MethodCallHandler {
           templateType: pictureInPicture.PiPTemplateType.VIDEO_PLAY, contentWidth: this.player.width || 1280, contentHeight: this.player.height || 720 });
         this.pip.on('controlPanelActionEvent', (event: pictureInPicture.PiPActionEventType, status?: number) => {
           if (event === 'playbackStateChanged') {
-            if (status === pictureInPicture.PiPControlStatus.PLAY) this.player?.play();
-            else this.player?.pause();
+            this.shouldPlay = status === pictureInPicture.PiPControlStatus.PLAY;
+            this.changePlayback();
           }
         });
       }
@@ -101,15 +106,25 @@ export class PipView extends PlatformView implements MethodCallHandler {
   }
   private async stopPip(result: MethodResult): Promise<void> {
     try { await this.pip?.stopPiP(); } catch (error) {}
-    result.success(this.currentPosition);
+    const playing = this.prepared ? this.player?.state === 'playing' : this.shouldPlay;
+    this.shouldPlay = false;
+    try { if (this.player?.state === 'playing') await this.player.pause(); } catch (error) {}
+    result.success({ positionMs: this.currentPosition, playing: playing });
   }
   onMethodCall(call: MethodCall, result: MethodResult): void {
     if (call.method === 'open') { this.requested = true; this.open(); result.success(null); }
     else if (call.method === 'startPiP') { this.startPip(result); }
     else if (call.method === 'stopPiP') { this.stopPip(result); }
-    else if (call.method === 'pause') { this.player?.pause(); result.success(null); }
-    else if (call.method === 'play') { this.player?.play(); result.success(null); }
+    else if (call.method === 'pause' || call.method === 'play') {
+      this.shouldPlay = call.method === 'play'; this.changePlayback(); result.success(null);
+    }
     else { result.notImplemented(); }
+  }
+  private async changePlayback(): Promise<void> {
+    try {
+      if (this.shouldPlay && (this.player?.state === 'paused' || this.player?.state === 'prepared')) await this.player.play();
+      else if (!this.shouldPlay && this.player?.state === 'playing') await this.player.pause();
+    } catch (error) {}
   }
   dispose(): void {
     if (this.disposed) return;

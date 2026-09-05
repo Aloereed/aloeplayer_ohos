@@ -134,6 +134,7 @@ class Libsmb2StreamReader {
     int totalBytesRead = 0;
 
     while (offset < actualEnd) {
+      if (!_isOpen || _fileHandle == null) throw StateError('SMB read canceled');
       final readSize = (actualEnd - offset) < chunkSize
           ? (actualEnd - offset).toInt()
           : chunkSize;

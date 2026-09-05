@@ -1190,7 +1190,12 @@ class _MPVPlayerState extends State<MPVPlayer>
     if (mediaList.isEmpty) mediaList.add(Media(resolvedPath));
     _openedPaths = (widget.mediaQueue != null || (!isHttpUrl && !isFileUrl)) && _playlist.isNotEmpty
         ? _playlist.map((f) => f.path).toList() : [filePath];
-    final selected = mediaList.indexWhere((m) => m.uri == resolvedPath);
+    // A file picked outside the current folder must not open the first queue item.
+    if (!_openedPaths.contains(filePath)) {
+      mediaList.add(Media(resolvedPath, httpHeaders: _mediaFor(filePath)?.httpHeaders));
+      _openedPaths.add(filePath);
+    }
+    final selected = _openedPaths.indexOf(filePath);
     final playlist = Playlist(mediaList, index: selected < 0 ? 0 : selected);
     await _beginHistory(filePath);
     if (!mounted || _disposing) return;
@@ -1260,11 +1265,11 @@ class _MPVPlayerState extends State<MPVPlayer>
     await player.pause();
     await _flushPosition();
     if (!mounted || _disposing) return;
-    final resumed = await Navigator.push<int>(context, MaterialPageRoute(builder: (_) => NativePipPage(uri: uri, positionMs: position.inMilliseconds, headers: media?.httpHeaders ?? {})));
+    final resumed = await Navigator.push<PipPlaybackResult>(context, MaterialPageRoute(builder: (_) => NativePipPage(uri: uri, positionMs: position.inMilliseconds, playing: wasPlaying, headers: media?.httpHeaders ?? {})));
     if (!mounted || _disposing) return;
     PlaybackSleepTimer.instance.attach(this, () => player.pause());
-    if (resumed != null) { _lastPosition = Duration(milliseconds: resumed); await player.seek(_lastPosition); }
-    if (wasPlaying) await player.play();
+    if (resumed != null) { _lastPosition = Duration(milliseconds: resumed.positionMs); await player.seek(_lastPosition); }
+    if (resumed?.playing ?? wasPlaying) await player.play();
   }
 
   Future<void> _showPlaybackTools() async {

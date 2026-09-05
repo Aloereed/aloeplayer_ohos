@@ -23,6 +23,7 @@ class Libsmb2Service {
 
   // 文件句柄管理 - 用于支持多个并发流式读取
   final Map<String, Libsmb2StreamReader> _streamReaders = {};
+  final Set<Libsmb2StreamReader> _rangeReaders = {};
 
   bool get isConnected => _context != null && !_context!.address.isNegative;
 
@@ -63,6 +64,7 @@ class Libsmb2Service {
     bool encryption = false,
   }) async {
     try {
+      if (_context != null) await disconnect();
       print('[libsmb2] Starting connection...');
       print('[libsmb2] Host: $host');
       print('[libsmb2] Username: $username');
@@ -185,6 +187,8 @@ class Libsmb2Service {
 
   // 断开连接
   Future<void> disconnect() async {
+    for (final reader in _rangeReaders.toList()) { await reader.close(); }
+    _rangeReaders.clear();
     // 先关闭所有打开的流式读取器
     for (var reader in _streamReaders.values) {
       await reader.close();
@@ -329,24 +333,7 @@ class Libsmb2Service {
   }
 
   // 获取文件流（完整文件）
-  Future<Stream<Uint8List>> getFileStream(String filePath) async {
-    if (!isConnected) {
-      throw Exception('未连接到SMB服务器');
-    }
-
-    print('[libsmb2] getFileStream called with path: $filePath');
-
-    // 组合基础路径和请求路径
-    final normalizedPath = _combinePaths(filePath);
-    print('[libsmb2] Combined path for stream: $normalizedPath');
-
-    final controller = StreamController<Uint8List>();
-
-    // 异步读取文件
-    _readFileAsync(normalizedPath, controller);
-
-    return controller.stream;
-  }
+  Future<Stream<Uint8List>> getFileStream(String filePath) => getRangeStream(filePath, start: 0);
 
   /// 创建流式文件读取器 - 支持范围读取和视频播放
   ///
@@ -387,6 +374,8 @@ class Libsmb2Service {
     final reader = Libsmb2StreamReader(_bindings, _context!, normalizedPath);
 
     // 保存到管理器中
+    final previous = _streamReaders[filePath];
+    if (previous != null) await previous.close();
     _streamReaders[filePath] = reader;
 
     return reader;
@@ -420,6 +409,7 @@ class Libsmb2Service {
 
     try {
       await reader.open();
+      _rangeReaders.add(reader);
       return _readAndClose(reader, start, end, chunkSize);
     } catch (e) {
       await reader.close();
@@ -431,6 +421,7 @@ class Libsmb2Service {
     try {
       yield* reader.readRange(start: start, end: end, chunkSize: chunkSize);
     } finally {
+      _rangeReaders.remove(reader);
       await reader.close();
     }
   }

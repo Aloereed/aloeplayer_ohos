@@ -328,6 +328,18 @@ class WebDavService {
         await response.data?.stream.listen((_) {}).cancel();
         throw Exception('服务器不支持范围读取');
       }
+      if (start != null || end != null) {
+        final match = RegExp(r'^bytes (\d+)-(\d+)/(\d+|\*)$').firstMatch(response.headers.value('content-range') ?? '');
+        final actualStart = match == null ? null : int.tryParse(match.group(1)!);
+        final actualEnd = match == null ? null : int.tryParse(match.group(2)!);
+        final total = match == null ? null : int.tryParse(match.group(3)!);
+        final expectedEnd = end == null ? (total == null ? null : total - 1) : (total != null && end >= total ? total - 1 : end);
+        if (actualStart != (start ?? 0) || actualEnd == null || actualEnd < (start ?? 0) ||
+            (expectedEnd != null && actualEnd != expectedEnd)) {
+          await response.data?.stream.listen((_) {}).cancel();
+          throw Exception('服务器返回了错误的读取范围，已停止以避免文件损坏');
+        }
+      }
       if (response.data == null) throw Exception('响应数据为空');
 
       return response.data!.stream;

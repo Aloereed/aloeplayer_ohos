@@ -331,8 +331,7 @@ class _BrowserPageState extends State<BrowserPage> {
               } catch (e) { if (mounted) _showError('$e'); }
             }),
             ListTile(leading: const Icon(Icons.stop_circle_outlined), title: const Text('停止文件共享'), onTap: () async {
-              await _httpService.stopServer();
-              await _httpService.startServer();
+              await _httpService.disableLanSharing();
               if (context.mounted) Navigator.pop(context);
             }),
             const Divider(height: 16),

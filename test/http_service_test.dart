@@ -55,4 +55,31 @@ void main() {
       await rejected.drain<void>();
     } finally { client.close(force: true); await proxy.stopServer(); }
   });
+  test('LAN grants are isolated and stopping sharing preserves local playback', () async {
+    final proxy = HttpService.forTesting(_Source(), lanAddress: '127.0.0.1');
+    final client = HttpClient();
+    Future<int> status(Uri uri) async {
+      final response = await (await client.getUrl(uri)).close();
+      await response.drain<void>();
+      return response.statusCode;
+    }
+    try {
+      await proxy.startServer();
+      final local = Uri.parse(proxy.getFileUrlLocalhost(_File().path));
+      await proxy.enableLanSharing();
+      final shared = Uri.parse(proxy.getFileUrl(_File().path));
+      expect(shared.port, isNot(local.port));
+      expect(await status(local), 200);
+      expect(await status(shared), 200);
+      expect(await status(local.replace(port: shared.port)), 403);
+      expect(await status(shared.replace(port: local.port)), 403);
+      await proxy.disableLanSharing();
+      expect(await status(local), 200);
+      await proxy.enableLanSharing();
+      final renewed = Uri.parse(proxy.getFileUrl(_File().path));
+      expect(await status(shared.replace(port: renewed.port)), 403);
+      expect(await status(renewed), 200);
+    } finally { client.close(force: true); await proxy.stopServer(); }
+  });
+
 }

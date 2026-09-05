@@ -400,10 +400,10 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       _thumbnailPath =
           path.join((await getTemporaryDirectory()).path, 'Thumbnails');
     }
-    _ensureVideoDirectoryExists();
-    setState(() async {
-      _isGridView = !(await _settingsService.getDefaultListmode());
-    });
+    await _ensureVideoDirectoryExists();
+    final defaultList = await _settingsService.getDefaultListmode();
+    if (!mounted) return;
+    setState(() => _isGridView = !defaultList);
     // _loadVideoFiles();
     _loadItems();
   }
