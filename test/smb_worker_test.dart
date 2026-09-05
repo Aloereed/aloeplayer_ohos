@@ -4,6 +4,9 @@ import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aloeplayer/libsmb2_service/smb_worker.dart';
+import 'package:aloeplayer/services/smb_service.dart';
+import 'package:aloeplayer/services/file_service.dart';
+import 'package:aloeplayer/models/server_config.dart';
 import 'package:aloeplayer/libsmb2_service/libsmb2_file.dart';
 
 class _Backend implements SmbWorkerBackend {
@@ -50,4 +53,14 @@ void main() {
       expect((await worker.getFile('/')).size, 6);
     } finally { timer.cancel(); await worker.disconnect(); }
   });
+  test('file-service adapter preserves inclusive range semantics through worker', () async {
+    final service = SmbFileService(service: SmbService.forTesting(SmbWorker.forTesting(_entry)));
+    try {
+      final config = ServerConfig(id: 'server', name: 'NAS', type: ServerType.smb, host: 'nas', username: '', password: '', createdAt: DateTime(2026));
+      expect(await service.connect(config), isTrue);
+      expect((await service.listFiles('/')).single.name, '片段.mp4');
+      expect(await (await service.getFileStream('/video', start: 1, end: 3)).expand((chunk) => chunk).toList(), [1, 2, 3]);
+    } finally { await service.disconnect(); }
+  });
+
 }

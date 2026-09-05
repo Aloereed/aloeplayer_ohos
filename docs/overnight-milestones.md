@@ -108,3 +108,10 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - libsmb2 stat fields are Unix seconds/nanoseconds, not Windows FILETIME. Corrected timestamps and added a fractional-revision regression. Existing SMB download tasks created with the old incorrect revision may report source changes; cancel/re-add those jobs rather than bypassing revision protection.
 - Server pages guard disposed callbacks; catalog scans reject overlapping starts; metadata editing validates numeric fields and reports write failures.
 - Twenty-seven full-suite tests passed, HAP build passed and canonical timestamp verified. A separate worker-isolate scaffold test also passed; that scaffold is integrated in the next milestone.
+
+## Milestone 14 — SMB worker isolation
+
+- SMB browsing, stat, connection and range reads now run in a dedicated worker isolate. One worker owns one native context and serializes native operations; credentials remain in the main-isolate secure store.
+- Pull-based TransferableTypedData chunks preserve stream backpressure. Cancel closes the worker reader; disconnect releases readers/context and ends the isolate; reconnect creates a new owner.
+- Twenty-nine tests passed. Worker tests simulate a blocking backend while a main-isolate timer keeps running, exercise range/cancellation/error/reconnect, and check inclusive FileService boundaries through the actual adapter. HAP build passed and canonical timestamp verified.
+- Mock backend tests do not validate real NAS behavior. Compare milestone 13 if a device-specific SMB worker issue occurs.

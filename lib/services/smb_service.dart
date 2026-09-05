@@ -8,13 +8,17 @@
 // lib/services/smb_service.dart
 // 使用 libsmb2 的实现，完全解耦 smb_connect
 import 'dart:typed_data';
-import '../libsmb2_service/libsmb2_service.dart';
+import '../libsmb2_service/smb_worker.dart';
+import 'credential_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../libsmb2_service/smb_file.dart';
 import '../libsmb2_service/smb_file_adapter.dart';
 
 class SmbService {
-  // 使用 Libsmb2Service 作为底层实现
-  final Libsmb2Service _libsmb2Service = Libsmb2Service();
+  // Native calls live in one dedicated worker isolate, never in the UI isolate.
+  final SmbWorker _libsmb2Service;
+  SmbService() : _libsmb2Service = SmbWorker();
+  SmbService.forTesting(SmbWorker worker) : _libsmb2Service = worker;
 
   bool get isConnected => _libsmb2Service.isConnected;
 
@@ -25,17 +29,19 @@ class SmbService {
     required String password,
     required String domain,
   }) async {
-    await _libsmb2Service.saveCredentials(
-      host: host,
-      username: username,
-      password: password,
-      domain: domain,
-    );
+    final prefs = await SharedPreferences.getInstance();
+    await CredentialStore.write('smb_password', password);
+    await prefs.remove('smb_password');
+    await prefs.setString('smb_host', host);
+    await prefs.setString('smb_username', username);
+    await prefs.setString('smb_domain', domain);
   }
 
   // 获取保存的登录信息
   Future<Map<String, String>> getSavedCredentials() async {
-    return await _libsmb2Service.getSavedCredentials();
+    final prefs = await SharedPreferences.getInstance();
+    return {'host': prefs.getString('smb_host') ?? '', 'username': prefs.getString('smb_username') ?? '',
+      'domain': prefs.getString('smb_domain') ?? '', 'password': await CredentialStore.migrateLegacy('smb_password', prefs, 'smb_password')};
   }
 
   // 连接SMB
@@ -83,5 +89,5 @@ class SmbService {
   }
 
   // 获取底层的 Libsmb2Service（如果需要直接访问）
-  Libsmb2Service get libsmb2Service => _libsmb2Service;
+  SmbWorker get libsmb2Service => _libsmb2Service;
 }

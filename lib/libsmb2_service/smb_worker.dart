@@ -115,6 +115,7 @@ class SmbWorker {
     } catch (_) { _isolate?.kill(priority: Isolate.immediate); events.close(); _events = null; rethrow; }
   }
   Future<Object?> _request(String command, Map<String, dynamic> args) async {
+    if (!{'connect', 'disconnect'}.contains(command) && !isConnected) throw StateError('SMB 连接已关闭');
     final port = _port;
     if (port == null) throw StateError('SMB 连接已关闭');
     final id = ++_sequence;
@@ -130,10 +131,12 @@ class SmbWorker {
     _closing = false;
     await (_starting = _launch());
     _starting = null;
-    _connected = await _request('connect', {'host': host, 'username': username, 'password': password, 'domain': domain,
-      'signingRequired': signingRequired, 'anonymousLogin': anonymousLogin, 'encryption': encryption}) == true;
-    if (!_connected) await _disconnect();
-    return _connected;
+    try {
+      _connected = await _request('connect', {'host': host, 'username': username, 'password': password, 'domain': domain,
+        'signingRequired': signingRequired, 'anonymousLogin': anonymousLogin, 'encryption': encryption}) == true;
+      if (!_connected) await _disconnect();
+      return _connected;
+    } catch (_) { await _disconnect(); rethrow; }
   });
   Future<List<Libsmb2File>> listFiles(String path) async => (await _request('list', {'path': path}) as List).cast<Libsmb2File>();
   Future<Libsmb2File> getFile(String path) async => await _request('stat', {'path': path}) as Libsmb2File;
