@@ -1,3 +1,4 @@
+import PipPlugin from './PipPlugin'
 import DeviceToolsPlugin from './DeviceToolsPlugin'
 /*
  * @Author: 
@@ -73,6 +74,7 @@ export default class EntryAbility extends FlutterAbility {
         this.addPlugin(this.myDownloadPlugin)
         this.addPlugin(new CredentialPlugin())
         this.addPlugin(new DeviceToolsPlugin())
+        this.addPlugin(new PipPlugin())
         this.addPlugin(new VolumePlugin())
         this.addPlugin(new FfmpegPlugin())
         this.addPlugin(new HdrPlugin())

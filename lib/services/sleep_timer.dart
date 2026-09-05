@@ -16,8 +16,8 @@ class PlaybackSleepTimer extends ChangeNotifier {
     _owner = owner;
     _pause = pause;
   }
-  void detach(Object owner) {
-    if (_owner == owner) { cancel(); _owner = null; _pause = null; }
+  void detach(Object owner, {bool cancelTimer = true}) {
+    if (_owner == owner) { if (cancelTimer) cancel(); _owner = null; _pause = null; }
   }
   void start(Duration duration) {
     cancel();

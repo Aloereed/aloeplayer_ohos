@@ -66,3 +66,9 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Eighteen tests passed, including a local mock server covering reverse-proxy URL prefixes, login headers, resume conversion, direct-stream construction and start/progress/stop reports. HAP build passed.
 - Live streams and server-side transcoding are explicitly unsupported by this first connector; a real Jellyfin/Emby instance has not been exercised.
 - Protocol references: https://dev.emby.media/doc/restapi/Video-Streaming.html and https://typescript-sdk.jellyfin.org/classes/generated-client.SessionApi.html .
+
+## Milestone 08 — native picture-in-picture
+
+- MPV settings now offer a system-PiP handoff page. It pauses the original decoder, creates one native XComponent/AVPlayer surface, carries the current position and HTTP authentication headers, and returns the position when leaving.
+- The native view owns PiP controls, file descriptor and AVPlayer release; capability failure remains visible and the user can return to the original decoder.
+- SDK compile corrected the exported name to ArkUI.PiPWindow. Native HAP build passed. **PiP has not been run on hardware; system decoding support differs from MPV and ASS effects are not carried into the native player.**

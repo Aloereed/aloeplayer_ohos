@@ -1,3 +1,4 @@
+import 'pages/native_pip_page.dart';
 import 'services/subtitle_matcher.dart';
 import 'services/playback_tools_store.dart';
 import 'services/sleep_timer.dart';
@@ -1248,6 +1249,22 @@ class _MPVPlayerState extends State<MPVPlayer>
       await applyPlaybackPreferences(player, _historyId);
       _updateMediaItem();
     } catch (_) {}
+  }
+
+  Future<void> _openSystemPip() async {
+    if (Platform.operatingSystem != 'ohos' || _openingMedia) return;
+    final wasPlaying = player.state.playing;
+    final position = player.state.position;
+    final media = _mediaFor(_currentFilePath);
+    final uri = await resolveLnkFile(_currentFilePath);
+    await player.pause();
+    await _flushPosition();
+    if (!mounted || _disposing) return;
+    final resumed = await Navigator.push<int>(context, MaterialPageRoute(builder: (_) => NativePipPage(uri: uri, positionMs: position.inMilliseconds, headers: media?.httpHeaders ?? {})));
+    if (!mounted || _disposing) return;
+    PlaybackSleepTimer.instance.attach(this, () => player.pause());
+    if (resumed != null) { _lastPosition = Duration(milliseconds: resumed); await player.seek(_lastPosition); }
+    if (wasPlaying) await player.play();
   }
 
   Future<void> _showPlaybackTools() async {
@@ -3005,6 +3022,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                           value: _backgroundPlayEnabled,
                           onChanged: _toggleBackgroundPlay,
                         ),
+                        if (Platform.operatingSystem == 'ohos') ListTile(leading: const Icon(Icons.picture_in_picture_alt, color: Colors.white), title: const Text('系统画中画', style: TextStyle(color: Colors.white)), onTap: _openSystemPip),
                         ListTile(leading: const Icon(Icons.tune, color: Colors.white), title: const Text('字幕同步、书签与章节', style: TextStyle(color: Colors.white)), onTap: _showPlaybackTools),
                         ListTile(leading: const Icon(Icons.bedtime_outlined, color: Colors.white), title: const Text('定时停止', style: TextStyle(color: Colors.white)), onTap: () => showSleepTimer(context)),
                         _buildSettingItem(
