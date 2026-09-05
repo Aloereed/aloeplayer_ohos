@@ -11,12 +11,14 @@ class VideoThumbnailLoader {
   final ThumbnailCache memory;
   final Directory library;
   final Future<Uint8List?> Function(String source) decode;
+  final Future<Uint8List?> Function(String source)? fallbackDecode;
   Future<Map<String, int>>? _legacyNames;
   VideoThumbnailLoader(
       {required this.disk,
       required this.memory,
       required this.library,
-      required this.decode});
+      required this.decode,
+      this.fallbackDecode});
 
   Future<Map<String, int>> _names() async {
     final names = <String, int>{};
@@ -58,6 +60,9 @@ class VideoThumbnailLoader {
     try {
       bytes = await decode(source);
     } catch (_) {}
+    if ((bytes == null || bytes.isEmpty) && fallbackDecode != null) {
+      try { bytes = await fallbackDecode!(source); } catch (_) {}
+    }
     if (bytes == null || bytes.isEmpty) {
       try {
         final legacy = File(

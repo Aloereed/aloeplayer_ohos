@@ -48,13 +48,24 @@ const TAG = "FfmpegPluginTag";
 
 // Each probe owns its FFmpeg context; keep synchronous probing off ArkUI's thread.
 @Concurrent
-function probeVideoDuration(path: string): number {
-  return libAddon.get_video_duration(path);
+async function probeVideoDuration(path: string): Promise<number> {
+  const file = await fs.open(path, fs.OpenMode.READ_ONLY);
+  try { return libAddon.probeDurationFd(file.fd); }
+  finally { await fs.close(file); }
 }
 
 @Concurrent
-function probeVideoHdr(path: string): string {
-  return libAddon.GetVideoHDRInfo(path);
+async function probeVideoHdr(path: string): Promise<string> {
+  const file = await fs.open(path, fs.OpenMode.READ_ONLY);
+  try { return libAddon.probeHdrFd(file.fd); }
+  finally { await fs.close(file); }
+}
+
+@Concurrent
+async function probeVideoThumbnail(path: string): Promise<string> {
+  const file = await fs.open(path, fs.OpenMode.READ_ONLY);
+  try { return libAddon.thumbnailFromFd(file.fd); }
+  finally { await fs.close(file); }
 }
 
 export default class FfmpegPlugin implements FlutterPlugin {
@@ -98,6 +109,9 @@ export default class FfmpegPlugin implements FlutterPlugin {
             break;
           case "getVideoDurationMs":
             that.api.getVideoDurationMs(result, call.argument("path") as string);
+            break;
+          case "getVideoThumbnailFallback":
+            that.api.getVideoThumbnailFallback(result, call.argument("path") as string);
             break;
           case "getVideoHDRInfo":
             console.error("[ffprobe] getVideoHDRInfo start");
@@ -671,6 +685,12 @@ class FfmpegApi {
     } catch (error) {
       result.error("UNAVAILABLE", "Failed to get video duration", error);
     }
+  }
+  async getVideoThumbnailFallback(result: MethodResult, path: string): Promise<void> {
+    try {
+      const encoded = await taskpool.execute(new taskpool.Task(probeVideoThumbnail, path), taskpool.Priority.LOW) as string;
+      result.success(encoded);
+    } catch (error) { result.success(""); }
   }
   async getVideoHDRInfoFFmpeg(result: MethodResult, path: string): Promise<void> {
     try {

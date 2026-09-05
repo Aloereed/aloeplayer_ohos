@@ -1026,6 +1026,11 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         library: Directory(_videoDirPath),
         decode: (source) => VideoThumbnailOhos.thumbnailData(
           video: source, imageFormat: ImageFormat.JPEG, maxWidth: 256, quality: 60),
+        fallbackDecode: (source) async {
+          const platform = MethodChannel('samples.flutter.dev/ffmpegplugin');
+          final encoded = await platform.invokeMethod<String>('getVideoThumbnailFallback', {'path': source});
+          return encoded == null || encoded.isEmpty ? null : base64Decode(encoded);
+        },
       );
       return await _thumbnailLoader!.load(file);
     } catch (_) { return null; }

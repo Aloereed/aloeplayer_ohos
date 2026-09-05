@@ -64,4 +64,31 @@ void main() {
     await target.writeAsBytes([0, 1]);
     expect(await loader.load(link), [2]);
   });
+  test('fallback runs only after system failure and its result is cached', () async {
+    final video = await File('${root.path}/movie.mkv').writeAsBytes([0]);
+    var primaryCalls = 0, fallbackCalls = 0;
+    final loader = VideoThumbnailLoader(
+      disk: DiskThumbnailCache(Directory('${root.path}/cache')),
+      memory: ThumbnailCache(), library: root,
+      decode: (_) async { primaryCalls++; throw StateError('unsupported system codec'); },
+      fallbackDecode: (source) async {
+        expect(source, video.path);
+        fallbackCalls++; return Uint8List.fromList([7, 8]);
+      });
+    expect(await loader.load(video), [7, 8]);
+    expect(await loader.load(video), [7, 8]);
+    expect(primaryCalls, 1);
+    expect(fallbackCalls, 1);
+  });
+  test('a working system decoder never starts the expensive fallback', () async {
+    final video = await File('${root.path}/movie.mp4').writeAsBytes([0]);
+    var fallbackCalls = 0;
+    final loader = VideoThumbnailLoader(
+      disk: DiskThumbnailCache(Directory('${root.path}/cache')),
+      memory: ThumbnailCache(), library: root,
+      decode: (_) async => Uint8List.fromList([4]),
+      fallbackDecode: (_) async { fallbackCalls++; return null; });
+    expect(await loader.load(video), [4]);
+    expect(fallbackCalls, 0);
+  });
 }

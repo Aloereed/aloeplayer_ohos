@@ -8,6 +8,9 @@ export class JSBind{
 export const executeFFmpegCommandAPP:(a:string,b:number,c:any)=>any;
 export const executeFFmpegCommandAPP2:(a:string,b:number,c:any)=>any;
 export const get_video_duration:(a:string)=>any;
+export const probeDurationFd: (fd: number) => number;
+export const probeHdrFd: (fd: number) => string;
+export const thumbnailFromFd: (fd: number) => string;
 export const GetVideoHDRInfo:(a:string)=>any;
 export const GetAudioTracks:(a:string)=>any;
 export const GetSubtitleTracks:(a:string)=>any;

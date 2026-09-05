@@ -6,6 +6,7 @@
  * @Description: file content
  */
 #include "utils.hpp"
+#include "library_media_probe.h"
 #include <aki/jsbind.h>
 extern "C" {
 #include <libavutil/log.h>
@@ -1388,6 +1389,9 @@ JSBIND_GLOBAL() {
     JSBIND_PFUNCTION(executeFFmpegCommandAPP2);
     JSBIND_FUNCTION(showLog);
     JSBIND_FUNCTION(get_video_duration);
+    JSBIND_FUNCTION(probeDurationFd);
+    JSBIND_FUNCTION(probeHdrFd);
+    JSBIND_FUNCTION(thumbnailFromFd);
     JSBIND_FUNCTION(GetVideoHDRInfo);
     JSBIND_FUNCTION(GetAudioTracks);
     JSBIND_FUNCTION(GetSubtitleTracks);
