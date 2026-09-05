@@ -10,7 +10,11 @@ class StreamCacheService {
   static final StreamCacheService instance = StreamCacheService._();
   StreamCacheService._();
   final Map<String, _CacheTask> _activeTasks = {};
-  Future<Directory> _directory() async => Directory(path.join((await getTemporaryDirectory()).path, 'stream-cache'))..createSync(recursive: true);
+  Future<Directory> _directory() async {
+    final directory = Directory(path.join((await getTemporaryDirectory()).path, 'stream-cache'));
+    await directory.create(recursive: true);
+    return directory;
+  }
   Future<String> startStreamCache({required Stream<Uint8List> stream, required String fileName, required int fileSize}) async {
     final directory = await _directory();
     final file = File(path.join(directory.path, '${DateTime.now().microsecondsSinceEpoch}_${path.basename(fileName)}'));

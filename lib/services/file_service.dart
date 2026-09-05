@@ -72,7 +72,8 @@ abstract class FileService {
 
 // SMB文件服务实现
 class SmbFileService implements FileService {
-  final SmbService _smbService = SmbService();
+  final SmbService _smbService;
+  SmbFileService({SmbService? service}) : _smbService = service ?? SmbService();
 
   @override
   bool get isConnected => _smbService.isConnected;
@@ -130,7 +131,7 @@ class SmbFileService implements FileService {
   Future<FileItem?> getFile(String path) async {
     try {
       final file = await _smbService.getFile(path);
-      return SmbFileItem(file);
+      return file.isExists ? SmbFileItem(file) : null;
     } catch (e) {
       return null;
     }
@@ -142,7 +143,8 @@ class SmbFileService implements FileService {
 
 // WebDAV文件服务实现
 class WebDavFileService implements FileService {
-  final WebDavService _webdavService = WebDavService();
+  final WebDavService _webdavService;
+  WebDavFileService({WebDavService? service}) : _webdavService = service ?? WebDavService();
 
   @override
   bool get isConnected => _webdavService.isConnected;

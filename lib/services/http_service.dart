@@ -1,3 +1,4 @@
+import 'file_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -15,10 +16,10 @@ import 'webdav_service.dart';
 class HttpService {
   static final HttpService instance = HttpService._();
   HttpService._();
+  HttpService.forTesting(FileService source) : _source = source;
   HttpServer? _server;
   Future<bool>? _starting;
-  SmbService? _smbService;
-  WebDavService? _webdavService;
+  FileService? _source;
   final Map<String, _FileGrant> _grants = {};
   int _port = 0;
   String? _localIp;
@@ -27,13 +28,11 @@ class HttpService {
   String? get localIpAddress => _localIp;
   String get baseUrl => 'http://${_lanEnabled ? (_localIp ?? "127.0.0.1") : "127.0.0.1"}:$_port';
   void setSmbService(SmbService service) {
-    _smbService = service;
-    _webdavService = null;
+    _source = SmbFileService(service: service);
     _grants.clear();
   }
   void setWebDavService(WebDavService service) {
-    _webdavService = service;
-    _smbService = null;
+    _source = WebDavFileService(service: service);
     _grants.clear();
   }
   Future<bool> startServer({String? bindAddress}) {
@@ -81,18 +80,11 @@ class HttpService {
     final grant = _grants[request.url.queryParameters['token']];
     if (grant == null || grant.expires.isBefore(DateTime.now())) return Response.forbidden('链接已失效');
     try {
-      final smb = _smbService;
-      final dav = _webdavService;
-      int size;
-      if (smb != null && smb.isConnected) {
-        final file = await smb.getFile(grant.path);
-        if (!file.isExists || file.isDirectory()) return Response.notFound('文件不存在');
-        size = file.size;
-      } else if (dav != null && dav.isConnected) {
-        final file = await dav.getFileInfo(grant.path);
-        if (file == null || file.isDirectory) return Response.notFound('文件不存在');
-        size = file.size;
-      } else { return Response(503, body: '服务器未连接'); }
+      final source = _source;
+      if (source == null || !source.isConnected) return Response(503, body: '服务器未连接');
+      final file = await source.getFile(grant.path);
+      if (file == null || file.isDirectory) return Response.notFound('文件不存在');
+      final size = file.size;
       final rangeHeader = request.headers['range'];
       final range = rangeHeader == null ? null : ByteRange.parse(rangeHeader, size);
       if (rangeHeader != null && range == null) return Response(416, headers: {'Content-Range': 'bytes */$size'});
@@ -104,9 +96,7 @@ class HttpService {
         if (range != null) 'Content-Range': 'bytes ${range.start}-${range.end}/$size',
       };
       if (request.method == 'HEAD' || size == 0) return Response(range == null ? 200 : 206, headers: headers);
-      final stream = smb != null
-          ? await smb.libsmb2Service.getRangeStream(grant.path, start: range?.start ?? 0, end: (range?.end ?? size - 1) + 1)
-          : await dav!.getFileStream(grant.path, start: range?.start, end: range?.end);
+      final stream = await source.getFileStream(grant.path, start: range?.start, end: range?.end);
       return Response(range == null ? 200 : 206, body: stream, headers: headers);
     } catch (_) { return Response(502, body: '读取失败，请检查服务器连接'); }
   }

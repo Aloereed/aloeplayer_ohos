@@ -51,3 +51,10 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Thirteen tests passed including a real temporary-file transfer that fails after 3 bytes and resumes from byte 3 to produce the exact 6-byte payload. Application analysis has no errors.
 - First native build caught an SDK export naming mismatch (statvfs vs statfs); corrected to CoreFileKit.statfs and rebuilt successfully.
 - No device is connected: long-running background transfer retention and public-library permissions still require device verification.
+
+## Milestone 06 — indexed poster library and protocol regression
+
+- Added SQLite-backed local poster library, incremental NFO/poster revision scanning, title/search/series filters and episode queues. Cancellation/inaccessible roots never prune existing records.
+- Thumbnail requests are deduplicated and limited to two concurrent native operations.
+- HTTP proxy shares the same range-capable source interface as downloads. Real loopback HTTP tests verify grants, suffix ranges, HEAD without file reads, and 416 handling.
+- Sixteen tests passed; HAP build passed. Local NFO/poster support requires sidecar files already present beside the media; it does not download third-party metadata.

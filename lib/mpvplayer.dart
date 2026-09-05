@@ -2686,8 +2686,8 @@ class _MPVPlayerState extends State<MPVPlayer>
                   Expanded(
                     child: Text(
                       _currentFilePath.isNotEmpty
-                          ? path.basename(_currentFilePath)
-                          : path.basename(widget.filePath),
+                          ? _mediaTitle(_currentFilePath)
+                          : _mediaTitle(widget.filePath),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,

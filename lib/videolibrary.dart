@@ -1,3 +1,4 @@
+import 'services/work_queue.dart';
 import 'services/thumbnail_cache.dart';
 import 'dart:convert';
 import 'dart:ui';
@@ -331,6 +332,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   late SortOrder _currentSortOrder = SortOrder.ascending;
   // 添加缓存
   final ThumbnailCache _thumbnailCache = ThumbnailCache();
+  final WorkQueue _thumbnailQueue = WorkQueue();
+  final Map<String, Future<Uint8List?>> _pendingThumbnails = {};
   final Map<String, DateTime> _modifiedTimes = {};
   Map<String, Duration?> _durationCache = {};
   Map<String, bool?> _hdrCache = {};
@@ -1196,7 +1199,11 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   // 获取视频缩略图
-  Future<Uint8List?> _getVideoThumbnail(File file) async {
+  Future<Uint8List?> _getVideoThumbnail(File file) {
+    return _pendingThumbnails.putIfAbsent(file.path, () => _thumbnailQueue.run(() => _loadVideoThumbnail(file)).whenComplete(() => _pendingThumbnails.remove(file.path)));
+  }
+
+  Future<Uint8List?> _loadVideoThumbnail(File file) async {
     if (disableThumbnail) return null;
     try {
       final realPath = file.path.endsWith('.lnk') ? (await file.readAsString()).trim() : file.path;

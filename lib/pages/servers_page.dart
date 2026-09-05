@@ -1,3 +1,4 @@
+import 'catalog_page.dart';
 import 'downloads_page.dart';
 import 'continue_watching_page.dart';
 // lib/pages/servers_page.dart
@@ -122,7 +123,7 @@ class _ServersPageState extends State<ServersPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('媒体库'),
-        actions: [IconButton(tooltip: '继续观看', icon: const Icon(Icons.play_circle_outline), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContinueWatchingPage()))), IconButton(tooltip: '下载任务', icon: const Icon(Icons.download), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage())))],
+        actions: [IconButton(tooltip: '海报媒体库', icon: const Icon(Icons.movie_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogPage()))), IconButton(tooltip: '继续观看', icon: const Icon(Icons.play_circle_outline), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContinueWatchingPage()))), IconButton(tooltip: '下载任务', icon: const Icon(Icons.download), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage())))],
         elevation: 0,
       ),
       body: _isLoading
