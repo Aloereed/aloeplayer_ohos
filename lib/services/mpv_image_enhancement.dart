@@ -122,6 +122,7 @@ class MpvImageEnhancer extends ChangeNotifier {
     return _serial.run(() async {
     if (_disposed) return;
     busy = true; error = null; notifyListeners();
+    var failed = false;
     try {
       if (!next.isDefault || _original.isNotEmpty) {
         await _snapshot();
@@ -148,13 +149,15 @@ class MpvImageEnhancer extends ChangeNotifier {
       } else { status = '保持播放器默认渲染'; }
       settings = next;
     } catch (_) {
+      failed = true;
       await _restore();
       settings = const ImageEnhancementSettings();
       if (identical(_desired, next)) _desired = settings;
       error = '此设备未能应用画质增强，已恢复默认画质';
       status = '默认画质';
     } finally {
-      if (save && !_disposed) {
+      // A saved preset that fails on this device must not fail again at every launch.
+      if ((save || failed) && !_disposed) {
         try { await (await SharedPreferences.getInstance()).setString(_key, jsonEncode(settings.toJson())); }
         catch (_) { error ??= '当前画质已应用，但无法保存设置'; }
       }

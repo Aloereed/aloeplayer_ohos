@@ -140,11 +140,11 @@ async function buildThumbnailFile(vidPath: string, headers: HashMap<string, stri
     }
   }
   let outputFile: fs.File;
-  outputFile = fs.openSync(fullpath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE);
+  outputFile = fs.openSync(fullpath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
   try {
     await fs.write(outputFile.fd, pickImageBuffer);
-    await fs.close(outputFile);
-  } catch (e) {
+  } finally {
+    try { await fs.close(outputFile); } catch (error) {}
   }
   return fullpath;
 }

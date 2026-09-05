@@ -37,6 +37,7 @@ extern "C" {
 #include <csetjmp>
 #include <locale>
 #include <codecvt>
+#include <chrono>
 
 #include <iostream>
 #include <cstdio>
@@ -60,11 +61,20 @@ std::string toUTF8(const std::wstring &wstr) {
     return converter.to_bytes(wstr);
 }
 
+// Bound library probes, including providers that stop responding during I/O.
+static int interrupt_library_probe(void* opaque) {
+    const auto* deadline = static_cast<const std::chrono::steady_clock::time_point*>(opaque);
+    return std::chrono::steady_clock::now() >= *deadline;
+}
+
 int64_t get_video_duration(const std::string &file_path) {
     // 初始化libavformat，并注册所有的muxers/demuxers
     // av_register_all();
 
-    AVFormatContext *format_ctx = nullptr;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    AVFormatContext *format_ctx = avformat_alloc_context();
+    if (!format_ctx) return -1;
+    format_ctx->interrupt_callback = {interrupt_library_probe, &deadline};
 
     // 打开视频文件
     if (avformat_open_input(&format_ctx, file_path.c_str(), nullptr, nullptr) != 0) {
@@ -86,7 +96,7 @@ int64_t get_video_duration(const std::string &file_path) {
     avformat_close_input(&format_ctx);
 
     // 将微秒转换为毫秒
-    return duration / 1000;
+    return duration == AV_NOPTS_VALUE || duration < 0 ? 0 : duration / 1000;
 }
 
 // 结构体定义用于返回音轨和字幕轨信息
@@ -98,7 +108,10 @@ struct TrackInfo {
 
 // 帮助函数：检查视频是否为HDR
 bool isHDRVideo(const char* filePath) {
-    AVFormatContext* formatContext = nullptr;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    AVFormatContext* formatContext = avformat_alloc_context();
+    if (!formatContext) return false;
+    formatContext->interrupt_callback = {interrupt_library_probe, &deadline};
     bool isHDR = false;
 
     // 初始化FFmpeg库（在较新版本的FFmpeg中不需要）
@@ -148,9 +161,9 @@ bool isHDRVideo(const char* filePath) {
                                      codecContext->color_trc == AVCOL_TRC_ARIB_STD_B67)) {
                                     isHDR = true;
                                 }
-                                avcodec_free_context(&codecContext);
                             }
                         }
+                        avcodec_free_context(&codecContext);
                     }
                 }
             }

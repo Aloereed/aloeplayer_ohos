@@ -340,6 +340,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   VideoThumbnailLoader? _thumbnailLoader;
   final WorkQueue _thumbnailQueue = WorkQueue();
   final Map<String, Future<Uint8List?>> _pendingThumbnails = {};
+  final WorkQueue _metadataQueue = WorkQueue();
+  final Map<String, Future<VideoTileInfo>> _pendingTileInfo = {};
   final Map<String, DateTime> _modifiedTimes = {};
   Map<String, Duration?> _durationCache = {};
   Map<String, bool?> _hdrCache = {};
@@ -2250,7 +2252,11 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     );
   }
 
-  Future<VideoTileInfo> _tileInfo(File file) async {
+  Future<VideoTileInfo> _tileInfo(File file) => _pendingTileInfo.putIfAbsent(file.path,
+    () => _metadataQueue.run(() => _loadTileInfo(file)).whenComplete(() { _pendingTileInfo.remove(file.path); }));
+
+  Future<VideoTileInfo> _loadTileInfo(File file) async {
+    if (!mounted) return const VideoTileInfo();
     try {
       final duration = await _getVideoDuration(file);
       final history = await historyService.getHistoryByPath(file.path);

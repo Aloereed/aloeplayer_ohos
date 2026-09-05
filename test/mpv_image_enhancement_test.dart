@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aloeplayer/services/mpv_image_enhancement.dart';
@@ -70,5 +71,34 @@ void main() {
     expect(value.brightness, 50);
     expect(value.gamma, 0);
     expect(value.contrast, 0);
+  });
+  test('a failing saved preset is disabled persistently instead of retried on every launch', () async {
+    SharedPreferences.setMockInitialValues({'mpv.image-enhancement.v1': jsonEncode(
+      const ImageEnhancementSettings(mode: UpscaleMode.fsr1080, deband: true).toJson())});
+    final backend = FakeImageBackend()..reject = 'deband';
+    final engine = MpvImageEnhancer(backend: backend, shaderPath: () async => '/app/FSR.glsl');
+    engine.videoChanged(width: 1280, height: 720);
+    await engine.initialize();
+    expect(engine.error, isNotNull);
+    final saved = (await SharedPreferences.getInstance()).getString('mpv.image-enhancement.v1')!;
+    expect(ImageEnhancementSettings.fromJson(jsonDecode(saved) as Map<String, dynamic>).isDefault, isTrue);
+    engine.dispose();
+  });
+  test('rapid preset changes and video updates preserve the last user choice', () async {
+    final backend = FakeImageBackend();
+    final engine = MpvImageEnhancer(backend: backend, shaderPath: () async => '/app/FSR.glsl');
+    await engine.initialize();
+    engine.videoChanged(width: 1280, height: 720);
+    final first = engine.apply(const ImageEnhancementSettings(mode: UpscaleMode.fsr4k));
+    final last = engine.apply(const ImageEnhancementSettings(mode: UpscaleMode.highQuality, brightness: 12));
+    engine.videoChanged(width: 960, height: 540);
+    await Future.wait([first, last]);
+    // All backend operations use microtasks; drain the queued video update.
+    await Future<void>.delayed(Duration.zero);
+    expect(engine.settings.mode, UpscaleMode.highQuality);
+    expect(backend.values['glsl-shaders'], isEmpty);
+    expect(backend.values['brightness'], '12');
+    expect(backend.size, (width: 1920, height: 1080));
+    engine.dispose();
   });
 }

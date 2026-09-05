@@ -46,6 +46,17 @@ import { FFMpegUtils, FFmpegCommandOptions } from './FFmpegUtils';
 
 const TAG = "FfmpegPluginTag";
 
+// Each probe owns its FFmpeg context; keep synchronous probing off ArkUI's thread.
+@Concurrent
+function probeVideoDuration(path: string): number {
+  return libAddon.get_video_duration(path);
+}
+
+@Concurrent
+function probeVideoHdr(path: string): string {
+  return libAddon.GetVideoHDRInfo(path);
+}
+
 export default class FfmpegPlugin implements FlutterPlugin {
   private channel?: MethodChannel;
   private eventSink?: EventSink;
@@ -653,22 +664,17 @@ class FfmpegApi {
     }
     Log.i(TAG, "getFfmpegPermission finish");
   }
-  getVideoDurationMs(result: MethodResult, path: string) {
-    let duration = 0;
+  async getVideoDurationMs(result: MethodResult, path: string): Promise<void> {
     try {
-      duration = libAddon.get_video_duration(path);
-      result.success(duration);
+      const duration = await taskpool.execute(new taskpool.Task(probeVideoDuration, path), taskpool.Priority.LOW) as number;
+      result.success(Math.max(0, duration));
     } catch (error) {
       result.error("UNAVAILABLE", "Failed to get video duration", error);
     }
   }
-  getVideoHDRInfoFFmpeg(result: MethodResult, path: string) {
-    console.error("[ffprobe] getVideoHDRInfo start");
-    let hdrinfo = '';
+  async getVideoHDRInfoFFmpeg(result: MethodResult, path: string): Promise<void> {
     try {
-      console.error("[ffprobe] getVideoHDRInfo start");
-      hdrinfo = libAddon.GetVideoHDRInfo(path);
-      console.error(`[ffprobe] getVideoHDRInfo end: ${hdrinfo}`);
+      const hdrinfo = await taskpool.execute(new taskpool.Task(probeVideoHdr, path), taskpool.Priority.LOW) as string;
       result.success(hdrinfo);
     } catch (error) {
       console.error("[ffprobe] getVideoHDRInfo error");
@@ -676,28 +682,23 @@ class FfmpegApi {
     }
   }
   async getVideoHDRInfo(result: MethodResult, path: string) {
-    console.error("[ffprobe] getVideoHDRInfo system start");
-    let hdrinfo = '';
+    let extractor: media.AVMetadataExtractor | undefined;
+    let file: fs.File | undefined;
     try {
-      let avMetadataExtractor: media.AVMetadataExtractor = await media.createAVMetadataExtractor()
-    let file = fs.openSync(fileUri.getUriFromPath(path));
-    avMetadataExtractor.fdSrc = file
-    avMetadataExtractor.fetchMetadata(async (_error: BusinessError, metadata: media.AVMetadata) => {
-      let hdrJson = `{"isHDR": ${metadata.hdrType ? 'true' : 'false'}}`;
-    
-    // 返回给 Dart 侧
-    result.success(hdrJson);
-
-      fs.closeSync(file)
-      avMetadataExtractor.release();
-      
-      // The rest of your original code can be removed or modified as needed
-      // since you're now handling the HDR check differently
-  });
+      extractor = await media.createAVMetadataExtractor();
+      // fs.open accepts both paths and provider URIs. Rewrapping file://docs
+      // with getUriFromPath corrupts already valid shortcut URIs.
+      file = await fs.open(path, fs.OpenMode.READ_ONLY);
+      extractor.fdSrc = { fd: file.fd };
+      const metadata = await extractor.fetchMetadata();
+      const isHdr = metadata.hdrType !== undefined && metadata.hdrType !== media.HdrType.AV_HDR_TYPE_NONE;
+      result.success(`{"isHDR": ${isHdr ? 'true' : 'false'}}`);
     } catch (error) {
-      console.error("[ffprobe] getVideoHDRInfo error");
-      result.error("UNAVAILABLE", "Failed to get video hdr", error);
-    } 
+      result.error("UNAVAILABLE", "Failed to get video HDR metadata", null);
+    } finally {
+      if (extractor) { try { await extractor.release(); } catch (error) {} }
+      if (file) { try { await fs.close(file); } catch (error) {} }
+    }
   }
   
   getSubtitleTracks(result: MethodResult, path: string) {
@@ -1026,111 +1027,49 @@ class FfmpegApi {
     result.success(null);
   }
 
-  async fetchCover(filename: string, result: MethodResult) {
-    if (canIUse("SystemCapability.Multimedia.Media.AVMetadataExtractor")) {
-      // 创建AVMetadataExtractor对象
-      let avMetadataExtractor: media.AVMetadataExtractor =
-        await media.createAVMetadataExtractor()
-      // 设置fdSrc
-      if (filename != null && filename.startsWith("file")) {
-        console.log(`trying to get metadata from file: ${filename}`)
-        let file = fs.openSync(filename, fs.OpenMode.READ_ONLY)
-        let state = fs.statSync(file.fd)
-        let avFileDescriptor: media.AVFileDescriptor = {
-          fd: file.fd,
-          offset: 0,
-          length: state.size,
-        }
-        avMetadataExtractor.fdSrc = avFileDescriptor
-      } else {
-        avMetadataExtractor.release()
-        result.success("")
-        return
-      }
-
-      // avMetadataExtractor.fdSrc = await getContext(this).resourceManager.getRawFd(filename);
-
-      // 获取元数据（promise模式）
-      let metadata = await avMetadataExtractor.fetchMetadata()
-      console.info(TAG, `get meta data, hasAudio: ${metadata.hasAudio}`)
-
-      // 获取专辑封面（promise模式）
-      try {
-        if (metadata.hasVideo == "yes") {
-          let avImageGenerator: media.AVImageGenerator =
-            await media.createAVImageGenerator()
-          if (filename != null && filename.startsWith("file")) {
-            console.log(
-              `trying to get video cover from file: ${filename}`
-            )
-            let file = fs.openSync(filename, fs.OpenMode.READ_ONLY)
-            let state = fs.statSync(file.fd)
-            let avFileDescriptor: media.AVFileDescriptor = {
-              fd: file.fd,
-              offset: 0,
-              length: state.size,
-            }
-            avImageGenerator.fdSrc = avFileDescriptor
-          }
-          // 初始化入参
-          let timeUs = 0
-          let queryOption =
-            media.AVImageQueryOptions.AV_IMAGE_QUERY_NEXT_SYNC
-          let param: media.PixelMapParams = {
-            width: 300,
-            height: 300,
-          }
-
-          // 获取缩略图（promise模式）
-          let pixelMap = await avImageGenerator.fetchFrameByTime(
-            timeUs,
-            queryOption,
-            param
-          )
-
-          // 创建 ImagePacker 实例
-          const imagePacker = image.createImagePacker();
-
-          // 将 PixelMap 编码为图像数据
-          const packedData = await imagePacker.packing(pixelMap, {
-            format: "image/jpeg", // 你可以根据需要选择其他格式，如 "image/png"
-            quality: 100 // 图像质量，范围是 1 到 100
-          });
-
-          // 将 Uint8Array 转换为 Base64 字符串
-          const base64String = buffer.from(packedData).toString('base64');
-          result.success(base64String);
-          // 释放资源（promise模式）
-          avImageGenerator.release()
-
-          console.info(TAG, `release success.`)
-          return;
-        } else {
-          let pixelMap = await avMetadataExtractor.fetchAlbumCover()
-          // 创建 ImagePacker 实例
-          const imagePacker = image.createImagePacker();
-
-          // 将 PixelMap 编码为图像数据
-          const packedData = await imagePacker.packing(pixelMap, {
-            format: "image/jpeg", // 你可以根据需要选择其他格式，如 "image/png"
-            quality: 100 // 图像质量，范围是 1 到 100
-          });
-
-          // 将 Uint8Array 转换为 Base64 字符串
-          const base64String = buffer.from(packedData).toString('base64');
-          result.success(base64String);
-          return;
-        }
-      } catch (e) {
+  async fetchCover(filename: string, result: MethodResult): Promise<void> {
+    if (!canIUse("SystemCapability.Multimedia.Media.AVMetadataExtractor")) {
+      result.success("");
+      return;
+    }
+    let extractor: media.AVMetadataExtractor | undefined;
+    let generator: media.AVImageGenerator | undefined;
+    let file: fs.File | undefined;
+    let videoFile: fs.File | undefined;
+    let pixelMap: image.PixelMap | undefined;
+    let packer: image.ImagePacker | undefined;
+    try {
+      if (!filename || !(filename.startsWith('/') || filename.startsWith('file://'))) {
         result.success("");
-
-        console.error(TAG, `fetchAlbumCover failed: ${e}`)
         return;
       }
+      extractor = await media.createAVMetadataExtractor();
+      file = await fs.open(filename, fs.OpenMode.READ_ONLY);
+      extractor.fdSrc = { fd: file.fd };
+      const metadata = await extractor.fetchMetadata();
+      if (metadata.hasVideo === "yes") {
+        generator = await media.createAVImageGenerator();
+        // The SDK forbids sharing one FD between metadata and frame extractors.
+        videoFile = await fs.open(filename, fs.OpenMode.READ_ONLY);
+        generator.fdSrc = { fd: videoFile.fd };
+        pixelMap = await generator.fetchFrameByTime(0,
+          media.AVImageQueryOptions.AV_IMAGE_QUERY_CLOSEST_SYNC, { width: 300, height: 300 });
+      } else {
+        pixelMap = await extractor.fetchAlbumCover();
+      }
+      packer = image.createImagePacker();
+      const packed = await packer.packing(pixelMap, { format: "image/jpeg", quality: 85 });
+      result.success(buffer.from(packed).toString('base64'));
+    } catch (error) {
+      // Missing embedded art is a normal result. Complete the channel exactly once.
       result.success("");
-      // 释放资源（promise模式）
-      avMetadataExtractor.release()
-      console.info(TAG, `release success.`)
+    } finally {
+      if (packer) { try { await packer.release(); } catch (error) {} }
+      if (pixelMap) { try { await pixelMap.release(); } catch (error) {} }
+      if (generator) { try { await generator.release(); } catch (error) {} }
+      if (extractor) { try { await extractor.release(); } catch (error) {} }
+      if (videoFile) { try { await fs.close(videoFile); } catch (error) {} }
+      if (file) { try { await fs.close(file); } catch (error) {} }
     }
   }
 
