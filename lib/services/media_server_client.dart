@@ -1,3 +1,4 @@
+import 'serial_executor.dart';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +19,9 @@ class MediaServerConnection {
   }
 }
 class MediaServerStore {
-  static Future<List<MediaServerConnection>> load() async {
+  static final _serial = SerialExecutor();
+  static Future<List<MediaServerConnection>> load() => _serial.run(_load);
+  static Future<List<MediaServerConnection>> _load() async {
     final raw = (await SharedPreferences.getInstance()).getString('media-server.connections') ?? '[]';
     final result = <MediaServerConnection>[];
     for (final row in jsonDecode(raw) as List) {
@@ -27,19 +30,19 @@ class MediaServerStore {
     }
     return result;
   }
-  static Future<void> save(MediaServerConnection connection) async {
-    final all = await load();
+  static Future<void> save(MediaServerConnection connection) => _serial.run(() async {
+    final all = await _load();
     all.removeWhere((c) => c.id == connection.id);
     await CredentialStore.write('media-server.${connection.id}', connection.token);
     all.add(connection);
     await (await SharedPreferences.getInstance()).setString('media-server.connections', jsonEncode(all.map((c) => c.toJson()).toList()));
-  }
-  static Future<void> remove(String id) async {
-    final all = await load();
+  });
+  static Future<void> remove(String id) => _serial.run(() async {
+    final all = await _load();
     all.removeWhere((c) => c.id == id);
     await (await SharedPreferences.getInstance()).setString('media-server.connections', jsonEncode(all.map((c) => c.toJson()).toList()));
     await CredentialStore.delete('media-server.$id');
-  }
+  });
 }
 class MediaServerItem {
   final String id, name, type;

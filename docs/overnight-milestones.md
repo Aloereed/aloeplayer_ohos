@@ -87,3 +87,10 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Audio tag parsing runs in worker isolates with revision caching. Full-library indexes no longer retain every embedded cover; visible items load covers through a bounded queue/memory cache and limited decoded image width. Superseded scans cannot overwrite the latest folder.
 - A real WAV regression uncovered a self-waiting Future in pending-task cleanup, fixed for video thumbnails and audio work. **If testing milestones 06–09 and thumbnails remain blank, compare milestone 10 or newer.**
 - Twenty-two tests passed, including real WAV parsing/invalidation and disk-cache eviction. Application analysis has no errors; HAP build passed and canonical timestamp verified. No measured device performance claims are made.
+
+## Milestone 11 — migration safety and explicit resume
+
+- Serialized configuration read-modify-write across service instances for SMB, WebDAV and media servers. Failed operations do not poison later work.
+- Credential regression checks verify a failed keystore migration retains original data, a successful migration removes plaintext, concurrent saves retain both servers, and removal deletes the matching secret.
+- Continue Watching explicitly supplies its saved position; network subtitle selection respects stored language preference.
+- Twenty-four tests passed, application analysis has no errors, HAP build passed and canonical timestamp verified.

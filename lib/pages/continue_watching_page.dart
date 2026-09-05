@@ -32,7 +32,7 @@ class _ContinueWatchingPageState extends State<ContinueWatchingPage> {
     }
     if (!mounted) return;
     await Navigator.push(context, MaterialPageRoute(builder: (_) => remote
-      ? RemotePlaybackPage(mediaId: item.filePath) : MPVPlayer(filePath: item.filePath)));
+      ? RemotePlaybackPage(mediaId: item.filePath, initialPositionMs: item.lastPosition) : MPVPlayer(filePath: item.filePath, initialPositionMs: item.lastPosition)));
     await _load();
   }
   Future<void> _action(String action, HistoryItem item) async {

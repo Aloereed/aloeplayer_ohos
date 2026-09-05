@@ -11,7 +11,8 @@ import '../services/server_config_service.dart';
 /// Reconnects a saved source instead of replaying a stale localhost URL.
 class RemotePlaybackPage extends StatefulWidget {
   final String mediaId;
-  const RemotePlaybackPage({super.key, required this.mediaId});
+  final int? initialPositionMs;
+  const RemotePlaybackPage({super.key, required this.mediaId, this.initialPositionMs});
   @override
   State<RemotePlaybackPage> createState() => _RemotePlaybackPageState();
 }
@@ -57,7 +58,7 @@ class _RemotePlaybackPageState extends State<RemotePlaybackPage> {
   void dispose() { _mediaClient?.close(); _files?.disconnect(); super.dispose(); }
   @override
   Widget build(BuildContext context) {
-    if (_url != null) return MPVPlayer(filePath: _url!, mediaQueue: _queue, onPlayback: _mediaClient?.report);
+    if (_url != null) return MPVPlayer(filePath: _url!, mediaQueue: _queue, initialPositionMs: widget.initialPositionMs, onPlayback: _mediaClient?.report);
     return Scaffold(appBar: AppBar(title: const Text('继续播放')), body: Center(child: _error == null
       ? const CircularProgressIndicator() : Column(mainAxisSize: MainAxisSize.min, children: [Text(_error!), TextButton(onPressed: () { setState(() => _error = null); _connect(); }, child: const Text('重试'))])));
   }

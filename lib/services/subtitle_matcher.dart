@@ -3,7 +3,7 @@ import 'package:path/path.dart' as path;
 List<String> matchSubtitles(String mediaName, Iterable<String> candidates, {String preferredLanguage = ''}) {
   String name(String value) => path.basename(Uri.decodeComponent(Uri.tryParse(value)?.path ?? value)).toLowerCase();
   final stem = path.basenameWithoutExtension(name(mediaName));
-  final languages = preferredLanguage.split(',').where((v) => v.isNotEmpty).toList();
+  final languages = preferredLanguage.toLowerCase().split(',').map((v) => v.trim()).where((v) => v.isNotEmpty).toList();
   final result = candidates.where((candidate) {
     final file = name(candidate);
     final base = path.basenameWithoutExtension(file);

@@ -1,3 +1,4 @@
+import 'serial_executor.dart';
 import 'credential_store.dart';
 // lib/services/server_config_service.dart
 import 'dart:convert';
@@ -5,11 +6,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/server_config.dart';
 
 class ServerConfigService {
+  static final _serial = SerialExecutor();
   static const String _configsKey = 'server_configs';
   static const String _activeConfigIdKey = 'active_server_config_id';
 
   // 获取所有服务器配置
-  Future<List<ServerConfig>> getAllConfigs() async {
+  Future<List<ServerConfig>> getAllConfigs() => _serial.run(_readAllConfigs);
+
+  Future<List<ServerConfig>> _readAllConfigs() async {
     final prefs = await SharedPreferences.getInstance();
     final configsJson = prefs.getString(_configsKey);
 
@@ -44,8 +48,8 @@ class ServerConfigService {
   }
 
   // 保存服务器配置
-  Future<void> saveConfig(ServerConfig config) async {
-    final configs = await getAllConfigs();
+  Future<void> saveConfig(ServerConfig config) => _serial.run(() async {
+    final configs = await _readAllConfigs();
 
     // 检查是否已存在相同ID的配置
     final existingIndex = configs.indexWhere((c) => c.id == config.id);
@@ -59,11 +63,11 @@ class ServerConfigService {
     }
 
     await _saveAllConfigs(configs);
-  }
+  });
 
   // 删除服务器配置
-  Future<void> deleteConfig(String configId) async {
-    final configs = await getAllConfigs();
+  Future<void> deleteConfig(String configId) => _serial.run(() async {
+    final configs = await _readAllConfigs();
     configs.removeWhere((c) => c.id == configId);
     await _saveAllConfigs(configs);
     await CredentialStore.delete('$_configsKey.$configId');
@@ -73,11 +77,11 @@ class ServerConfigService {
     if (activeId == configId) {
       await setActiveConfigId(null);
     }
-  }
+  });
 
   // 更新配置的最后连接时间
-  Future<void> updateLastConnected(String configId) async {
-    final configs = await getAllConfigs();
+  Future<void> updateLastConnected(String configId) => _serial.run(() async {
+    final configs = await _readAllConfigs();
     final index = configs.indexWhere((c) => c.id == configId);
 
     if (index >= 0) {
@@ -86,7 +90,7 @@ class ServerConfigService {
       );
       await _saveAllConfigs(configs);
     }
-  }
+  });
 
   // 获取单个配置
   Future<ServerConfig?> getConfig(String configId) async {
@@ -132,12 +136,12 @@ class ServerConfigService {
   }
 
   // 清除所有配置
-  Future<void> clearAllConfigs() async {
-    for (final config in await getAllConfigs()) {
+  Future<void> clearAllConfigs() => _serial.run(() async {
+    for (final config in await _readAllConfigs()) {
       await CredentialStore.delete('$_configsKey.${config.id}');
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_configsKey);
     await prefs.remove(_activeConfigIdKey);
-  }
+  });
 }

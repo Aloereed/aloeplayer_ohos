@@ -253,9 +253,10 @@ class _BrightnessSliderState extends State<BrightnessSlider> {
 class MPVPlayer extends StatefulWidget {
   final String filePath;
   final List<PlaybackMedia>? mediaQueue;
+  final int? initialPositionMs;
   final Future<void> Function(PlaybackMedia media, int positionMs, bool stopped, bool playing)? onPlayback;
 
-  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue, this.onPlayback}) : super(key: key);
+  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue, this.onPlayback, this.initialPositionMs}) : super(key: key);
 
   @override
   _MPVPlayerState createState() => _MPVPlayerState();
@@ -1209,7 +1210,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     player.setPlaylistMode(_loopMode);
     _tryRestorePosition();
     final remoteSubtitles = _mediaFor(filePath)?.subtitles ?? [];
-    if (remoteSubtitles.isNotEmpty) await player.setSubtitleTrack(SubtitleTrack.uri(remoteSubtitles.first));
+    if (remoteSubtitles.isNotEmpty) await _loadRemoteSubtitle(filePath, remoteSubtitles);
     await applyPlaybackPreferences(player, _historyId);
 
     // 更新 Audio Service 的媒体信息
@@ -1227,6 +1228,13 @@ class _MPVPlayerState extends State<MPVPlayer>
       } catch (e) {
       if (mounted && !_disposing) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('播放失败: $e')));
     } finally { _openingMedia = false; }
+  }
+
+  Future<void> _loadRemoteSubtitle(String url, List<String> candidates) async {
+    final id = _historyId;
+    final preferences = await PlaybackToolsStore.preferences(id);
+    final matches = matchSubtitles(_mediaTitle(url), candidates, preferredLanguage: preferences.subtitleLanguage);
+    if (mounted && !_disposing && id == _historyId) await player.setSubtitleTrack(SubtitleTrack.uri(matches.isEmpty ? candidates.first : matches.first));
   }
 
   Future<void> _autoLoadSubtitle(String filePath) async {
@@ -1250,7 +1258,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       if (!mounted || _disposing) return;
       _tryRestorePosition();
       final subtitles = _mediaFor(url)?.subtitles ?? [];
-      if (subtitles.isNotEmpty) await player.setSubtitleTrack(SubtitleTrack.uri(subtitles.first));
+      if (subtitles.isNotEmpty) await _loadRemoteSubtitle(url, subtitles);
       await applyPlaybackPreferences(player, _historyId);
       _updateMediaItem();
     } catch (_) {}
@@ -1279,12 +1287,15 @@ class _MPVPlayerState extends State<MPVPlayer>
       onBookmark: (start, end) { setState(() { _pointA = end == null ? null : start; _pointB = end; }); player.seek(start); }));
   }
 
+  bool _initialSeekConsumed = false;
   Future<void> _beginHistory(String url) async {
     _readyForRestore = !_openingMedia;
     final media = _mediaFor(url);
     _historyId = media?.id ?? PlaybackMedia.localId(url);
     final previous = await _historyService.getHistoryByPath(_historyId);
-    _resumePosition = _useSeekToLatest ? (previous?.lastPosition ?? media?.startPositionMs) : null;
+    _resumePosition = !_initialSeekConsumed && widget.initialPositionMs != null ? widget.initialPositionMs
+      : _useSeekToLatest ? (previous?.lastPosition ?? media?.startPositionMs) : null;
+    _initialSeekConsumed = true;
     _hasRestoredPosition = false;
     _lastPosition = Duration.zero;
     await _historyService.updateHistory(HistoryItem(filePath: _historyId, durationMs: previous?.durationMs ?? 0,
