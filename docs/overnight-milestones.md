@@ -17,7 +17,7 @@ Each completed milestone is committed separately. Build success is not a substit
 
 ## Installation
 
-Start with the newest signed HAP. Keep existing app data when comparing versions; a version downgrade may require the deployment tool's replacement/downgrade option or re-signing for the target device. Do not uninstall casually: it can remove history and server credentials. Unsigned HAPs require signing before installation.
+Start with the newest signed HAP. Keep existing app data when comparing versions; the supplied deploy script uses API 23+ bm install -r -d for debug-signed downgrade installation. A different target device may require re-signing. Do not uninstall casually: it can remove history and server credentials. Unsigned HAPs require signing before installation.
 
 ## Milestone 02 — reliability
 
@@ -130,3 +130,12 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Browser callbacks and catalog retry feedback received final lifecycle guards.
 - Twenty-nine tests passed, application analysis has no errors; offline/locked native HAP build passed and canonical timestamp verified. **For PiP validation use milestone 16 or newer; earlier PiP archives used the incorrect creation-parameter access.**
 - PiP currently uses system decoding at normal speed; MPV subtitle rendering/rate preferences are not carried into that decoder.
+
+
+## Handoff verification
+
+- 17 archived milestones (00 is the pre-existing baseline), 34 HAP files. All archived file sizes and SHA-256 hashes verified.
+- Recommended application build: 16-native-bridge-final, version 3.1.1+164, source commit 55ac5ee.
+- Deployment helper dry-run passed. It selects one device explicitly when multiple devices exist, verifies the local HAP hash, and uses a hash-specific remote filename to avoid deploying a stale different milestone after a failed transfer.
+- No device deployment was performed. Current packages retain the project's existing debug signing and API 23 minimum.
+- Installation index: build/milestones/README.md. Chinese device workflow: docs/morning-verification.md. Analysis and feature scope: docs/repository-review-2026-09-06.md.
