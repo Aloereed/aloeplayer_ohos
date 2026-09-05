@@ -140,6 +140,9 @@ foreach ($plugin in $ohosPlugins) {
             Repair-MediaKitNativeDispose $sourceRoot
             Repair-MediaKitVideoSurfaceDispose $destinationRoot
         }
+        if ([string]$plugin.name -eq 'video_thumbnail_ohos') {
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ohos_patches\VideoThumbnailOhosPlugin.ets') -Destination (Join-Path $destinationOhos 'src\main\ets\components\plugin\VideoThumbnailOhosPlugin.ets') -Force
+        }
         $plugin.path = $destinationRoot.TrimEnd('\') + '\'
         Write-Host "Staged OHOS plugin: $($plugin.name)" -ForegroundColor DarkCyan
     } else {

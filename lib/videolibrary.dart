@@ -1,4 +1,5 @@
 import 'services/disk_thumbnail_cache.dart';
+import 'services/video_thumbnail_loader.dart';
 import 'services/work_queue.dart';
 import 'services/thumbnail_cache.dart';
 import 'dart:convert';
@@ -334,6 +335,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   // 添加缓存
   final ThumbnailCache _thumbnailCache = ThumbnailCache();
   late DiskThumbnailCache _diskThumbnails;
+  VideoThumbnailLoader? _thumbnailLoader;
   final WorkQueue _thumbnailQueue = WorkQueue();
   final Map<String, Future<Uint8List?>> _pendingThumbnails = {};
   final Map<String, DateTime> _modifiedTimes = {};
@@ -404,6 +406,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     }
     await _ensureVideoDirectoryExists();
     _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
+    _thumbnailLoader = null;
     final defaultList = await _settingsService.getDefaultListmode();
     if (!mounted) return;
     setState(() => _isGridView = !defaultList);
@@ -768,6 +771,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   Future<void> _pickVideoWithFilePicker() async {
     await _ensureVideoDirectoryExists();
     _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
+    _thumbnailLoader = null;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('请不要从"最近"选项卡中选择文件'),
@@ -809,6 +813,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   Future<void> _pickVideoWithPersist() async {
     await _ensureVideoDirectoryExists();
     _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
+    _thumbnailLoader = null;
     // 创建实例
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
     // 调用方法 persistPermission
@@ -843,6 +848,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   Future<void> _pickVideoWithFileManager(BuildContext context) async {
     await _ensureVideoDirectoryExists();
     _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
+    _thumbnailLoader = null;
 
     // 显示美观的对话框
     bool shouldProceed = await _showImportInfoDialog(context);
@@ -1002,6 +1008,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   Future<void> _pickVideoWithImagePicker() async {
     await _ensureVideoDirectoryExists();
     _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
+    _thumbnailLoader = null;
     final picker = ImagePicker();
     final List<XFile> files =
         await picker.pickMultipleVideo(source: ImageSource.gallery);
@@ -1213,26 +1220,13 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   Future<Uint8List?> _loadVideoThumbnail(File file) async {
     if (disableThumbnail) return null;
     try {
-      final realPath = file.path.endsWith('.lnk') ? (await file.readAsString()).trim() : file.path;
-      // A local shortcut must track the target revision as well as its own path.
-      final target = realPath.startsWith('file://') ? File.fromUri(Uri.parse(realPath)) : File(realPath);
-      final targetStat = await target.stat();
-      final stat = targetStat.type == FileSystemEntityType.file ? targetStat : await file.stat();
-      final key = ThumbnailCache.key(realPath, stat.size, stat.modified.millisecondsSinceEpoch);
-      final cached = _thumbnailCache.get(key);
-      if (cached != null) return cached;
-      final diskBytes = await _diskThumbnails.read(key);
-      if (diskBytes != null) {
-        final bytes = diskBytes;
-        _thumbnailCache.put(key, bytes);
-        return bytes;
-      }
-      final bytes = await VideoThumbnailOhos.thumbnailData(video: realPath, imageFormat: ImageFormat.JPEG, maxWidth: 256, quality: 60);
-      if (bytes != null) {
-        _thumbnailCache.put(key, bytes);
-        await _diskThumbnails.write(key, bytes);
-      }
-      return bytes;
+      _thumbnailLoader ??= VideoThumbnailLoader(
+        disk: _diskThumbnails, memory: _thumbnailCache,
+        library: Directory(_videoDirPath),
+        decode: (source) => VideoThumbnailOhos.thumbnailData(
+          video: source, imageFormat: ImageFormat.JPEG, maxWidth: 256, quality: 60),
+      );
+      return await _thumbnailLoader!.load(file);
     } catch (_) { return null; }
   }
 
