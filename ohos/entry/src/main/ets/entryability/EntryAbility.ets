@@ -74,7 +74,7 @@ export default class EntryAbility extends FlutterAbility {
         this.addPlugin(this.myDownloadPlugin)
         this.addPlugin(new CredentialPlugin())
         this.addPlugin(new DeviceToolsPlugin(this.context))
-        this.addPlugin(new PipPlugin())
+        this.addPlugin(new PipPlugin(this.context))
         this.addPlugin(new VolumePlugin())
         this.addPlugin(new FfmpegPlugin())
         this.addPlugin(new HdrPlugin())

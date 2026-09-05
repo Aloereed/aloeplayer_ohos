@@ -1,19 +1,32 @@
-import { FlutterPlugin, FlutterPluginBinding, StandardMessageCodec } from '@ohos/flutter_ohos';
-import { BinaryMessenger } from '@ohos/flutter_ohos/src/main/ets/plugin/common/BinaryMessenger';
-import PlatformViewFactory from '@ohos/flutter_ohos/src/main/ets/plugin/platform/PlatformViewFactory';
-import PlatformView from '@ohos/flutter_ohos/src/main/ets/plugin/platform/PlatformView';
+import { FlutterPlugin, FlutterPluginBinding, MethodCall, MethodChannel, MethodResult } from '@ohos/flutter_ohos';
 import common from '@ohos.app.ability.common';
-import { PipView } from './PipView';
-
-class PipFactory extends PlatformViewFactory {
-  private messenger: BinaryMessenger;
-  constructor(messenger: BinaryMessenger) { super(StandardMessageCodec.INSTANCE); this.messenger = messenger; }
-  create(context: common.Context, id: number, args: Object): PlatformView { return new PipView(context, id, args, this.messenger); }
-}
+import router from '@ohos.router';
+import { PipSession } from './PipSession';
 export default class PipPlugin implements FlutterPlugin {
+  private channel?: MethodChannel;
+  private session?: PipSession;
+  private context: common.UIAbilityContext;
+  constructor(context: common.UIAbilityContext) { this.context = context; }
   getUniqueClassName(): string { return 'PipPlugin'; }
   onAttachedToEngine(binding: FlutterPluginBinding): void {
-    binding.getPlatformViewRegistry()?.registerViewFactory('aloeplayer/pip-view', new PipFactory(binding.getBinaryMessenger()));
+    this.channel = new MethodChannel(binding.getBinaryMessenger(), 'aloeplayer/system-pip');
+    this.channel.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
+      if (call.method === 'open') {
+        this.session?.dispose();
+        this.session = new PipSession(this.context, call.args, this.channel!);
+        router.pushUrl({ url: 'pages/PipPlayer' }).then(() => result.success(null)).catch(() => {
+          this.session?.dispose(); result.error('PIP_PAGE', '无法打开画中画页面', null);
+        });
+      } else if (call.method === 'close') {
+        this.session?.close().then(() => result.success(null));
+        if (!this.session) result.success(null);
+      } else if (call.method === 'dispose') {
+        this.session?.dispose(); this.session = undefined; result.success(null);
+      } else if (this.session) { this.session.onMethodCall(call, result); }
+      else { result.error('NO_SESSION', '画中画会话已结束', null); }
+    }});
   }
-  onDetachedFromEngine(binding: FlutterPluginBinding): void {}
+  onDetachedFromEngine(binding: FlutterPluginBinding): void {
+    this.session?.dispose(); this.channel?.setMethodCallHandler(null);
+  }
 }
