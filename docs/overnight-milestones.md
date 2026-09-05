@@ -115,3 +115,10 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Pull-based TransferableTypedData chunks preserve stream backpressure. Cancel closes the worker reader; disconnect releases readers/context and ends the isolate; reconnect creates a new owner.
 - Twenty-nine tests passed. Worker tests simulate a blocking backend while a main-isolate timer keeps running, exercise range/cancellation/error/reconnect, and check inclusive FileService boundaries through the actual adapter. HAP build passed and canonical timestamp verified.
 - Mock backend tests do not validate real NAS behavior. Compare milestone 13 if a device-specific SMB worker issue occurs.
+
+## Milestone 15 — reproducible dependencies and artifact checks
+
+- Pinned direct package versions and direct/transitive Git forks to the implementations already in pubspec.lock. A before/after lock comparison confirmed no package version or resolved Git implementation changed.
+- build.ps1 accepts -Offline, -Locked and -NoVersionBump. HAP success now also requires a refreshed canonical unsigned output timestamp.
+- Archiving cross-checks embedded HAP versionCode against pubspec.yaml and records bundle/API versions, SDK identity and lock-file hash.
+- Twenty-nine tests passed; application analysis has no errors; an offline, enforced-lockfile HAP build passed with canonical timestamp verification.

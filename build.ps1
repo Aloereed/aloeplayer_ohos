@@ -9,7 +9,11 @@ param(
 
     [string]$FlutterRoot = "E:\source\flutter_327",
 
-    [string]$DevEcoRoot = "E:\Huawei\DevEco_Studio"
+    [string]$DevEcoRoot = "E:\Huawei\DevEco_Studio",
+
+    [switch]$Offline,
+    [switch]$Locked,
+    [switch]$NoVersionBump
 )
 
 $ErrorActionPreference = "Stop"
@@ -102,7 +106,7 @@ if (-not $Config) {
 }
 
 # 每次构建按项目既定规则自动递增版本号。
-Update-VersionIfChanged
+if (-not $NoVersionBump) { Update-VersionIfChanged }
 
 # 定义路径
 $buildProfilePath = "ohos\build-profile.json5"
@@ -136,7 +140,10 @@ try {
     # upgrade packages normally; pubspec.lock remains authoritative.
     Write-Host "----------------------------------------"
     Write-Host "阶段 1/3: 解析 Dart 依赖" -ForegroundColor Cyan
-    & $flutterCommand pub get
+    $pubArguments = @("pub", "get")
+    if ($Offline) { $pubArguments += "--offline" }
+    if ($Locked) { $pubArguments += "--enforce-lockfile" }
+    & $flutterCommand @pubArguments
     if ($LASTEXITCODE -ne 0) {
         throw "flutter pub get 失败，退出代码: $LASTEXITCODE"
     }
@@ -150,10 +157,19 @@ try {
     # refreshed immediately above, and another implicit pub get would overwrite
     # the normalized OHOS metadata.
     Write-Host "阶段 3/3: Release 构建" -ForegroundColor Cyan
+    $compilationStarted = Get-Date
     & $flutterCommand build $BuildType --release --no-pub
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -eq 0) {
+        if ($BuildType -eq "hap") {
+            $canonicalPath = Join-Path $projectRoot "ohos\entry\build\default\outputs\default\entry-default-unsigned.hap"
+            $canonicalHap = Get-Item -LiteralPath $canonicalPath
+            if ($canonicalHap.LastWriteTime -lt $compilationStarted) {
+                throw "Canonical HAP timestamp was not refreshed. Do not archive a cached artifact as a new milestone."
+            }
+            Write-Host "Verified canonical HAP: $($canonicalHap.LastWriteTime.ToString('o'))" -ForegroundColor Cyan
+        }
         Write-Host "----------------------------------------"
         Write-Host "构建成功!" -ForegroundColor Green
     } else {

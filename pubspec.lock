@@ -53,7 +53,7 @@ packages:
     dependency: "direct main"
     description:
       path: audio_service
-      ref: "br_v0.18.18_ohos"
+      ref: "64156e83e3dfd45a7535894f06d90f7779cff7dc"
       resolved-ref: "64156e83e3dfd45a7535894f06d90f7779cff7dc"
       url: "https://gitcode.com/openharmony-sig/fluttertpc_audio_service.git"
     source: git
@@ -78,7 +78,7 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: HEAD
+      ref: d2ff09dfe4df3b366c19cca27562bdb413de20c7
       resolved-ref: d2ff09dfe4df3b366c19cca27562bdb413de20c7
       url: "https://gitcode.com/openharmony-sig/flutter_audio_session.git"
     source: git
@@ -380,7 +380,7 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/file_selector/file_selector"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
@@ -418,10 +418,10 @@ packages:
     source: hosted
     version: "0.9.5"
   file_selector_ohos:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: "packages/file_selector/file_selector_ohos"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
@@ -581,7 +581,7 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: HEAD
+      ref: b904d5000b30d31d0d67fbd96ac53e3320d2e222
       resolved-ref: b904d5000b30d31d0d67fbd96ac53e3320d2e222
       url: "https://gitcode.com/openharmony-sig/flutter_fluttertoast.git"
     source: git
@@ -925,7 +925,7 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: HEAD
+      ref: f8f07cb816537a65a7812bc1f6b2fc44180771fb
       resolved-ref: f8f07cb816537a65a7812bc1f6b2fc44180771fb
       url: "https://gitcode.com/openharmony-sig/fluttertpc_media_info.git"
     source: git
@@ -934,7 +934,7 @@ packages:
     dependency: "direct main"
     description:
       path: media_kit
-      ref: feat-ohos
+      ref: f609ef6244191d9ceaa6d7b547d76032f1f554af
       resolved-ref: f609ef6244191d9ceaa6d7b547d76032f1f554af
       url: "https://github.com/ErBWs/media-kit.git"
     source: git
@@ -943,7 +943,7 @@ packages:
     dependency: "direct main"
     description:
       path: media_kit_video
-      ref: feat-ohos
+      ref: f609ef6244191d9ceaa6d7b547d76032f1f554af
       resolved-ref: f609ef6244191d9ceaa6d7b547d76032f1f554af
       url: "https://github.com/ErBWs/media-kit.git"
     source: git
@@ -976,7 +976,7 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: master
+      ref: "53bc3854d4e2e6f1793e7cb419ecbbe5c7c6048b"
       resolved-ref: "53bc3854d4e2e6f1793e7cb419ecbbe5c7c6048b"
       url: "https://github.com/xiaoyaocz/flutter_ns_danmaku.git"
     source: git
@@ -1001,7 +1001,7 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/package_info_plus/package_info_plus"
-      ref: "br_package_info_plus-v8.1.0_ohos"
+      ref: "2180f5bd763cc26478d4f0baba4acdc1528f4647"
       resolved-ref: "2180f5bd763cc26478d4f0baba4acdc1528f4647"
       url: "https://gitcode.com/openharmony-sig/flutter_plus_plugins.git"
     source: git
@@ -1026,7 +1026,7 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/path_provider/path_provider"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
@@ -1056,10 +1056,10 @@ packages:
     source: hosted
     version: "2.2.2"
   path_provider_ohos:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: "packages/path_provider/path_provider_ohos"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
@@ -1211,16 +1211,16 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/share_plus/share_plus"
-      ref: HEAD
+      ref: "03507cc39ab148fe9f5827cd991b3e04aed2bcc3"
       resolved-ref: "03507cc39ab148fe9f5827cd991b3e04aed2bcc3"
       url: "https://gitcode.com/openharmony-sig/flutter_plus_plugins.git"
     source: git
     version: "7.2.0"
   share_plus_platform_interface:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: "packages/share_plus/share_plus_platform_interface"
-      ref: master
+      ref: "03507cc39ab148fe9f5827cd991b3e04aed2bcc3"
       resolved-ref: "03507cc39ab148fe9f5827cd991b3e04aed2bcc3"
       url: "https://gitcode.com/openharmony-sig/flutter_plus_plugins.git"
     source: git
@@ -1229,7 +1229,7 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/shared_preferences/shared_preferences"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
@@ -1259,10 +1259,10 @@ packages:
     source: hosted
     version: "2.4.1"
   shared_preferences_ohos:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: "packages/shared_preferences/shared_preferences_ohos"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
@@ -1356,16 +1356,16 @@ packages:
     dependency: "direct main"
     description:
       path: sqflite
-      ref: HEAD
+      ref: "8c8971886957e6b1b0761507cc048b01f3a6cc15"
       resolved-ref: "8c8971886957e6b1b0761507cc048b01f3a6cc15"
       url: "https://gitcode.com/openharmony-sig/flutter_sqflite.git"
     source: git
     version: "2.2.8+3"
   sqflite_common:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: sqflite_common
-      ref: HEAD
+      ref: "8c8971886957e6b1b0761507cc048b01f3a6cc15"
       resolved-ref: "8c8971886957e6b1b0761507cc048b01f3a6cc15"
       url: "https://gitcode.com/openharmony-sig/flutter_sqflite.git"
     source: git
@@ -1470,7 +1470,7 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/url_launcher/url_launcher"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
@@ -1508,10 +1508,10 @@ packages:
     source: hosted
     version: "3.2.5"
   url_launcher_ohos:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: "packages/url_launcher/url_launcher_ohos"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
@@ -1604,7 +1604,7 @@ packages:
     dependency: "direct main"
     description:
       path: ohos
-      ref: HEAD
+      ref: e6d1946e70ed7e458ce8893e18845b2cfd88cab7
       resolved-ref: e6d1946e70ed7e458ce8893e18845b2cfd88cab7
       url: "https://gitcode.com/openharmony-sig/fluttertpc_video_thumbnail.git"
     source: git
@@ -1637,7 +1637,7 @@ packages:
     dependency: "direct main"
     description:
       path: wakelock
-      ref: HEAD
+      ref: afa07411c3d1660371a0585d041913b64adb34cc
       resolved-ref: afa07411c3d1660371a0585d041913b64adb34cc
       url: "https://gitcode.com/openharmony-sig/flutter_wakelock.git"
     source: git
@@ -1662,7 +1662,7 @@ packages:
     dependency: "direct main"
     description:
       path: wakelock_plus
-      ref: HEAD
+      ref: "8c5a6083fb4d832ca5166dfa385a56a25d211dc1"
       resolved-ref: "8c5a6083fb4d832ca5166dfa385a56a25d211dc1"
       url: "https://gitcode.com/openharmony-sig/fluttertpc_wakelock_plus.git"
     source: git
@@ -1735,43 +1735,43 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/webview_flutter/webview_flutter"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "4.6.0"
   webview_flutter_android:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: "packages/webview_flutter/webview_flutter_android"
-      ref: HEAD
+      ref: "35fb467533e174411a117b2a030c15d2a3a9687c"
       resolved-ref: "35fb467533e174411a117b2a030c15d2a3a9687c"
       url: "https://gitee.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "3.15.0"
   webview_flutter_ohos:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: "packages/webview_flutter/webview_flutter_ohos"
-      ref: HEAD
+      ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       resolved-ref: c199e1745f242a0ca2d789dadee63b9953a4d27f
       url: "https://gitcode.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "3.15.0"
   webview_flutter_platform_interface:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: "packages/webview_flutter/webview_flutter_platform_interface"
-      ref: HEAD
+      ref: "35fb467533e174411a117b2a030c15d2a3a9687c"
       resolved-ref: "35fb467533e174411a117b2a030c15d2a3a9687c"
       url: "https://gitee.com/openharmony-sig/flutter_packages.git"
     source: git
     version: "2.10.0"
   webview_flutter_wkwebview:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       path: "packages/webview_flutter/webview_flutter_wkwebview"
-      ref: HEAD
+      ref: "35fb467533e174411a117b2a030c15d2a3a9687c"
       resolved-ref: "35fb467533e174411a117b2a030c15d2a3a9687c"
       url: "https://gitee.com/openharmony-sig/flutter_packages.git"
     source: git
