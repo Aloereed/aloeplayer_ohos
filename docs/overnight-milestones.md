@@ -94,3 +94,10 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Credential regression checks verify a failed keystore migration retains original data, a successful migration removes plaintext, concurrent saves retain both servers, and removal deletes the matching secret.
 - Continue Watching explicitly supplies its saved position; network subtitle selection respects stored language preference.
 - Twenty-four tests passed, application analysis has no errors, HAP build passed and canonical timestamp verified.
+
+## Milestone 12 — system background downloads
+
+- Downloads request a HarmonyOS data-transfer continuous task and release only their own task ID. If denied, the task center explains foreground-only operation; a system cancellation pauses active/queued work for later resume.
+- Cleanup closes streams, writers and connections even when an individual release fails. Finished-record cleanup preserves downloaded files; duplicate concurrent additions are rejected.
+- Twenty-six tests passed, including pause/cancel during an open stream and release completion before returning. Native HAP build passed and canonical timestamp verified.
+- Background task APIs compile against the configured HarmonyOS SDK; notification authorization, OS cancellation and long-duration retention still require device validation.

@@ -14,6 +14,8 @@ import 'server_config_service.dart';
 
 class DownloadManager extends ChangeNotifier {
   static final instance = DownloadManager._();
+  static const _device = MethodChannel('aloeplayer/device-tools');
+  String? backgroundNotice;
   DownloadManager._();
   @visibleForTesting
   DownloadManager.forTesting({required String directory, required Future<FileService> Function(String serverId) openSource}) {
@@ -31,6 +33,18 @@ class DownloadManager extends ChangeNotifier {
   Future<void> _writes = Future.value();
   Future<void> initialize() => _initializing ??= _load();
   Future<void> _load() async {
+    if (Platform.operatingSystem == 'ohos') {
+      _device.setMethodCallHandler((call) async {
+        if (call.method == 'downloadBackgroundCanceled') {
+          backgroundNotice = '系统已结束后台下载任务，下载已暂停，可返回后继续';
+          final active = tasks.where((t) => t.id == _activeId).firstOrNull;
+          for (final task in tasks.where((t) => t.status == DownloadStatus.queued)) { task.status = DownloadStatus.paused; }
+          if (active != null) await pause(active);
+          else await _persist();
+          notifyListeners();
+        }
+      });
+    }
     final raw = (await SharedPreferences.getInstance()).getString('download.tasks.v1');
     if (raw != null) {
       tasks.addAll((jsonDecode(raw) as List).map((e) => DownloadTask.fromJson(e as Map<String, dynamic>)));
@@ -49,14 +63,19 @@ class DownloadManager extends ChangeNotifier {
     if (tasks.any((t) => t.serverId == config.id && t.remotePath == file.path && t.status != DownloadStatus.canceled && t.status != DownloadStatus.completed)) {
       throw StateError('该文件已在下载列表中');
     }
+    if (file.isDirectory || file.size < 0) throw StateError('无法下载目录或未知大小的文件');
     final id = const Uuid().v4();
     final audio = {'.mp3', '.flac', '.m4a', '.wav', '.ogg', '.aac', '.opus'}.contains(path.extension(file.name).toLowerCase());
     final directory = Directory(_directoryOverride ?? '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/${audio ? 'Audios' : 'Videos'}/Downloads');
     await directory.create(recursive: true);
-    final safeName = path.basename(file.name).replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+    var safeName = path.basename(file.name).replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+    if (safeName.isEmpty || safeName == '.' || safeName == '..') safeName = 'download-$id';
     var destination = path.join(directory.path, safeName);
     if (await File(destination).exists() || tasks.any((t) => t.destination == destination)) {
       destination = path.join(directory.path, '${path.basenameWithoutExtension(safeName)}-${id.substring(0, 8)}${path.extension(safeName)}');
+    }
+    if (tasks.any((t) => t.serverId == config.id && t.remotePath == file.path && t.status != DownloadStatus.canceled && t.status != DownloadStatus.completed)) {
+      throw StateError('该文件已在下载列表中');
     }
     tasks.add(DownloadTask(id: id, serverId: config.id, remotePath: file.path, name: file.name, destination: destination,
       size: file.size, modifiedMs: file.modified?.millisecondsSinceEpoch));
@@ -91,28 +110,53 @@ class DownloadManager extends ChangeNotifier {
     await _persist();
     notifyListeners();
   }
+  Future<void> removeFinished() async {
+    await initialize();
+    tasks.removeWhere((task) => task.status == DownloadStatus.completed || task.status == DownloadStatus.canceled);
+    await _persist();
+    notifyListeners();
+  }
   Future<void> _pump() async {
     if (_running) return;
     _running = true;
     try {
+      if (Platform.operatingSystem == 'ohos') {
+        try {
+          await _device.invokeMethod<bool>('startDownloadBackground').timeout(const Duration(seconds: 10));
+          backgroundNotice = null;
+        } catch (_) { backgroundNotice = '系统未允许后台下载，请保持应用在前台；中断后可继续'; }
+        notifyListeners();
+      }
       while (true) {
         final next = tasks.where((t) => t.status == DownloadStatus.queued).firstOrNull;
         if (next == null) break;
         _activeId = next.id;
         final done = Completer<void>();
         _activeDone = done;
-        try { await _download(next); } finally { _activeId = null; done.complete(); _activeDone = null; }
+        try { await _download(next); }
+        catch (error) {
+          next.status = DownloadStatus.failed;
+          next.error = '下载任务保存或清理失败: $error';
+          try { await _persist(); } catch (_) {}
+        } finally { _activeId = null; done.complete(); _activeDone = null; }
       }
-    } finally { _running = false; _activeId = null; notifyListeners(); }
+    } finally {
+      if (Platform.operatingSystem == 'ohos') {
+        try { await _device.invokeMethod<void>('stopDownloadBackground').timeout(const Duration(seconds: 10)); } catch (_) {}
+      }
+      _running = false; _activeId = null; notifyListeners();
+      // A new job may have been added while the native background task stopped.
+      if (tasks.any((t) => t.status == DownloadStatus.queued)) unawaited(_pump());
+    }
   }
   Future<void> _download(DownloadTask task) async {
     FileService? files;
     RandomAccessFile? writer;
     final part = File(task.partialPath);
     task.status = DownloadStatus.downloading;
-    await _persist();
-    notifyListeners();
     try {
+      await _persist();
+      notifyListeners();
       if (_openSourceOverride != null) {
         files = await _openSourceOverride!(task.serverId);
       } else {
@@ -163,10 +207,10 @@ class DownloadManager extends ChangeNotifier {
     } catch (e) {
       if (task.status == DownloadStatus.downloading) { task.status = DownloadStatus.failed; task.error = e.toString(); }
     } finally {
-      await _iterator?.cancel();
+      try { await _iterator?.cancel(); } catch (_) {}
       _iterator = null;
-      await writer?.close();
-      await files?.disconnect();
+      try { await writer?.close(); } catch (_) {}
+      try { await files?.disconnect(); } catch (_) {}
       if (task.status == DownloadStatus.canceled && await part.exists()) await part.delete();
       await _persist();
       notifyListeners();

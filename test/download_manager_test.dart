@@ -35,6 +35,16 @@ class TestSource extends FileService {
     yield Uint8List.fromList([4, 5, 6]);
   }
 }
+class SlowSource extends TestSource {
+  bool canceled = false, disconnected = false;
+  SlowSource() : super([]);
+  @override Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end}) async {
+    final controller = StreamController<Uint8List>(onCancel: () { canceled = true; });
+    controller.add(Uint8List.fromList([1, 2, 3]));
+    return controller.stream;
+  }
+  @override Future<void> disconnect() async { disconnected = true; }
+}
 Future<void> waitForStatus(DownloadManager manager, DownloadStatus status) async {
   if (manager.tasks.single.status == status) return;
   final ready = Completer<void>();
@@ -66,4 +76,28 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+  for (final cancel in [false, true]) {
+    test('${cancel ? "cancel" : "pause"} waits for stream cancellation and releases connection', () async {
+      SharedPreferences.setMockInitialValues({});
+      final directory = await Directory.systemTemp.createTemp('aloe-download-stop-');
+      final source = SlowSource();
+      final manager = DownloadManager.forTesting(directory: directory.path, openSource: (_) async => source);
+      try {
+        final config = ServerConfig(id: 'server', name: 'NAS', type: ServerType.webdav, host: 'localhost', username: '', password: '', createdAt: DateTime(2026));
+        await manager.add(config, TestFile());
+        final task = manager.tasks.single;
+        final deadline = DateTime.now().add(const Duration(seconds: 5));
+        while (task.received < 3 && DateTime.now().isBefore(deadline)) { await Future<void>.delayed(const Duration(milliseconds: 10)); }
+        expect(task.received, 3);
+        if (cancel) { await manager.cancel(task); } else { await manager.pause(task); }
+        expect(source.canceled, isTrue);
+        expect(source.disconnected, isTrue);
+        expect(task.status, cancel ? DownloadStatus.canceled : DownloadStatus.paused);
+        expect(await File(task.destination).exists(), isFalse);
+        expect(await File(task.partialPath).exists(), !cancel);
+        if (!cancel) expect(await File(task.partialPath).readAsBytes(), [1, 2, 3]);
+      } finally { manager.dispose(); await directory.delete(recursive: true); }
+    });
+  }
+
 }

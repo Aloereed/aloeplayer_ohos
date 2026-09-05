@@ -22,12 +22,13 @@ class _DownloadsPageState extends State<DownloadsPage> {
     try { await action(); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
   @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('下载任务')),
+  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('下载任务'), actions: [IconButton(tooltip: '清理已结束记录（保留文件）', onPressed: () => _action(manager.removeFinished), icon: const Icon(Icons.cleaning_services_outlined))]),
     body: ListenableBuilder(listenable: manager, builder: (_, __) => _error != null ? Center(child: Text(_error!)) : manager.tasks.isEmpty
       ? const Center(child: Text('在网络文件的更多菜单中选择“下载到本地”'))
       : ListView.builder(itemCount: manager.tasks.length, itemBuilder: (_, index) {
-        final task = manager.tasks.reversed.toList()[index];
+        final task = manager.tasks[manager.tasks.length - 1 - index];
         return Card(margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (index == 0 && manager.backgroundNotice != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(manager.backgroundNotice!)),
           Text(task.name, style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           LinearProgressIndicator(value: task.size > 0 ? (task.received / task.size).clamp(0.0, 1.0) : null),
