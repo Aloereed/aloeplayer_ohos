@@ -58,3 +58,11 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Thumbnail requests are deduplicated and limited to two concurrent native operations.
 - HTTP proxy shares the same range-capable source interface as downloads. Real loopback HTTP tests verify grants, suffix ranges, HEAD without file reads, and 416 handling.
 - Sixteen tests passed; HAP build passed. Local NFO/poster support requires sidecar files already present beside the media; it does not download third-party metadata.
+
+## Milestone 07 — Jellyfin / Emby
+
+- Media-server entry supports login/edit/remove, secure access-token storage, paged browsing/search, authenticated posters, direct file playback and server progress reports. History reconnects by server/item identity.
+- Playback URLs do not embed access tokens; headers carry authentication. Playback progress uses 10,000 ticks per millisecond.
+- Eighteen tests passed, including a local mock server covering reverse-proxy URL prefixes, login headers, resume conversion, direct-stream construction and start/progress/stop reports. HAP build passed.
+- Live streams and server-side transcoding are explicitly unsupported by this first connector; a real Jellyfin/Emby instance has not been exercised.
+- Protocol references: https://dev.emby.media/doc/restapi/Video-Streaming.html and https://typescript-sdk.jellyfin.org/classes/generated-client.SessionApi.html .

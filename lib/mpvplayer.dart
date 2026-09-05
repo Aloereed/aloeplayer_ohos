@@ -252,8 +252,9 @@ class _BrightnessSliderState extends State<BrightnessSlider> {
 class MPVPlayer extends StatefulWidget {
   final String filePath;
   final List<PlaybackMedia>? mediaQueue;
+  final Future<void> Function(PlaybackMedia media, int positionMs, bool stopped, bool playing)? onPlayback;
 
-  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue}) : super(key: key);
+  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue, this.onPlayback}) : super(key: key);
 
   @override
   _MPVPlayerState createState() => _MPVPlayerState();
@@ -1171,7 +1172,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     // 创建播放列表
     final List<Media> mediaList = [];
     if (widget.mediaQueue != null) {
-      for (final file in _playlist) { mediaList.add(Media(file.path)); }
+      for (final file in _playlist) { mediaList.add(Media(file.path, httpHeaders: _mediaFor(file.path)?.httpHeaders)); }
       _currentIndex = _playlist.indexWhere((f) => f.path == filePath);
       if (_currentIndex < 0) _currentIndex = 0;
     } else if (isHttpUrl || isFileUrl) {
@@ -1261,7 +1262,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     final media = _mediaFor(url);
     _historyId = media?.id ?? PlaybackMedia.localId(url);
     final previous = await _historyService.getHistoryByPath(_historyId);
-    _resumePosition = _useSeekToLatest ? previous?.lastPosition : null;
+    _resumePosition = _useSeekToLatest ? (previous?.lastPosition ?? media?.startPositionMs) : null;
     _hasRestoredPosition = false;
     _lastPosition = Duration.zero;
     await _historyService.updateHistory(HistoryItem(filePath: _historyId, durationMs: previous?.durationMs ?? 0,
@@ -1282,6 +1283,10 @@ class _MPVPlayerState extends State<MPVPlayer>
   Future<void> _flushPosition() async {
     final id = _historyId;
     final position = _lastPosition;
+    final media = _mediaFor(_currentFilePath);
+    if (media != null && widget.onPlayback != null) {
+      unawaited(widget.onPlayback!(media, position.inMilliseconds, _disposing, !_disposing && player.state.playing).catchError((_) {}));
+    }
     if (id.isEmpty || position <= Duration.zero) return;
     _lastCheckpoint = DateTime.now();
     try { await _historyService.updatePosition(id, position.inMilliseconds); } catch (_) {}

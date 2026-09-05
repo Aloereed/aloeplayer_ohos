@@ -1,3 +1,4 @@
+import '../services/media_server_client.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import '../models/playback_media.dart';
@@ -16,6 +17,7 @@ class RemotePlaybackPage extends StatefulWidget {
 }
 class _RemotePlaybackPageState extends State<RemotePlaybackPage> {
   FileService? _files;
+  MediaServerClient? _mediaClient;
   List<PlaybackMedia>? _queue;
   String? _url;
   String? _error;
@@ -24,6 +26,16 @@ class _RemotePlaybackPageState extends State<RemotePlaybackPage> {
   Future<void> _connect() async {
     try {
       final uri = Uri.parse(widget.mediaId);
+      if (uri.scheme == 'aloe-server') {
+        final connection = (await MediaServerStore.load()).where((c) => c.id == uri.host).firstOrNull;
+        if (connection == null) throw StateError('媒体服务器配置已删除');
+        final client = MediaServerClient(connection);
+        _mediaClient = client;
+        final item = await client.item(uri.pathSegments.last);
+        final media = await client.playback(item);
+        if (mounted) setState(() { _queue = [media]; _url = media.url; });
+        return;
+      }
       final config = await ServerConfigService().getConfig(uri.host);
       if (config == null) throw StateError('服务器配置已删除，请重新添加');
       final files = FileServiceFactory.createService(config.type);
@@ -42,10 +54,10 @@ class _RemotePlaybackPageState extends State<RemotePlaybackPage> {
     } catch (e) { if (mounted) setState(() => _error = e.toString()); }
   }
   @override
-  void dispose() { _files?.disconnect(); super.dispose(); }
+  void dispose() { _mediaClient?.close(); _files?.disconnect(); super.dispose(); }
   @override
   Widget build(BuildContext context) {
-    if (_url != null) return MPVPlayer(filePath: _url!, mediaQueue: _queue);
+    if (_url != null) return MPVPlayer(filePath: _url!, mediaQueue: _queue, onPlayback: _mediaClient?.report);
     return Scaffold(appBar: AppBar(title: const Text('继续播放')), body: Center(child: _error == null
       ? const CircularProgressIndicator() : Column(mainAxisSize: MainAxisSize.min, children: [Text(_error!), TextButton(onPressed: () { setState(() => _error = null); _connect(); }, child: const Text('重试'))])));
   }
