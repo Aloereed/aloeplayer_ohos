@@ -42,3 +42,12 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - MPV tools under player settings: subtitle/audio delay, language and track preference per media, named time bookmarks, saved AB segments, chapter navigation.
 - Local subtitle matching respects episode boundaries and language preference; removed the delayed first-match callback.
 - Eleven tests passed, including timer replacement/ownership, bookmark persistence and subtitle matching. Application Dart analysis has no errors; HAP build passed.
+
+## Milestone 05 — persistent downloads
+
+- Server page exposes a download task center. Network file downloads are persisted without passwords or proxy URLs; interrupted jobs restore paused.
+- Sequential downloads support pause/resume/cancel/retry, source revision validation, free-space checks, partial-file isolation and atomic completion into Videos/Downloads or Audios/Downloads.
+- Explicit LAN sharing action and stop-sharing action replace automatic LAN exposure on opening file options.
+- Thirteen tests passed including a real temporary-file transfer that fails after 3 bytes and resumes from byte 3 to produce the exact 6-byte payload. Application analysis has no errors.
+- First native build caught an SDK export naming mismatch (statvfs vs statfs); corrected to CoreFileKit.statfs and rebuilt successfully.
+- No device is connected: long-running background transfer retention and public-library permissions still require device verification.

@@ -655,6 +655,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         _modifiedTimes[item.path] = (await item.stat()).modified;
       }
       for (var item in items) {
+        if (item.path.contains('.aloe-part-')) continue;
         if (item is File) {
           String extension = path.extension(item.path).toLowerCase();
           // 排除 .srt 和 .ass 文件

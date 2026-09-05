@@ -1,3 +1,5 @@
+import '../services/download_manager.dart';
+import 'downloads_page.dart';
 import '../models/playback_media.dart';
 import '../services/network_playback.dart';
 // lib/pages/browser_page.dart
@@ -281,108 +283,13 @@ class _BrowserPageState extends State<BrowserPage> {
 
   Future<void> _downloadFile(FileItem file) async {
     try {
-      // 使用 file_picker_ohos 选择保存位置
-      // final String? savePath = await FilePicker.platform.saveFile(
-      //   fileName: file.name,
-      //   initialDirectory: '/storage/Users/currentUser/Download/com.aloereed.aloeplayer',
-      //   dialogTitle: '保存文件',
-      // );
-
-      // 尝试创建/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Downloads
-      await Directory('/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Downloads').create(recursive: true);
-
-      String savePath = '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Downloads/${file.name}';
-
-      if (savePath == null) {
-        // 用户取消了选择
-        return;
-      }
-
-      // 显示下载进度
+      await DownloadManager.instance.add(widget.serverConfig, file);
       if (!mounted) return;
-
-      bool isDownloading = true;
-      double progress = 0.0;
-
-      // 创建一个 ValueNotifier 来更新进度
-      final progressNotifier = ValueNotifier<double>(0.0);
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext dialogContext) {
-          return ValueListenableBuilder<double>(
-            valueListenable: progressNotifier,
-            builder: (context, currentProgress, child) {
-              return AlertDialog(
-                title: const Text('下载文件'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('正在下载: ${file.name}'),
-                    const SizedBox(height: 16),
-                    LinearProgressIndicator(value: currentProgress),
-                    const SizedBox(height: 8),
-                    Text('${(currentProgress * 100).toStringAsFixed(1)}%'),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      isDownloading = false;
-                      Navigator.pop(dialogContext);
-                    },
-                    child: const Text('取消'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-
-      // 获取文件的 HTTP URL
-      final httpUrl = _httpService.getFileUrlLocalhost(file.path);
-
-      // 使用 Dio 下载文件
-      final dio = Dio();
-
-      try {
-        await dio.download(
-          httpUrl,
-          savePath,
-          onReceiveProgress: (received, total) {
-            if (total != -1 && isDownloading) {
-              progress = received / total;
-              progressNotifier.value = progress;
-            }
-          },
-        );
-
-        // 下载完成
-        progressNotifier.dispose();
-
-        if (mounted && isDownloading) {
-          Navigator.of(context).pop();
-          _showSuccess('文件已保存到: $savePath');
-        }
-      } catch (e) {
-        progressNotifier.dispose();
-
-        if (mounted) {
-          Navigator.of(context).pop();
-          _showError('下载失败: $e');
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        _showError('保存文件失败: $e');
-      }
-    }
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage()));
+    } catch (e) { if (mounted) _showError('添加下载失败: $e'); }
   }
 
   void _showFileOptions(FileItem file) async {
-    try { await _httpService.enableLanSharing(); } catch (e) { _showError(e.toString()); return; }
     if (!mounted) return;
     final httpUrl = _httpService.getFileUrl(file.path);
     final accessUrls = _httpService.getAccessUrls();
@@ -415,9 +322,22 @@ class _BrowserPageState extends State<BrowserPage> {
                   _downloadFile(file);
                 },
               ),
+            ListTile(leading: const Icon(Icons.share), title: const Text('生成局域网共享链接'), onTap: () async {
+              try {
+                await _httpService.enableLanSharing();
+                final url = _httpService.getFileUrl(file.path);
+                await Clipboard.setData(ClipboardData(text: url));
+                if (mounted) _showSuccess('共享链接已复制，24 小时有效');
+              } catch (e) { if (mounted) _showError('$e'); }
+            }),
+            ListTile(leading: const Icon(Icons.stop_circle_outlined), title: const Text('停止文件共享'), onTap: () async {
+              await _httpService.stopServer();
+              await _httpService.startServer();
+              if (context.mounted) Navigator.pop(context);
+            }),
             const Divider(height: 16),
             const Text(
-              '访问链接:',
+              '本机播放链接:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),

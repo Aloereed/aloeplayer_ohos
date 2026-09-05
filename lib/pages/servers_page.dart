@@ -1,3 +1,5 @@
+import 'downloads_page.dart';
+import 'continue_watching_page.dart';
 // lib/pages/servers_page.dart
 import 'package:flutter/material.dart';
 import '../models/server_config.dart';
@@ -120,6 +122,7 @@ class _ServersPageState extends State<ServersPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('媒体库'),
+        actions: [IconButton(tooltip: '继续观看', icon: const Icon(Icons.play_circle_outline), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContinueWatchingPage()))), IconButton(tooltip: '下载任务', icon: const Icon(Icons.download), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage())))],
         elevation: 0,
       ),
       body: _isLoading

@@ -66,7 +66,7 @@ abstract class FileService {
   Future<bool> connect(ServerConfig config);
   Future<void> disconnect();
   Future<List<FileItem>> listFiles(String path);
-  Future<Stream<Uint8List>> getFileStream(String filePath);
+  Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end});
   Future<FileItem?> getFile(String path);
 }
 
@@ -122,8 +122,8 @@ class SmbFileService implements FileService {
   }
 
   @override
-  Future<Stream<Uint8List>> getFileStream(String filePath) async {
-    return await _smbService.getFileStream(filePath);
+  Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end}) async {
+    return await _smbService.libsmb2Service.getRangeStream(filePath, start: start ?? 0, end: end == null ? null : end + 1);
   }
 
   @override
@@ -172,8 +172,8 @@ class WebDavFileService implements FileService {
   }
 
   @override
-  Future<Stream<Uint8List>> getFileStream(String filePath) async {
-    return await _webdavService.getFileStream(filePath);
+  Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end}) async {
+    return await _webdavService.getFileStream(filePath, start: start, end: end);
   }
 
   @override

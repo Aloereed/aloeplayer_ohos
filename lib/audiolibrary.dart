@@ -583,6 +583,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     if (await directory.exists()) {
       final items = await directory.list().toList();
       for (var item in items) {
+        if (item.path.contains('.aloe-part-')) continue;
         if (item is File) {
           String extension = path.extension(item.path).toLowerCase();
           // Filter out non-audio files
