@@ -1,4 +1,5 @@
 import 'widgets/video_library_tile.dart';
+import 'widgets/video_file_actions_sheet.dart';
 import 'widgets/local_import_sheet.dart';
 import 'services/disk_thumbnail_cache.dart';
 import 'services/video_thumbnail_loader.dart';
@@ -983,33 +984,20 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   // 在删除视频方法中也应用筛选刷新
-  Future<void> _deleteVideoFile(File file) async {
-    try {
-      await file.delete();
-
-      // 如果文件已收藏，从收藏中移除
-      if (_favoriteStatus[file.path] ?? false) {
-        await _favoritesDb.removeFavorite(file.path);
-        setState(() {
-          _favoriteStatus.remove(file.path);
-        });
-      }
-
-      // 从所有项目和已筛选项目中移除
-      setState(() {
-        _allItems.removeWhere((item) => item is File && item.path == file.path);
-        _filteredItems
-            .removeWhere((item) => item is File && item.path == file.path);
-      });
-    } catch (e) {
-      print("Error deleting file: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('删除文件失败: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+  Future<bool> _deleteVideoFile(File file) async {
+    try { await file.delete(); }
+    catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('删除失败，请检查文件访问权限')));
+      return false;
     }
+    try { await _favoritesDb.removeFavorite(file.path); } catch (_) {}
+    _favoriteStatus.remove(file.path);
+    _durationCache.remove(file.path); _hdrCache.remove(file.path);
+    _videoFiles.removeWhere((item) => item.path == file.path);
+    _allItems.removeWhere((item) => item is File && item.path == file.path);
+    _filteredItems.removeWhere((item) => item is File && item.path == file.path);
+    if (mounted) setState(() {});
+    return true;
   }
 
   // 获取视频缩略图
@@ -1030,6 +1018,11 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
           const platform = MethodChannel('samples.flutter.dev/ffmpegplugin');
           final encoded = await platform.invokeMethod<String>('getVideoThumbnailFallback', {'path': source});
           return encoded == null || encoded.isEmpty ? null : base64Decode(encoded);
+        },
+        validateCached: (bytes) async {
+          final codec = await instantiateImageCodec(bytes, targetWidth: 16, targetHeight: 16);
+          try { final frame = await codec.getNextFrame(); frame.image.dispose(); return true; }
+          finally { codec.dispose(); }
         },
       );
       return await _thumbnailLoader!.load(file);
@@ -2280,381 +2273,55 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     onOptions: () => _showVideoOptionsBottomSheet(file), onFavorite: () => _toggleFavorite(file),
   ));
 
-  void _handleVideoAction(String value, File file) {
-    switch (value) {
-      case 'play':
-        widget.getopenfile(file.path);
-        widget.startPlayerPage(context);
-        break;
-      case 'convert':
-        _showConvertToMp4Dialog(file);
-        break;
-      case 'extract':
-        _showExtractSubtitleDialog(file);
-        break;
-      case 'share':
-        String filePath = file.path;
-        if (file.path.endsWith('.lnk')) {
-          filePath = file.readAsStringSync();
-          _settingsService.activatePersistPermission(pathToUri(filePath));
-        }
-        Share.shareXFiles([XFile(filePath)]);
-        break;
-      case 'favorite':
-        _toggleFavorite(file);
-        break;
-      case 'delete':
-        _showDeleteConfirmDialog(file);
-        break;
+  Future<void> _regenerateThumbnail(File file) async {
+    if (disableThumbnail) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先在设置中开启缩略图')));
+      return;
+    }
+    try {
+      await _pendingThumbnails[file.path];
+      await _thumbnailLoader?.invalidate(file);
+      final bytes = await _getVideoThumbnail(file);
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+        bytes == null ? '暂时无法提取缩略图，请确认原文件仍可访问' : '缩略图已更新')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('缩略图更新失败，可稍后重试')));
     }
   }
 
-  void _showVideoOptionsBottomSheet(File file) {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent, // Keep this transparent
-      builder: (BuildContext context) {
-        final fileName = path.basename(file.path);
-        final orientation = MediaQuery.of(context).orientation;
-        final isLandscape = orientation == Orientation.landscape;
-        final screenWidth = MediaQuery.of(context).size.width;
-        final isLargeScreen = screenWidth > 600;
-
-        final gridColumns = isLandscape ? 6 : (isLargeScreen ? 4 : 3);
-        final aspectRatio = isLandscape ? 1.1 : (isLargeScreen ? 1.5 : 1.0);
-
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                // Apply blur directly to the container with frosted glass effect
-                color: Colors.transparent,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    // Add the colored container inside the backdropFilter
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.black.withOpacity(0.85)
-                          : Colors.white.withOpacity(0.85),
-                    ),
-                    child: isLandscape
-                        // Landscape layout
-                        ? Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildDragHandle(),
-                              Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      flex: 1,
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          _buildThumbnail(file),
-                                          SizedBox(width: 16),
-                                          Expanded(
-                                              child: _buildFileInfo(
-                                                  fileName, file)),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: _buildOptionsGrid(
-                                          file, gridColumns, aspectRatio),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          )
-                        // Portrait layout
-                        : Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildDragHandle(),
-                              Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    _buildThumbnail(file),
-                                    SizedBox(width: 16),
-                                    Expanded(
-                                        child: _buildFileInfo(fileName, file)),
-                                  ],
-                                ),
-                              ),
-                              Divider(height: 1, thickness: 0.5),
-                              _buildOptionsGrid(file, gridColumns, aspectRatio),
-                            ],
-                          ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-// 添加拖动把手
-  Widget _buildDragHandle() {
-    return Container(
-      margin: EdgeInsets.only(top: 12, bottom: 4),
-      width: 40,
-      height: 4,
-      decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(2),
-      ),
-    );
-  }
-
-// 提取缩略图组件
-  Widget _buildThumbnail(File file) {
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 4,
-      shadowColor: Colors.black26,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: FutureBuilder<Uint8List?>(
-        future: _getVideoThumbnail(file),
-        builder: (context, snapshot) {
-          return Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.grey[800],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: snapshot.connectionState == ConnectionState.done &&
-                    snapshot.data != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.memory(snapshot.data!, fit: BoxFit.cover),
-                  )
-                : Icon(Icons.movie_outlined, size: 30, color: Colors.white70),
-          );
-        },
-      ),
-    );
-  }
-
-// 提取文件信息组件
-  Widget _buildFileInfo(String fileName, File file) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          fileName,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        SizedBox(height: 4),
-        FutureBuilder<Duration?>(
-          future: _getVideoDuration(file),
-          builder: (context, snapshot) {
-            final fileSize = _getFileSize(file);
-            final fileDateString = _getFileDate(file);
-
-            if (snapshot.connectionState == ConnectionState.waiting ||
-                snapshot.hasError ||
-                snapshot.data == null) {
-              return Text(
-                '大小: $fileSize, 日期: $fileDateString',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              );
-            }
-
-            final duration = snapshot.data!;
-            final hours = duration.inHours > 0 ? '${duration.inHours}:' : '';
-            final minutes =
-                '${(duration.inMinutes % 60).toString().padLeft(2, '0')}:';
-            final seconds =
-                '${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
-
-            return Text(
-              '时长: $hours$minutes$seconds • 大小: $fileSize • 日期: $fileDateString',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-// 提取选项网格组件
-  Widget _buildOptionsGrid(
-      File file, int crossAxisCount, double childAspectRatio) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: NeverScrollableScrollPhysics(),
-      crossAxisCount: crossAxisCount,
-      childAspectRatio: childAspectRatio,
-      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      mainAxisSpacing: 12, // 增加行间距
-      crossAxisSpacing: 8, // 增加列间距
-      children: [
-        _buildOptionTile(
-          icon: Icons.play_arrow,
-          color: Colors.green,
-          title: '播放',
-          onTap: () {
-            Navigator.pop(context);
-            widget.getopenfile(file.path);
-            widget.startPlayerPage(context);
-          },
-        ),
-        _buildOptionTile(
-          icon: Icons.file_download,
-          color: Colors.blue,
-          title: '转MP4',
-          enabled: !isFFmpeged,
-          onTap: () {
-            Navigator.pop(context);
-            _showConvertToMp4Dialog(file);
-          },
-        ),
-        _buildOptionTile(
-          icon: Icons.subtitles,
-          color: Colors.purple,
-          title: '抽取字幕',
-          onTap: () {
-            Navigator.pop(context);
-            _showExtractSubtitleDialog(file);
-          },
-        ),
-        _buildOptionTile(
-          icon: Icons.music_note,
-          color: Colors.yellow,
-          title: '抽取音轨',
-          onTap: () {
-            Navigator.pop(context);
-            _showExtractAudioTrackDialog(file);
-          },
-        ),
-        _buildOptionTile(
-          icon: Icons.cast,
-          color: Colors.blue,
-          title: '投播(测试)',
-          onTap: () {
-            Navigator.pop(context);
-            // 如果file.path是lnk文件，按String读取成为新的path
-            String filePath = file.path;
-            if (file.path.endsWith('.lnk')) {
-              filePath = file.readAsStringSync();
-            }
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => CastScreenPage(
-                  mediaPath: filePath,
-                ),
-              ),
-            );
-          },
-        ),
-        _buildOptionTile(
-          icon: Icons.share,
-          color: Colors.orange,
-          title: '分享',
-          onTap: () {
-            Navigator.pop(context);
-            String filePath = file.path;
-            if (file.path.endsWith('.lnk')) {
-              filePath = file.readAsStringSync();
-              _settingsService.activatePersistPermission(pathToUri(filePath));
-            }
-            Share.shareXFiles([XFile(filePath)]);
-          },
-        ),
-        _buildOptionTile(
-          icon: _favoriteStatus[file.path] ?? false
-              ? Icons.favorite
-              : Icons.favorite_border,
-          color: _favoriteStatus[file.path] ?? false ? Colors.red : Colors.pink,
-          title: _favoriteStatus[file.path] ?? false ? '取消收藏' : '收藏',
-          onTap: () {
-            Navigator.pop(context);
-            _toggleFavorite(file);
-          },
-        ),
-        _buildOptionTile(
-          icon: Icons.delete,
-          color: Colors.red,
-          title: '删除',
-          onTap: () {
-            Navigator.pop(context);
-            _showDeleteConfirmDialog(file);
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOptionTile({
-    required IconData icon,
-    required Color color,
-    required String title,
-    required VoidCallback onTap,
-    bool enabled = true,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(12),
-        child: Opacity(
-          opacity: enabled ? 1.0 : 0.5,
-          child: Container(
-            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: color, size: 24),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+  Future<void> _showVideoOptionsBottomSheet(File file) async {
+    final action = await showVideoFileActions(context,
+      name: path.basename(file.path).replaceFirst(RegExp(r'\.lnk$'), ''),
+      details: '${_getFileSize(file)} · ${_getFileDate(file)}', thumbnail: _getVideoThumbnail(file),
+      favorite: _favoriteStatus[file.path] ?? false, shortcut: file.path.endsWith('.lnk'), conversionBusy: isFFmpeged);
+    if (!mounted || action == null) return;
+    try {
+      switch (action) {
+        case VideoFileAction.play:
+          widget.getopenfile(file.path); widget.startPlayerPage(context);
+        case VideoFileAction.favorite: await _toggleFavorite(file);
+        case VideoFileAction.refreshThumbnail: await _regenerateThumbnail(file);
+        case VideoFileAction.convert: _showConvertToMp4Dialog(file);
+        case VideoFileAction.extractSubtitle:
+          await _activateShortcut(file);
+          if (mounted) _showExtractSubtitleDialog(file);
+        case VideoFileAction.extractAudio:
+          await _activateShortcut(file);
+          if (mounted) _showExtractAudioTrackDialog(file);
+        case VideoFileAction.share:
+        case VideoFileAction.cast:
+          await _activateShortcut(file);
+          final source = file.path.endsWith('.lnk') ? (await file.readAsString()).trim() : file.path;
+          if (!mounted) return;
+          if (action == VideoFileAction.share) { await Share.shareXFiles([XFile(source)]); }
+          else { await Navigator.push(context, MaterialPageRoute(builder: (_) => CastScreenPage(mediaPath: source))); }
+        case VideoFileAction.delete: _showDeleteConfirmDialog(file);
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法完成操作，请检查文件访问权限后重试')));
+    }
   }
 
   void _showConvertToMp4Dialog(File file) {
@@ -3270,87 +2937,22 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     );
   }
 
-  void _showDeleteConfirmDialog(File file) {
-    final fileName = path.basename(file.path);
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.delete, color: Colors.red),
-              SizedBox(width: 10),
-              Text('删除视频'),
-            ],
-          ),
-          content: RichText(
-            text: TextSpan(
-              style: TextStyle(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white
-                    : Colors.black87,
-                fontSize: 16,
-              ),
-              children: [
-                TextSpan(text: '确定要删除 '),
-                TextSpan(
-                  text: fileName,
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                TextSpan(text: ' 吗？\n\n'),
-                TextSpan(
-                  text: '此操作不可恢复',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: Text('取消', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                _deleteVideoFile(file);
-                Navigator.pop(context);
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('已删除: $fileName'),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    action: SnackBarAction(
-                      label: '关闭',
-                      onPressed: () {},
-                    ),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: Text('删除'),
-            ),
-          ],
-        );
-      },
-    );
+  Future<void> _showDeleteConfirmDialog(File file) async {
+    final shortcut = file.path.endsWith('.lnk');
+    final fileName = path.basename(file.path).replaceFirst(RegExp(r'\.lnk$'), '');
+    final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
+      title: Text(shortcut ? '移除快捷方式' : '删除视频'),
+      content: SingleChildScrollView(child: Text(shortcut
+        ? '移除“$fileName”的快捷方式？\n\n只移除链接，原视频文件保留。'
+        : '删除“$fileName”？\n\n这个文件将从媒体库删除，无法撤销。')),
+      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error,
+          foregroundColor: Theme.of(context).colorScheme.onError),
+          onPressed: () => Navigator.pop(dialogContext, true), child: Text(shortcut ? '移除链接' : '删除文件'))],
+    ));
+    if (confirmed != true || !mounted) return;
+    if (await _deleteVideoFile(file) && mounted) ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(shortcut ? '快捷方式已移除，原视频保留' : '已删除：$fileName')));
   }
 
   Future<void> _openFile() async {

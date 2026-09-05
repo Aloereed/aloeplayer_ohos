@@ -12,13 +12,16 @@ class VideoThumbnailLoader {
   final Directory library;
   final Future<Uint8List?> Function(String source) decode;
   final Future<Uint8List?> Function(String source)? fallbackDecode;
+  final Future<bool> Function(Uint8List bytes)? validateCached;
+  final Set<String> _bypassCache = {};
   Future<Map<String, int>>? _legacyNames;
   VideoThumbnailLoader(
       {required this.disk,
       required this.memory,
       required this.library,
       required this.decode,
-      this.fallbackDecode});
+      this.fallbackDecode,
+      this.validateCached});
 
   Future<Map<String, int>> _names() async {
     final names = <String, int>{};
@@ -31,7 +34,7 @@ class VideoThumbnailLoader {
     return names;
   }
 
-  Future<Uint8List?> load(File file) async {
+  Future<({String source, String key, DateTime modified})> _revision(File file) async {
     final source = file.path.endsWith('.lnk')
         ? (await file.readAsString()).trim()
         : file.path;
@@ -47,11 +50,29 @@ class VideoThumbnailLoader {
     } catch (_) {/* Provider access can still work in the native decoder. */}
     final key = ThumbnailCache.key(
         source, stat.size, stat.modified.millisecondsSinceEpoch);
+    return (source: source, key: key, modified: stat.modified);
+  }
+
+  Future<void> invalidate(File file) async {
+    final revision = await _revision(file);
+    _bypassCache.add(revision.key);
+    memory.remove(revision.key);
+    try { await disk.remove(revision.key); } catch (_) {}
+  }
+
+  Future<bool> _valid(Uint8List bytes) async {
+    if (bytes.isEmpty) return false;
+    try { return await validateCached?.call(bytes) ?? true; } catch (_) { return false; }
+  }
+
+  Future<Uint8List?> load(File file) async {
+    final revision = await _revision(file);
+    final source = revision.source, key = revision.key;
     final cached = memory.get(key);
     if (cached != null) return cached;
     try {
-      final bytes = await disk.read(key);
-      if (bytes != null && bytes.isNotEmpty) {
+      final bytes = _bypassCache.contains(key) ? null : await disk.read(key);
+      if (bytes != null && await _valid(bytes)) {
         memory.put(key, bytes);
         return bytes;
       }
@@ -63,15 +84,17 @@ class VideoThumbnailLoader {
     if ((bytes == null || bytes.isEmpty) && fallbackDecode != null) {
       try { bytes = await fallbackDecode!(source); } catch (_) {}
     }
-    if (bytes == null || bytes.isEmpty) {
+    if ((bytes == null || bytes.isEmpty) && !_bypassCache.contains(key)) {
       try {
         final legacy = File(
             path.join(disk.directory.path, '${path.basename(file.path)}.jpg'));
         if (await legacy.exists() &&
-            !(await legacy.lastModified()).isBefore(stat.modified)) {
+            !(await legacy.lastModified()).isBefore(revision.modified)) {
           final names = await (_legacyNames ??= _names());
-          if (names[path.basename(file.path)] == 1)
-            bytes = await legacy.readAsBytes();
+          if (names[path.basename(file.path)] == 1) {
+            final legacyBytes = await legacy.readAsBytes();
+            if (await _valid(legacyBytes)) bytes = legacyBytes;
+          }
         }
       } catch (_) {
         _legacyNames = null;
@@ -81,6 +104,7 @@ class VideoThumbnailLoader {
     memory.put(key, bytes);
     try {
       await disk.write(key, bytes);
+      _bypassCache.remove(key);
     } catch (_) {}
     return bytes;
   }

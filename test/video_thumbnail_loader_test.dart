@@ -91,4 +91,33 @@ void main() {
     expect(await loader.load(video), [4]);
     expect(fallbackCalls, 0);
   });
+  test('corrupt cached bytes are decoded again and replaced', () async {
+    final video = await File('${root.path}/movie.mp4').writeAsBytes([0]);
+    final stat = await video.stat();
+    final key = ThumbnailCache.key(video.path, stat.size, stat.modified.millisecondsSinceEpoch);
+    final disk = DiskThumbnailCache(Directory('${root.path}/cache'));
+    await disk.write(key, Uint8List.fromList([0]));
+    var decodes = 0;
+    final loader = VideoThumbnailLoader(disk: disk, memory: ThumbnailCache(), library: root,
+      validateCached: (bytes) async => bytes.first == 9,
+      decode: (_) async { decodes++; return Uint8List.fromList([9]); });
+    expect(await loader.load(video), [9]);
+    expect(await loader.load(video), [9]);
+    expect(await disk.read(key), [9]);
+    expect(decodes, 1);
+  });
+  test('manual regeneration invalidates only this revision and preserves media and sidecars', () async {
+    final video = await File('${root.path}/movie.mp4').writeAsBytes([0]);
+    final disk = DiskThumbnailCache(Directory('${root.path}/cache'));
+    var decodes = 0;
+    final loader = VideoThumbnailLoader(disk: disk, memory: ThumbnailCache(), library: root,
+      decode: (_) async => Uint8List.fromList([++decodes]));
+    expect(await loader.load(video), [1]);
+    final sidecar = await File('${disk.directory.path}/movie.mp4.jpg').writeAsBytes([7]);
+    await loader.invalidate(video);
+    expect(await loader.load(video), [2]);
+    expect(await loader.load(video), [2]);
+    expect(await video.readAsBytes(), [0]);
+    expect(await sidecar.readAsBytes(), [7]);
+  });
 }

@@ -14,6 +14,7 @@ import 'package:aloeplayer/pages/servers_page.dart';
 import 'package:aloeplayer/widgets/responsive_app_shell.dart';
 import 'package:aloeplayer/widgets/local_import_sheet.dart';
 import 'package:aloeplayer/widgets/video_library_tile.dart';
+import 'package:aloeplayer/widgets/video_file_actions_sheet.dart';
 import 'package:aloeplayer/widgets/image_enhancement_sheet.dart';
 import 'package:aloeplayer/services/mpv_image_enhancement.dart';
 
@@ -87,6 +88,9 @@ void main() {
           details: '1.28 GB', shortcut: i == 2, favorite: i == 0, thumbnail: Future.value(null),
           info: Future.value(VideoTileInfo(duration: const Duration(minutes: 42, seconds: 18), progress: i == 0 ? .4 : 0, hdr: i == 1)),
           onPlay: () {}, onOptions: () {}, onFavorite: () {})])));
+    await capture('mobile-video-actions-light', const Size(390, 844), Brightness.light,
+      Scaffold(body: VideoFileActionsSheet(name: '周末的旅行 · 山与海.mp4', details: '快捷方式 · 3 天前',
+        thumbnail: Future.value(null), shortcut: true)));
     await tester.runAsync(() async {
       await File('build/ui-review/index.html').writeAsString('<!doctype html><meta charset="utf-8"><title>AloePlayer UI review</title>'
         '<style>body{font:16px system-ui;background:#edf2f7;color:#17212f;margin:32px}img{max-width:100%;border-radius:16px}section{margin:32px 0;max-width:1440px}</style>'

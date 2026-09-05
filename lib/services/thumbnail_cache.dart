@@ -36,4 +36,7 @@ class ThumbnailCache {
       _bytes -= _items.remove(_items.keys.first)!.length;
     }
   }
+  void remove(String key) {
+    _bytes -= _items.remove(key)?.length ?? 0;
+  }
 }

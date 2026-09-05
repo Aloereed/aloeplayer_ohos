@@ -62,6 +62,13 @@ class DiskThumbnailCache {
     } finally { if (await temporary.exists()) await temporary.delete(); }
   });
 
+  Future<void> remove(String key) => _serial(() async {
+    await _load();
+    final file = _file(key);
+    if (await file.exists()) await file.delete();
+    _entries.remove(key);
+  });
+
   Future<void> _prune() async {
     var total = _entries.values.fold<int>(0, (sum, item) => sum + item.bytes);
     final oldest = _entries.keys.toList()..sort((a, b) => _entries[a]!.used.compareTo(_entries[b]!.used));
