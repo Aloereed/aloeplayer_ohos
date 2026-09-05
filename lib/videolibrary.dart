@@ -1,3 +1,4 @@
+import 'widgets/local_import_sheet.dart';
 import 'services/disk_thumbnail_cache.dart';
 import 'services/video_thumbnail_loader.dart';
 import 'services/work_queue.dart';
@@ -862,103 +863,16 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     }
   }
 
-  Future<bool> _showImportInfoDialog(BuildContext context) async {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
-    return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (BuildContext context) {
-            return BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-              child: Dialog(
-                backgroundColor: isDarkMode
-                    ? Colors.grey[900]!.withOpacity(0.9)
-                    : Colors.white.withOpacity(0.9),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20.0),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Colors.blue,
-                        size: 48.0,
-                      ),
-                      const SizedBox(height: 16.0),
-                      Text(
-                        "文件导入说明",
-                        style: TextStyle(
-                          fontSize: 22.0,
-                          fontWeight: FontWeight.bold,
-                          color: isDarkMode ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16.0),
-                      Text(
-                        "使用文件管理器进行复制导入是最快捷和方便的方式：\n\n"
-                        "• 在 /下载/AloePlayer/Videos 下可以复制导入视频\n"
-                        "• 在 /下载/AloePlayer/Audios 下可以复制导入音频\n\n"
-                        "由于开发者使用平板开发，平板端和手机端系统文件管理器的差别越来越大，使用应用内导入可能不稳定（例如不能导入\"最近\"里的视频会崩溃无法复现），尽情谅解。\n\n"
-                        "导入后请下拉刷新。",
-                        style: TextStyle(
-                          fontSize: 16.0,
-                          color: isDarkMode ? Colors.white70 : Colors.black87,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24.0),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop(false);
-                            },
-                            child: Text(
-                              "取消",
-                              style: TextStyle(
-                                fontSize: 16.0,
-                                color: isDarkMode
-                                    ? Colors.white70
-                                    : Colors.black54,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16.0),
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.of(context).pop(true);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).primaryColor,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 24.0, vertical: 12.0),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30.0),
-                              ),
-                            ),
-                            child: const Text(
-                              "确定",
-                              style: TextStyle(fontSize: 16.0),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ) ??
-        false; // 如果对话框被异常关闭，默认返回false
-  }
+  Future<bool> _showImportInfoDialog(BuildContext context) async =>
+    await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('在文件管理器中导入'),
+      content: const SingleChildScrollView(child: Text(
+        '打开文件管理器后，将视频复制到：\nDownloads/com.aloereed.aloeplayer/Videos\n\n'
+        '音频请放到：\nDownloads/com.aloereed.aloeplayer/Audios\n\n'
+        '完成后返回 AloePlayer，下拉刷新即可看到文件。若不想复制，请返回选择“添加快捷方式”。')),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('返回')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('打开文件管理器'))],
+    )) ?? false;
 
   Future<void> _createLinkFile(String uri) async {
     final fileName = path.basename(uri + ".lnk");
@@ -977,11 +891,10 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       }
       // 向destinationFile写入uri
       await destinationFile.writeAsString(uri);
-      print("文件创建完成: $destinationPath");
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('快捷方式已添加，视频未复制，原文件请保留在当前位置')));
     } catch (e) {
       print("链接文件文件创建失败: $e");
-      // 关闭对话框
-      Navigator.of(context).pop();
 
       // 显示复制失败的Toast
       Fluttertoast.showToast(
@@ -1023,162 +936,51 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     final fileName = path.basename(file.path);
     final destinationPath = path.join(_currentPath, fileName);
     final destinationFile = File(destinationPath);
-    bool deleteIfError = true;
-    // 显示加载对话框
-    showDialog(
-      context: context,
-      barrierDismissible: false, // 用户不能通过点击外部关闭对话框
-      builder: (BuildContext context) {
-        return AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(
-                color: Colors.lightBlue,
-              ),
-              SizedBox(width: 20),
-              Text("正在复制..."),
-            ],
-          ),
-        );
-      },
-    );
-
+    if (await destinationFile.exists()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('媒体库已存在“$fileName”，已跳过复制')));
+      return;
+    }
+    if (!mounted) return;
+    final progress = ValueNotifier<double?>(null);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final dialog = DialogRoute<void>(context: context, barrierDismissible: false,
+      builder: (_) => PopScope(canPop: false, child: AlertDialog(
+        title: const Text('正在复制到媒体库'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(fileName, maxLines: 2, overflow: TextOverflow.ellipsis), const SizedBox(height: 20),
+          ValueListenableBuilder<double?>(valueListenable: progress, builder: (_, value, __) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [LinearProgressIndicator(value: value),
+              const SizedBox(height: 10), Text(value == null ? '准备复制…' : '${(value * 100).toStringAsFixed(0)}%')],
+          )),
+          const SizedBox(height: 16), const Text('原文件会保留。大文件复制需要一些时间。'),
+          const SizedBox(height: 8), Text(destinationPath.replaceFirst('/storage/Users/currentUser/Download/', 'Downloads/'),
+            style: Theme.of(context).textTheme.bodySmall),
+        ]),
+      )));
+    unawaited(navigator.push(dialog));
     try {
-      // 检查destinationPath是否已存在
-      if (await destinationFile.exists()) {
-        deleteIfError = false;
-        throw FileSystemException(
-          "文件已存在",
-          destinationPath,
-        );
-      }
-      final inputStream = File(file.path).openRead();
-      final outputStream = destinationFile.openWrite();
-
-      await inputStream.pipe(outputStream);
-      print("文件复制完成: $destinationPath 从 ${file.path}");
-
-      // 关闭对话框
-      Navigator.of(context).pop();
-
-      // 显示复制成功的Toast
-      Fluttertoast.showToast(
-        msg: "文件复制成功",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        timeInSecForIosWeb: 1,
-        backgroundColor: Colors.green,
-        textColor: Colors.white,
-        fontSize: 16.0,
-      );
-    } catch (e) {
-      print("文件复制失败: $e");
-      // 关闭对话框
-      Navigator.of(context).pop();
-
-      // 显示复制失败的Toast
-      Fluttertoast.showToast(
-        msg: "文件复制失败: $e",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        timeInSecForIosWeb: 1,
-        backgroundColor: Colors.red,
-        textColor: Colors.white,
-        fontSize: 16.0,
-      );
-
-      // 如果复制失败，删除可能已创建的目标文件
-      if (deleteIfError && await destinationFile.exists()) {
-        await destinationFile.delete();
-      }
+      final length = await File(file.path).length();
+      var copied = 0;
+      var updated = DateTime.now();
+      final input = File(file.path).openRead().map((bytes) {
+        copied += bytes.length;
+        if (DateTime.now().difference(updated).inMilliseconds >= 100) {
+          progress.value = length == 0 ? null : (copied / length).clamp(0.0, 1.0);
+          updated = DateTime.now();
+        }
+        return bytes;
+      });
+      await input.pipe(destinationFile.openWrite());
+      progress.value = 1;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制到媒体库，原文件保留')));
+    } catch (_) {
+      if (await destinationFile.exists()) await destinationFile.delete();
       rethrow;
     } finally {
-      _loadItems();
-    }
-  }
-
-  Future<void> _copyVideoFileWithProgress(XFile file) async {
-    final fileName = path.basename(file.path);
-    final destinationPath = path.join(_videoDirPath, fileName);
-    final destinationFile = File(destinationPath);
-
-    // 显示带有进度条的对话框
-    showDialog(
-      context: context,
-      barrierDismissible: false, // 用户不能通过点击外部关闭对话框
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('复制文件中...'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LinearProgressIndicator(),
-              SizedBox(height: 16),
-              Text('正在复制: $fileName'),
-            ],
-          ),
-        );
-      },
-    );
-
-    try {
-      final inputStream = File(file.path).openRead();
-      final outputStream = destinationFile.openWrite();
-
-      // 获取文件大小
-      final fileSize = await File(file.path).length();
-      int copiedBytes = 0;
-
-      // 监听输入流，逐块写入输出流
-      await inputStream.listen(
-        (List<int> data) {
-          outputStream.add(data);
-          copiedBytes += data.length;
-          // 更新进度
-          double progress = copiedBytes / fileSize;
-          // 更新对话框中的进度条
-          Navigator.of(context).pop(); // 关闭之前的对话框
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: Text('复制文件中...'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LinearProgressIndicator(value: progress),
-                    SizedBox(height: 16),
-                    Text(
-                        '正在复制: $fileName (${(progress * 100).toStringAsFixed(1)}%)'),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-        onDone: () async {
-          await outputStream.close();
-          print("文件复制完成: $destinationPath");
-          Navigator.of(context).pop(); // 关闭对话框
-          _loadItems(); // 刷新视频列表
-        },
-        onError: (e) {
-          print("文件复制失败: $e");
-          if (destinationFile.existsSync()) {
-            destinationFile.deleteSync();
-          }
-          Navigator.of(context).pop(); // 关闭对话框
-          throw e;
-        },
-      ).asFuture();
-    } catch (e) {
-      print("文件复制失败: $e");
-      if (await destinationFile.exists()) {
-        await destinationFile.delete();
-      }
-      Navigator.of(context).pop(); // 关闭对话框
-      // rethrow;
+      if (dialog.isActive) navigator.removeRoute(dialog);
+      // Let the dialog unmount before disposing its progress notifier.
+      WidgetsBinding.instance.addPostFrameCallback((_) => progress.dispose());
+      if (mounted) await _loadItems();
     }
   }
 
@@ -1741,170 +1543,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                         ),
                       ),
                       if (_searchQuery.isEmpty)
-                        PopupMenuButton<String>(
-                          icon: Icon(
-                            Icons.add_rounded,
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.white
-                                    : Colors.black,
-                          ),
-                          tooltip: "添加视频",
-                          elevation: 0,
-                          offset: const Offset(0, 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          color: Colors.transparent,
-                          onSelected: (value) {
-                            if (value == 'pick') {
-                              _pickVideoWithFilePicker();
-                            } else if (value == 'folder') {
-                              _createNewFolder(context);
-                            } else if (value == 'gallery') {
-                              _pickVideoWithImagePicker();
-                            } else if (value == 'webdav') {
-                              _openWebDavFileManager(context);
-                            } else if (value == 'softlink') {
-                              _pickVideoWithPersist();
-                            } else if (value == 'filemanager') {
-                              _pickVideoWithFileManager(context);
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              padding: EdgeInsets.zero,
-                              value: null,
-                              enabled: false,
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(
-                                      sigmaX: 10.0, sigmaY: 10.0),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.black.withOpacity(0.6)
-                                          : Colors.white.withOpacity(0.7),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: Theme.of(context).brightness ==
-                                                Brightness.dark
-                                            ? Colors.white.withOpacity(0.2)
-                                            : Colors.white.withOpacity(0.5),
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 8.0),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          // Add files from file manager
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 16.0,
-                                              vertical: 8.0,
-                                            ),
-                                            child: Text(
-                                              '添加视频',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                                color: Theme.of(context)
-                                                            .brightness ==
-                                                        Brightness.dark
-                                                    ? Colors.white
-                                                    : Colors.black87,
-                                              ),
-                                            ),
-                                          ),
-                                          const Divider(
-                                              height: 1, thickness: 1),
-                                          // Add files from File Manager
-                                          _buildActionMenuItem(
-                                            context: context,
-                                            title: '从文件管理器添加',
-                                            icon: Icons.folder_open_rounded,
-                                            iconColor: Colors.lightBlue,
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              _pickVideoWithFileManager(
-                                                  context);
-                                            },
-                                          ),
-
-                                          // Add local video
-                                          _buildActionMenuItem(
-                                            context: context,
-                                            title: '添加本地视频文件',
-                                            icon: Icons.file_upload,
-                                            iconColor: Colors.lightBlue,
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              _pickVideoWithFilePicker();
-                                            },
-                                          ),
-
-                                          // Add local video link
-                                          _buildActionMenuItem(
-                                            context: context,
-                                            title: '添加视频文件快捷方式(不复制)',
-                                            icon: Icons.dataset_linked_rounded,
-                                            iconColor: Colors.lightBlue,
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              _pickVideoWithPersist();
-                                            },
-                                          ),
-
-                                          // Create new folder
-                                          _buildActionMenuItem(
-                                            context: context,
-                                            title: '新建文件夹',
-                                            icon: Icons.create_new_folder,
-                                            iconColor: Colors.lightBlue,
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              _createNewFolder(context);
-                                            },
-                                          ),
-
-                                          // Pick from gallery
-                                          _buildActionMenuItem(
-                                            context: context,
-                                            title: '从相册选择',
-                                            icon: Icons.video_library_rounded,
-                                            iconColor: Colors.lightBlue,
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              _pickVideoWithImagePicker();
-                                            },
-                                          ),
-
-                                          // WebDAV download
-                                          _buildActionMenuItem(
-                                            context: context,
-                                            title: '从WebDAV下载',
-                                            icon: Icons.cloud_upload_rounded,
-                                            iconColor: Colors.lightBlue,
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              _openWebDavFileManager(context);
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                        IconButton(
+                          tooltip: '添加视频', icon: const Icon(Icons.add_rounded),
+                          onPressed: () => _showAddOptionsDialog(context),
                         ),
                       // IconButton(
                       //   icon: Icon(Icons.refresh_rounded,
@@ -2608,45 +2249,27 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     }
   }
 
-  void _showAddOptionsDialog(BuildContext context) {
-    // Reusing logic from PopupMenuButton but in a dialog for PC
-    showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return SimpleDialog(
-            title: Text('添加视频'),
-            children: [
-              SimpleDialogOption(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _pickVideoWithFileManager(context);
-                },
-                child: Text('从文件管理器添加'),
-              ),
-              SimpleDialogOption(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _pickVideoWithFilePicker();
-                },
-                child: Text('添加本地视频文件'),
-              ),
-              SimpleDialogOption(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _pickVideoWithPersist();
-                },
-                child: Text('添加视频文件快捷方式(不复制)'),
-              ),
-              SimpleDialogOption(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _createNewFolder(context);
-                },
-                child: Text('新建文件夹'),
-              ),
-            ],
-          );
-        });
+  Future<void> _showAddOptionsDialog(BuildContext context) async {
+    final destination = _currentPath.replaceFirst('/storage/Users/currentUser/Download/', 'Downloads/');
+    final action = await showLocalImportSheet(context, destination: destination);
+    if (!mounted || action == null) return;
+    try {
+      switch (action) {
+        case LocalImportAction.copy: await _pickVideoWithFilePicker();
+        case LocalImportAction.shortcut: await _pickVideoWithPersist();
+        case LocalImportAction.gallery: await _pickVideoWithImagePicker();
+        case LocalImportAction.fileManager: await _pickVideoWithFileManager(context);
+        case LocalImportAction.folder: await _createNewFolder(context);
+        case LocalImportAction.webdav: _openWebDavFileManager(context);
+        case LocalImportAction.playFile: await _openFile();
+        case LocalImportAction.playUrl: _showUrlDialog(context);
+        case LocalImportAction.history:
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryPage(
+            getOpenFile: widget.getopenfile, startPlayerPage: widget.startPlayerPage)));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('未能完成添加，请检查文件权限和剩余空间后重试')));
+    }
   }
 
   Widget _buildEmptyStateView() {
@@ -2693,7 +2316,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
             )
           else
             TextButton.icon(
-              onPressed: _pickVideoWithFilePicker,
+              onPressed: () => _showAddOptionsDialog(context),
               icon: Icon(
                 Icons.add,
                 color: Colors.lightBlue,
@@ -5714,81 +5337,10 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     }
   }
 
-  Widget _buildSpeedDial() {
-    return SpeedDial(
-      icon: Icons.add,
-      activeIcon: Icons.close,
-      backgroundColor: Colors.lightBlue,
-      foregroundColor: Colors.white,
-      overlayColor: Colors.black,
-      overlayOpacity: 0.5,
-      spacing: 15,
-      spaceBetweenChildren: 10,
-      animatedIcon: AnimatedIcons.menu_close,
-      animatedIconTheme: IconThemeData(size: 22),
-      curve: Curves.bounceIn,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(16)),
-      ),
-      children: [
-        SpeedDialChild(
-          child: Icon(Icons.folder_open, color: Colors.white),
-          backgroundColor: Colors.blue[600],
-          foregroundColor: Colors.white,
-          label: '打开文件',
-          labelStyle: TextStyle(fontSize: 14),
-          labelBackgroundColor: Theme.of(context).brightness == Brightness.dark
-              ? Colors.grey[800]
-              : Colors.white,
-          onTap: () => _openFile(),
-        ),
-        SpeedDialChild(
-          child: Icon(Icons.link, color: Colors.white),
-          backgroundColor: Colors.green[600],
-          foregroundColor: Colors.white,
-          label: '打开URL',
-          labelStyle: TextStyle(fontSize: 14),
-          labelBackgroundColor: Theme.of(context).brightness == Brightness.dark
-              ? Colors.grey[800]
-              : Colors.white,
-          onTap: () => _showUrlDialog(context),
-        ),
-        SpeedDialChild(
-          child: Icon(Icons.history, color: Colors.white),
-          backgroundColor: Colors.orange[600],
-          foregroundColor: Colors.white,
-          label: '打开历史记录',
-          labelStyle: TextStyle(fontSize: 14),
-          labelBackgroundColor: Theme.of(context).brightness == Brightness.dark
-              ? Colors.grey[800]
-              : Colors.white,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => HistoryPage(
-                  getOpenFile: widget.getopenfile,
-                  startPlayerPage: widget.startPlayerPage,
-                ),
-              ),
-            );
-          },
-        ),
-        // SpeedDialChild(
-        //   child: Icon(Icons.webhook, color: Colors.white),
-        //   backgroundColor: Colors.orange[600],
-        //   foregroundColor: Colors.white,
-        //   label: '从WebDAV下载',
-        //   labelStyle: TextStyle(fontSize: 14),
-        //   labelBackgroundColor: Theme.of(context).brightness == Brightness.dark
-        //       ? Colors.grey[800]
-        //       : Colors.white,
-        //   onTap: () => _openWebDavFileManager(context),
-        // ),
-      ],
-    );
-  }
-
+  Widget _buildSpeedDial() => FloatingActionButton.extended(
+    onPressed: () => _showAddOptionsDialog(context),
+    icon: const Icon(Icons.add_rounded), label: const Text('添加视频'),
+  );
   void _showUrlDialog(BuildContext context) {
     final TextEditingController urlController = TextEditingController();
 
