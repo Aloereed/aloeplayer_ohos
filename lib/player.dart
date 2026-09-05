@@ -1,3 +1,5 @@
+import 'services/sleep_timer.dart';
+import 'widgets/sleep_timer_button.dart';
 import 'dart:convert';
 import 'dart:ui';
 import 'dart:ui' as ui;
@@ -317,6 +319,7 @@ class _PlayerTabState extends State<PlayerTab>
   @override
   void initState() async {
     super.initState();
+    PlaybackSleepTimer.instance.attach(this, () async { await _videoController?.pause(); });
     _checkAndOpenUriFile(); // 添加文件检查逻辑
     // if (widget.openfile.isNotEmpty) {
     //   _openUri(widget.openfile);
@@ -994,6 +997,7 @@ class _PlayerTabState extends State<PlayerTab>
   }
 
   void _handleVideoFinished() {
+    if (_videoController != null && _videoController!.value.duration > Duration.zero && _videoController!.value.position >= _videoController!.value.duration - const Duration(milliseconds: 100) && PlaybackSleepTimer.instance.consumeEnd(this)) return;
     switch (_isLooping) {
       case 0:
         // 播放完停止
@@ -1254,6 +1258,7 @@ class _PlayerTabState extends State<PlayerTab>
             iconData: Icons.screenshot_monitor,
             title: '截图',
           ),
+          OptionItem(onTap: () => showSleepTimer(context), iconData: Icons.bedtime_outlined, title: '定时停止'),
           OptionItem(
             onTap: () => _showABLoopDialog(context),
             iconData: Icons.repeat_on,
@@ -3041,6 +3046,7 @@ class _PlayerTabState extends State<PlayerTab>
 
   @override
   void dispose() {
+    PlaybackSleepTimer.instance.detach(this);
     // ui.ImageFilter.setHdr(
     //   hdr: 0,
     //   is_image: true,

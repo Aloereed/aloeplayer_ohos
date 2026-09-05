@@ -1,3 +1,4 @@
+import 'services/sleep_timer.dart';
 /*
  * @Author:
  * @Date: 2025-11-16
@@ -148,6 +149,7 @@ class MediaKitAudioService {
 
   // 释放资源
   void dispose() {
+    PlaybackSleepTimer.instance.detach(this);
     _playerStateController.close();
     _controllerChangeController.close();
     player?.dispose();
@@ -164,6 +166,7 @@ class MediaKitAudioService {
 
   // 初始化播放器
   Future<void> _initPlayer() async {
+    PlaybackSleepTimer.instance.attach(this, () async { await player?.pause(); });
     firstPlay = true;
     _isHandlingCompletion = false;
 
@@ -178,6 +181,7 @@ class MediaKitAudioService {
 
       // 监听播放完成事件
       player!.stream.completed.listen((completed) {
+        if (completed && PlaybackSleepTimer.instance.consumeEnd(this)) return;
         if (completed && !_isHandlingCompletion) {
           _isHandlingCompletion = true;
           _handleCompletion();

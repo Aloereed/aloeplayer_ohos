@@ -1,3 +1,4 @@
+import 'widgets/sleep_timer_button.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -1602,6 +1603,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
               // );
             },
           ),
+          const SleepTimerButton(color: Colors.white),
           _buildOptionButton(
             icon: Icons.more_horiz,
             onPressed: () {

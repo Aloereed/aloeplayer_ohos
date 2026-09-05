@@ -35,3 +35,10 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Opening media preserves existing progress; recent-list limits no longer delete long-term resume records.
 - History toolbar links to Continue Watching / Listening with local/network filters, completed marker, and local-file relocation.
 - Six tests passed including Unicode/percent/fragment filename identity; application Dart analysis has no errors; HAP build passed.
+
+## Milestone 04 — playback tools
+
+- Sleep timer across MPV, system video and both music services: 15/30/45/60/90 minutes or end of current item.
+- MPV tools under player settings: subtitle/audio delay, language and track preference per media, named time bookmarks, saved AB segments, chapter navigation.
+- Local subtitle matching respects episode boundaries and language preference; removed the delayed first-match callback.
+- Eleven tests passed, including timer replacement/ownership, bookmark persistence and subtitle matching. Application Dart analysis has no errors; HAP build passed.

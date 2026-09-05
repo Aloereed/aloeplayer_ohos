@@ -1,3 +1,4 @@
+import 'services/sleep_timer.dart';
 /*
  * @Author: 
  * @Date: 2025-03-08 16:38:50
@@ -139,6 +140,7 @@ class AudioPlayerService {
 
   // 释放资源
   void dispose() {
+    PlaybackSleepTimer.instance.detach(this);
     _playerStateController.close();
     _controllerChangeController.close(); // 添加这一行
     controller?.dispose();
@@ -156,6 +158,7 @@ class AudioPlayerService {
 
   // 初始化播放器
   Future<void> _initPlayer() async {
+    PlaybackSleepTimer.instance.attach(this, () async { await controller?.pause(); });
     firstPlay = true;
     _isHandlingCompletion = false; // 重置标志位
 
@@ -203,6 +206,9 @@ class AudioPlayerService {
     controller?.addListener(() {
       updatePlayerState();
 
+      if (controller!.value.duration > Duration.zero && controller!.value.position >= controller!.value.duration - const Duration(milliseconds: 100)) {
+        if (PlaybackSleepTimer.instance.consumeEnd(this)) return;
+      }
       // 仅在接近歌曲结尾且未处于过渡状态时处理
       if (!_isHandlingCompletion &&
           (controller!.value.position >= controller!.value.duration ||

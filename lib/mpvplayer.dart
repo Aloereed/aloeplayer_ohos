@@ -1,3 +1,8 @@
+import 'services/subtitle_matcher.dart';
+import 'services/playback_tools_store.dart';
+import 'services/sleep_timer.dart';
+import 'widgets/sleep_timer_button.dart';
+import 'widgets/playback_tools_sheet.dart';
 import 'models/playback_media.dart';
 import 'dart:async';
 import 'dart:io';
@@ -483,6 +488,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         setState(() {});
         _updatePlaybackState();
       }
+      if (player.state.duration > Duration.zero && position >= player.state.duration - const Duration(milliseconds: 100)) PlaybackSleepTimer.instance.consumeEnd(this);
       _checkABLoop(position);
       // 更新播放位置到历史记录
       _updatePlaybackPosition(position);
@@ -516,8 +522,9 @@ class _MPVPlayerState extends State<MPVPlayer>
 
         // 只有当索引真的改变时才更新
         if (newFilePath != _currentFilePath) {
+          PlaybackSleepTimer.instance.consumeEnd(this);
           _flushPosition();
-          _beginHistory(newFilePath).then((_) { if (mounted && !_disposing) _tryRestorePosition(); });
+          _onQueueItemChanged(newFilePath);
           setState(() {
             _currentIndex = _playlist.indexWhere((f) => f.path == newFilePath);
             if (_currentIndex < 0) _currentIndex = 0;
@@ -1189,19 +1196,21 @@ class _MPVPlayerState extends State<MPVPlayer>
     await _applyMpvHardwareDecoding();
 
     // 打开播放列表
+    PlaybackSleepTimer.instance.attach(this, () => player.pause());
     await player.open(playlist);
     _readyForRestore = true;
     player.setPlaylistMode(_loopMode);
     _tryRestorePosition();
     final remoteSubtitles = _mediaFor(filePath)?.subtitles ?? [];
     if (remoteSubtitles.isNotEmpty) await player.setSubtitleTrack(SubtitleTrack.uri(remoteSubtitles.first));
+    await applyPlaybackPreferences(player, _historyId);
 
     // 更新 Audio Service 的媒体信息
     _updateMediaItem();
 
     // 自动检测并载入字幕文件（仅对特定目录下的本地文件）
     if (!isHttpUrl && !isFileUrl) {
-      _autoLoadSubtitle(resolvedPath);
+      await _autoLoadSubtitle(resolvedPath);
     }
 
     // 检测 HDR 视频并调节亮度（仅对本地文件）
@@ -1213,79 +1222,38 @@ class _MPVPlayerState extends State<MPVPlayer>
     } finally { _openingMedia = false; }
   }
 
-  // 自动检测并载入字幕文件
-  void _autoLoadSubtitle(String filePath) async {
-    // 检查文件是否位于指定目录及其子孙文件夹下
-    const targetBasePath =
-        '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/';
-    if (!filePath.startsWith(targetBasePath)) {
-      return;
-    }
-
+  Future<void> _autoLoadSubtitle(String filePath) async {
+    final id = _historyId;
     try {
+      final preferences = await PlaybackToolsStore.preferences(id);
+      if (preferences.subtitleTrack != null && preferences.subtitleTrack != 'auto') return;
       final directory = Directory(path.dirname(filePath));
-      final fileBasename = path.basenameWithoutExtension(filePath);
-
-      // 支持的字幕扩展名
-      final subtitleExtensions = ['.srt', '.ass', '.ssa', '.vtt'];
-
-      // 列出目录中的所有文件
-      final files = await directory.list().toList();
-
-      // 查找匹配的字幕文件
-      File? matchedSubtitle;
-      for (final entity in files) {
-        if (entity is File) {
-          final entityBasename = path.basenameWithoutExtension(entity.path);
-          final entityExtension = path.extension(entity.path).toLowerCase();
-
-          // 检查文件名是否以视频文件的 basename 开头，且扩展名是字幕格式
-          if (entityBasename.startsWith(fileBasename) &&
-              subtitleExtensions.contains(entityExtension)) {
-            matchedSubtitle = entity;
-            break; // 找到第一个匹配的字幕文件就停止
-          }
-        }
+      if (!await directory.exists()) return;
+      final files = await directory.list().where((entry) => entry is File).map((entry) => entry.path).toList();
+      final matches = matchSubtitles(filePath, files, preferredLanguage: preferences.subtitleLanguage);
+      if (matches.isNotEmpty && mounted && !_disposing && id == _historyId) {
+        await player.setSubtitleTrack(SubtitleTrack.uri(matches.first, title: path.basename(matches.first)));
       }
+    } catch (_) {}
+  }
 
-      // 如果找到匹配的字幕文件，自动载入
-      if (matchedSubtitle != null) {
-        // 延迟一点时间确保播放器已经加载完成
-        Future.delayed(const Duration(milliseconds: 800), () {
-          if (mounted) {
-            final subtitlePath = matchedSubtitle!.path;
+  Future<void> _onQueueItemChanged(String url) async {
+    try {
+      await _beginHistory(url);
+      if (!mounted || _disposing) return;
+      _tryRestorePosition();
+      final subtitles = _mediaFor(url)?.subtitles ?? [];
+      if (subtitles.isNotEmpty) await player.setSubtitleTrack(SubtitleTrack.uri(subtitles.first));
+      await applyPlaybackPreferences(player, _historyId);
+      _updateMediaItem();
+    } catch (_) {}
+  }
 
-            // 根据字幕类型选择加载方式
-            if (subtitlePath.toLowerCase().endsWith('.ass') ||
-                subtitlePath.toLowerCase().endsWith('.ssa')) {
-              // ASS/SSA 字幕使用 libass 渲染
-              player.setSubtitleTrack(
-                SubtitleTrack.uri(
-                  subtitlePath,
-                  title: path.basenameWithoutExtension(subtitlePath),
-                  language: 'auto',
-                ),
-              );
-            } else {
-              // SRT/VTT 等其他格式
-              player.setSubtitleTrack(SubtitleTrack.uri(subtitlePath));
-            }
-
-            print('自动载入字幕: ${path.basename(subtitlePath)}');
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('已自动载入字幕: ${path.basename(subtitlePath)}'),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
-        });
-      }
-    } catch (e) {
-      print('自动检测字幕时发生错误: $e');
-      // 静默处理错误，不影响播放
-    }
+  Future<void> _showPlaybackTools() async {
+    if (_historyId.isEmpty) return;
+    await showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) => PlaybackToolsSheet(
+      player: player, mediaId: _historyId, loopStart: _pointA, loopEnd: _pointB,
+      onBookmark: (start, end) { setState(() { _pointA = end == null ? null : start; _pointB = end; }); player.seek(start); }));
   }
 
   Future<void> _beginHistory(String url) async {
@@ -2020,6 +1988,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   @override
   void dispose() {
     _disposing = true;
+    PlaybackSleepTimer.instance.detach(this);
     _flushPosition();
     for (final subscription in _subscriptions) { subscription.cancel(); }
 
@@ -3031,6 +3000,8 @@ class _MPVPlayerState extends State<MPVPlayer>
                           value: _backgroundPlayEnabled,
                           onChanged: _toggleBackgroundPlay,
                         ),
+                        ListTile(leading: const Icon(Icons.tune, color: Colors.white), title: const Text('字幕同步、书签与章节', style: TextStyle(color: Colors.white)), onTap: _showPlaybackTools),
+                        ListTile(leading: const Icon(Icons.bedtime_outlined, color: Colors.white), title: const Text('定时停止', style: TextStyle(color: Colors.white)), onTap: () => showSleepTimer(context)),
                         _buildSettingItem(
                           title: '循环模式',
                           child: SegmentedButton<PlaylistMode>(
