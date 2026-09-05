@@ -1,3 +1,4 @@
+import 'services/thumbnail_cache.dart';
 import 'dart:convert';
 import 'dart:ui';
 
@@ -329,7 +330,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   late SortType _currentSortType = SortType.none;
   late SortOrder _currentSortOrder = SortOrder.ascending;
   // 添加缓存
-  Map<String, Uint8List?> _thumbnailCache = {};
+  final ThumbnailCache _thumbnailCache = ThumbnailCache();
+  final Map<String, DateTime> _modifiedTimes = {};
   Map<String, Duration?> _durationCache = {};
   Map<String, bool?> _hdrCache = {};
   final SettingsService _settingsService = SettingsService();
@@ -418,6 +420,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         _favoriteStatus[item.path] = isFav;
       }
     }
+    if (!mounted) return;
     setState(() {});
 
     // 收藏状态更新后重新应用筛选
@@ -443,8 +446,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         break;
       case SortType.modifiedDate:
         _filteredItems.sort((a, b) {
-          DateTime dateA = a.statSync().modified;
-          DateTime dateB = b.statSync().modified;
+          DateTime dateA = _modifiedTimes[a.path] ?? DateTime(1970);
+          DateTime dateB = _modifiedTimes[b.path] ?? DateTime(1970);
           return _currentSortOrder == SortOrder.ascending
               ? dateA.compareTo(dateB)
               : dateB.compareTo(dateA);
@@ -647,7 +650,10 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     disableThumbnail = await _settingsService.getDisableThumbnail();
 
     if (await directory.exists()) {
-      final items = directory.listSync();
+      final items = await directory.list().toList();
+      for (final item in items) {
+        _modifiedTimes[item.path] = (await item.stat()).modified;
+      }
       for (var item in items) {
         if (item is File) {
           String extension = path.extension(item.path).toLowerCase();
@@ -679,6 +685,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         }
       }
     }
+    if (!mounted) return;
     _videoFiles = files;
     _directories = directories;
     // _filteredItems = [...directories, ...files]; // 初始化时显示所有文件和文件夹
@@ -1189,68 +1196,27 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 获取视频缩略图
   Future<Uint8List?> _getVideoThumbnail(File file) async {
-    if (disableThumbnail) {
-      return null;
-    }
-    // 从file.path提取文件名
-    String fileName = path.basename(file.path);
-    String filePath = file.path;
-    String realFilePath = file.path;
-    if (_thumbnailCache.containsKey(filePath)) {
-      return _thumbnailCache[filePath];
-    }
-    // 检查file是否是".lnk"文件
-    if (file.path.endsWith('.lnk')) {
-      // 读取文件内容
-      realFilePath = await file.readAsString();
-    }
-    // 尝试读取$_thumbnailPath/$fileName.nothumbnail
-    String thumbnailPath = '$_thumbnailPath/$fileName.nothumbnail';
-    // 检查文件是否存在
-    if (await File(thumbnailPath).exists()) {
-      // 如果文件存在，则读取文件内容
-      _thumbnailCache[filePath] = null;
-      return null;
-    }
-
-    // 尝试读取$_thumbnailPath/$fileName.jpg
-    thumbnailPath = '$_thumbnailPath/$fileName.jpg';
-    // 检查文件是否存在
-    if (await File(thumbnailPath).exists()) {
-      // 如果文件存在，则读取文件内容为Uint8List
-      final result = await File(thumbnailPath).readAsBytes();
-      _thumbnailCache[filePath] = result;
-      return result;
-    }
-
-    Uint8List? thumbnail;
+    if (disableThumbnail) return null;
     try {
-      thumbnail = await VideoThumbnailOhos.thumbnailData(
-        video: realFilePath,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 128, // 缩略图的最大宽度
-        quality: 25, // 缩略图的质量 (0-100)
-      );
-    } catch (e) {
-      thumbnail = null;
-      print("获取缩略图失败: $e");
-    }
-    _thumbnailCache[filePath] = thumbnail;
-
-    try {
-      // 保存缩略图到$_thumbnailPath/
-      String thumbnailPath = '$_thumbnailPath/$fileName.jpg';
-      // 将缩略图保存到文件
-      File thumbnailFile = File(thumbnailPath);
-      await thumbnailFile.writeAsBytes(thumbnail!);
-    } catch (e) {
-      // 写入一个空文件$_thumbnailPath/$fileName.nothumbnail
-      String thumbnailPath = '$_thumbnailPath/$fileName.nothumbnail';
-      // 将缩略图保存到文件
-      File thumbnailFile = File(thumbnailPath);
-      await thumbnailFile.writeAsBytes([]);
-    }
-    return thumbnail;
+      final realPath = file.path.endsWith('.lnk') ? (await file.readAsString()).trim() : file.path;
+      final stat = await file.stat();
+      final key = ThumbnailCache.key(realPath, stat.size, stat.modified.millisecondsSinceEpoch);
+      final cached = _thumbnailCache.get(key);
+      if (cached != null) return cached;
+      final disk = File('$_thumbnailPath/$key.jpg');
+      if (await disk.exists()) {
+        final bytes = await disk.readAsBytes();
+        _thumbnailCache.put(key, bytes);
+        return bytes;
+      }
+      final bytes = await VideoThumbnailOhos.thumbnailData(video: realPath, imageFormat: ImageFormat.JPEG, maxWidth: 256, quality: 60);
+      if (bytes != null) {
+        _thumbnailCache.put(key, bytes);
+        await disk.parent.create(recursive: true);
+        await disk.writeAsBytes(bytes, flush: true);
+      }
+      return bytes;
+    } catch (_) { return null; }
   }
 
   /// 检查视频文件是否为HDR格式

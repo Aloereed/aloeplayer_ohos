@@ -320,9 +320,15 @@ class WebDavService {
         ),
       );
 
-      if (response.data == null) {
-        throw Exception('响应数据为空');
+      if (response.statusCode != 200 && response.statusCode != 206) {
+        await response.data?.stream.listen((_) {}).cancel();
+        throw Exception('文件请求失败: ${response.statusCode}');
       }
+      if ((start != null || end != null) && response.statusCode != 206) {
+        await response.data?.stream.listen((_) {}).cancel();
+        throw Exception('服务器不支持范围读取');
+      }
+      if (response.data == null) throw Exception('响应数据为空');
 
       return response.data!.stream;
     } catch (e) {

@@ -25,6 +25,7 @@ import { buffer } from "@kit.ArkTS"
 import { FlutterAbility, FlutterEngine } from "@ohos/flutter_ohos"
 import { GeneratedPluginRegistrant } from "../plugins/GeneratedPluginRegistrant"
 import { UIAbility, AbilityConstant, Want } from "@kit.AbilityKit"
+import CredentialPlugin from './CredentialPlugin'
 import DownloadPlugin from "./DownloadPlugin"
 import VolumePlugin from "./VolumePlugin"
 import FfmpegPlugin from "./FfmpegPlugin"
@@ -69,6 +70,7 @@ export default class EntryAbility extends FlutterAbility {
         GeneratedPluginRegistrant.registerWith(flutterEngine)
         this.myDownloadPlugin = new DownloadPlugin()
         this.addPlugin(this.myDownloadPlugin)
+        this.addPlugin(new CredentialPlugin())
         this.addPlugin(new VolumePlugin())
         this.addPlugin(new FfmpegPlugin())
         this.addPlugin(new HdrPlugin())

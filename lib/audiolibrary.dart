@@ -1,3 +1,4 @@
+import 'services/thumbnail_cache.dart';
 import 'dart:collection';
 import 'dart:ui';
 
@@ -505,7 +506,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   bool _isGridView = true;
   final SettingsService _settingsService = SettingsService();
   // 添加缓存
-  Map<String, Uint8List?> _thumbnailCache = {};
+  final ThumbnailCache _thumbnailCache = ThumbnailCache();
   Map<String, Duration?> _durationCache = {};
   // For metadata sorted view
   late TabController _tabController;
@@ -580,7 +581,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     List<Directory> directories = [];
 
     if (await directory.exists()) {
-      final items = directory.listSync();
+      final items = await directory.list().toList();
       for (var item in items) {
         if (item is File) {
           String extension = path.extension(item.path).toLowerCase();
@@ -1096,19 +1097,15 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
 
   // 获取音频缩略图
   Future<Uint8List?> _getAudioThumbnail(File file) async {
-    final filePath = file.path;
-    if (_thumbnailCache.containsKey(filePath)) {
-      return _thumbnailCache[filePath];
-    }
-    final metadata = readMetadata(file, getImage: true);
-    if (metadata.pictures.isNotEmpty) {
-      _thumbnailCache[filePath] = metadata.pictures[0].bytes;
-      return metadata.pictures[0].bytes;
-    }
-    final coverNative =
-        await _settingsService.fetchCoverNative(pathToUri(file.path));
-    _thumbnailCache[filePath] = coverNative;
-    return coverNative;
+    try {
+      final key = await ThumbnailCache.fileKey(file.path);
+      final cached = _thumbnailCache.get(key);
+      if (cached != null) return cached;
+      final metadata = readMetadata(file, getImage: true);
+      final bytes = metadata.pictures.isNotEmpty ? metadata.pictures[0].bytes : await _settingsService.fetchCoverNative(pathToUri(file.path));
+      if (bytes != null) _thumbnailCache.put(key, bytes);
+      return bytes;
+    } catch (_) { return null; }
   }
 
   // 获取音频时长

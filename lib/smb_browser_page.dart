@@ -96,7 +96,7 @@ class _SmbBrowserPageState extends State<SmbBrowserPage> {
     } catch (e) {
       _showError('连接失败: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -125,15 +125,17 @@ class _SmbBrowserPageState extends State<SmbBrowserPage> {
     } catch (e) {
       _showError('加载文件失败: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
  // 处理文件点击 - 修改这个方法
-  void _onFileSelected(SmbFile file) {
+  void _onFileSelected(SmbFile file) async {
     if (file.isDirectory()) {
       _loadFiles(file.path);
     } else {
+      await _httpService.enableLanSharing();
+      if (!mounted) return;
       // 生成HTTP链接并显示所有可用地址
       final httpUrl = _httpService.getFileUrl(file.path);
       final accessUrls = _httpService.getAccessUrls();
@@ -162,7 +164,7 @@ class _SmbBrowserPageState extends State<SmbBrowserPage> {
             const SizedBox(height: 8),
             ...accessUrls.map((baseUrl) {
               final cleanPath = file.path.startsWith('/') ? file.path.substring(1) : file.path;
-              final fullUrl = '$baseUrl/file/$cleanPath';
+              final fullUrl = _httpService.getFileUrl(file.path);
               final isLocal = baseUrl.contains('localhost');
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),

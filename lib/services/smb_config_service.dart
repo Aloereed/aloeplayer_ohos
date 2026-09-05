@@ -1,3 +1,4 @@
+import 'credential_store.dart';
 // lib/services/smb_config_service.dart
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,10 +19,27 @@ class SmbConfigService {
 
     try {
       final List<dynamic> jsonList = json.decode(configsJson);
-      return jsonList.map((json) => SmbServerConfig.fromJson(json)).toList();
+      final configs = <SmbServerConfig>[];
+      bool migrated = false;
+      for (final raw in jsonList) {
+        final data = Map<String, dynamic>.from(raw as Map);
+        final key = '$_configsKey.${data['id']}';
+        if (data.containsKey('password')) {
+          await CredentialStore.write(key, data['password'] as String? ?? '');
+          migrated = true;
+        } else {
+          data['password'] = await CredentialStore.read(key) ?? '';
+        }
+        configs.add(SmbServerConfig.fromJson(data));
+      }
+      if (migrated) {
+        final sanitized = configs.map((c) => c.toJson()..remove('password')).toList();
+        await prefs.setString(_configsKey, json.encode(sanitized));
+      }
+      return configs;
     } catch (e) {
-      print('解析配置失败: $e');
-      return [];
+      // Preserve the saved list on a keystore or decoding failure.
+      rethrow;
     }
   }
 
@@ -48,6 +66,7 @@ class SmbConfigService {
     final configs = await getAllConfigs();
     configs.removeWhere((c) => c.id == configId);
     await _saveAllConfigs(configs);
+    await CredentialStore.delete('$_configsKey.$configId');
 
     // 如果删除的是当前活动配置,清除活动配置ID
     final activeId = await getActiveConfigId();
@@ -105,12 +124,18 @@ class SmbConfigService {
   // 保存所有配置
   Future<void> _saveAllConfigs(List<SmbServerConfig> configs) async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonList = configs.map((c) => c.toJson()).toList();
+    for (final config in configs) {
+      await CredentialStore.write('$_configsKey.${config.id}', config.password);
+    }
+    final jsonList = configs.map((c) => c.toJson()..remove('password')).toList();
     await prefs.setString(_configsKey, json.encode(jsonList));
   }
 
   // 清除所有配置
   Future<void> clearAllConfigs() async {
+    for (final config in await getAllConfigs()) {
+      await CredentialStore.delete('$_configsKey.${config.id}');
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_configsKey);
     await prefs.remove(_activeConfigIdKey);

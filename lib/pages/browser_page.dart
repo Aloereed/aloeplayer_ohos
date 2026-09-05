@@ -77,7 +77,7 @@ class _BrowserPageState extends State<BrowserPage> {
   void initState() {
     super.initState();
     _fileService = FileServiceFactory.createService(widget.serverConfig.type);
-    _httpService.startServer();
+    
     _connectAndLoad();
   }
 
@@ -94,8 +94,10 @@ class _BrowserPageState extends State<BrowserPage> {
     setState(() => _isLoading = true);
 
     try {
+      if (!await _httpService.startServer()) throw StateError('无法启动本地播放服务');
       final success = await _fileService.connect(widget.serverConfig);
 
+      if (!mounted) return;
       if (success) {
         setState(() => _isConnected = true);
 
@@ -124,7 +126,7 @@ class _BrowserPageState extends State<BrowserPage> {
       _showError('连接失败: $e');
       if (mounted) Navigator.pop(context);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -135,6 +137,7 @@ class _BrowserPageState extends State<BrowserPage> {
 
     try {
       final files = await _fileService.listFiles(path);
+      if (!mounted) return;
       setState(() {
         _currentPath = path;
         _allFiles = files;
@@ -143,7 +146,7 @@ class _BrowserPageState extends State<BrowserPage> {
     } catch (e) {
       _showError('加载文件失败: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -176,7 +179,7 @@ class _BrowserPageState extends State<BrowserPage> {
         case SortType.modified:
           if (a.isDirectory && !b.isDirectory) return -1;
           if (!a.isDirectory && b.isDirectory) return 1;
-          comparison = a.size.compareTo(b.size);
+          comparison = (a.modified ?? DateTime(1970)).compareTo(b.modified ?? DateTime(1970));
           break;
       }
       return _sortOrder == SortOrder.ascending ? comparison : -comparison;
@@ -375,7 +378,9 @@ class _BrowserPageState extends State<BrowserPage> {
     }
   }
 
-  void _showFileOptions(FileItem file) {
+  void _showFileOptions(FileItem file) async {
+    try { await _httpService.enableLanSharing(); } catch (e) { _showError(e.toString()); return; }
+    if (!mounted) return;
     final httpUrl = _httpService.getFileUrl(file.path);
     final accessUrls = _httpService.getAccessUrls();
 

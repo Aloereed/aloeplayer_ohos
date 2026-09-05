@@ -1,3 +1,4 @@
+import '../services/credential_store.dart';
 // Libsmb2 Service - 兼容 smb_service.dart 接口的实现
 import 'dart:async';
 import 'dart:ffi' as ffi;
@@ -35,7 +36,8 @@ class Libsmb2Service {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_hostKey, host);
     await prefs.setString(_usernameKey, username);
-    await prefs.setString(_passwordKey, password);
+    await CredentialStore.write(_passwordKey, password);
+    await prefs.remove(_passwordKey);
     await prefs.setString(_domainKey, domain);
   }
 
@@ -45,7 +47,7 @@ class Libsmb2Service {
     return {
       'host': prefs.getString(_hostKey) ?? '',
       'username': prefs.getString(_usernameKey) ?? '',
-      'password': prefs.getString(_passwordKey) ?? '',
+      'password': await CredentialStore.migrateLegacy(_passwordKey, prefs, _passwordKey),
       'domain': prefs.getString(_domainKey) ?? '',
     };
   }
@@ -418,10 +420,18 @@ class Libsmb2Service {
 
     try {
       await reader.open();
-      return reader.readRange(start: start, end: end, chunkSize: chunkSize);
+      return _readAndClose(reader, start, end, chunkSize);
     } catch (e) {
       await reader.close();
       rethrow;
+    }
+  }
+
+  Stream<Uint8List> _readAndClose(Libsmb2StreamReader reader, int start, int? end, int chunkSize) async* {
+    try {
+      yield* reader.readRange(start: start, end: end, chunkSize: chunkSize);
+    } finally {
+      await reader.close();
     }
   }
 

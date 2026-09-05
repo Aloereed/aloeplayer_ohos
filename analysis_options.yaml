@@ -26,3 +26,9 @@ linter:
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
+
+# Archived examples are not application targets.
+analyzer:
+  exclude:
+    - lib/chewie-1.8.5/example/**
+    - lib/smblibrary_diasbled.dart

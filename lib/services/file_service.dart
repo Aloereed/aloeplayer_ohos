@@ -10,6 +10,7 @@ abstract class FileItem {
   String get name;
   String get path;
   int get size;
+  DateTime? get modified;
   bool get isDirectory;
 }
 
@@ -31,6 +32,8 @@ class SmbFileItem implements FileItem {
   @override
   bool get isDirectory => _file.isDirectory();
 
+  DateTime? get modified => _file.modifiedTime;
+
   SmbFile get smbFile => _file;
 }
 
@@ -51,6 +54,8 @@ class WebDavFileItem implements FileItem {
 
   @override
   bool get isDirectory => _file.isDirectory;
+
+  DateTime? get modified => _file.lastModified;
 
   WebDavFile get webdavFile => _file;
 }

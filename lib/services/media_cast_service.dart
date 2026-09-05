@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+import 'byte_range.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:castscreen/castscreen.dart';
@@ -61,26 +64,40 @@ class MediaCastService {
     final serverPort = _httpServer!.port;
     
     print("[cast] local ip: $localIp, port: $serverPort");
-    _httpServer!.listen((request) {
-      if (request.uri.path == '/media') {
-        request.response.headers.contentType = ContentType.parse(
-          _getContentType(filePath),
-        );
-        request.response.headers.add('Access-Control-Allow-Origin', '*');
-        
-        file.openRead().pipe(request.response).catchError((e) {
-          debugPrint('Error serving file: $e');
-        });
-      } else {
-        request.response.statusCode = HttpStatus.notFound;
-        request.response.close();
-      }
+    final token = base64UrlEncode(List<int>.generate(24, (_) => Random.secure().nextInt(256)));
+    _httpServer!.listen((request) async {
+      final response = request.response;
+      try {
+        if (request.uri.path != '/media' || request.uri.queryParameters['token'] != token) {
+          response.statusCode = 403;
+        } else if (request.method != 'GET' && request.method != 'HEAD') {
+          response.statusCode = 405;
+          response.headers.set('Allow', 'GET, HEAD');
+        } else {
+          final size = await file.length();
+          final header = request.headers.value('range');
+          final range = header == null ? null : ByteRange.parse(header, size);
+          if (header != null && range == null) {
+            response.statusCode = 416;
+            response.headers.set('Content-Range', 'bytes */$size');
+          } else {
+            response.statusCode = range == null ? 200 : 206;
+            response.headers.contentType = ContentType.parse(_getContentType(filePath));
+            response.headers.set('Accept-Ranges', 'bytes');
+            response.headers.set('Cache-Control', 'no-store');
+            response.contentLength = range?.length ?? size;
+            if (range != null) response.headers.set('Content-Range', 'bytes ${range.start}-${range.end}/$size');
+            if (request.method == 'GET' && size > 0) {
+              await response.addStream(file.openRead(range?.start ?? 0, range == null ? null : range.end + 1));
+            }
+          }
+        }
+        await response.close();
+      } catch (_) { response.close().catchError((_) {}); }
     });
-    
-    print("[cast] local server started with port: $serverPort");
-    return 'http://$localIp:$serverPort/media';
+    return 'http://$localIp:$serverPort/media?token=$token';
   }
-  
+
   Future<String> _getLocalIpAddress() async {
     final interfaces = await NetworkInterface.list(
       type: InternetAddressType.IPv4,
@@ -139,10 +156,16 @@ class MediaCastService {
   }
 
   Future<bool> disconnectFromDevice() async {
-    if (activeDevice == null) return true;
+    if (activeDevice == null) {
+      await _httpServer?.close(force: true);
+      _httpServer = null;
+      return true;
+    }
     
     try {
       await stopMedia();
+      await _httpServer?.close(force: true);
+      _httpServer = null;
       activeDevice!.isConnected = false;
       activeDevice!.isPlaying = false;
       activeDevice = null;

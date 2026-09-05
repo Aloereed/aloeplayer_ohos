@@ -18,3 +18,12 @@ Each completed milestone is committed separately. Build success is not a substit
 ## Installation
 
 Start with the newest signed HAP. Keep existing app data when comparing versions; a version downgrade may require the deployment tool's replacement/downgrade option or re-signing for the target device. Do not uninstall casually: it can remove history and server credentials. Unsigned HAPs require signing before installation.
+
+## Milestone 02 — reliability
+
+- Loopback-only playback proxy; LAN sharing requires an explicit file action and issues 24-hour random file grants. Cast server supports GET/HEAD and byte ranges. SMB inclusive/exclusive range boundary and reader cleanup corrected.
+- Server passwords migrate to HarmonyOS Asset Store after successful writes, without plaintext fallback. **Older baseline builds cannot read migrated credentials; re-enter credentials if testing a pre-migration package.**
+- Async library enumeration, cached modification times, revision-keyed video thumbnails and bounded thumbnail memory. Network modified-time sorting and disposed-page callbacks fixed.
+- Sequential stream-cache writer with threshold-specific waiters; this growing-file playback path remains disabled.
+- Removed unused external Chewie dependency (the app imports its embedded fork).
+- Dart application analysis: no errors (archived examples and disabled SMB prototype excluded); 5 tests passed. HAP build passed with native Asset Store bridge. No device validation.

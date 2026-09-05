@@ -1,10 +1,9 @@
 dependencies:
+  crypto: ^3.0.3
   audio_service: any
   audio_session: any
   audio_metadata_reader: ^1.1.0
   canvas_danmaku: ^0.2.6
-  chewie:
-    path: ./chewie-1.8.5
   cupertino_icons: ^1.0.6
   dart_des: ^1.0.2
   flutter:
@@ -214,4 +213,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 3.1.0+146
+version: 3.1.1+148

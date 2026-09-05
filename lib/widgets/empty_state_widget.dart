@@ -198,7 +198,7 @@ class EmptyStates {
     return EmptyStateWidget(
       icon: Icons.cloud_outlined,
       title: '未配置媒体服务器',
-      message: '添加网络媒体服务器以访问云端内容\n支持Jellyfin、Emby等主流媒体服务器',
+      message: '添加网络媒体服务器以访问云端内容\n支持 SMB 和 WebDAV 文件服务器',
       actionLabel: '添加服务器',
       onActionPressed: onAddServer,
       color: Colors.green,
