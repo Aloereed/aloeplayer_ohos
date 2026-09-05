@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aloeplayer/pages/native_pip_page.dart';
+import 'package:aloeplayer/services/sleep_timer.dart';
 
 void main() {
   const channel = MethodChannel('aloeplayer/system-pip');
@@ -59,5 +60,37 @@ void main() {
     expect(find.textContaining('准备超时'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('native ready ends loading and short landscape view can scroll', (tester) async {
+    tester.view.physicalSize = const Size(640, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const MaterialApp(home: NativePipPage(uri: '/movie.mp4', positionMs: 0)));
+    await tester.pump();
+    await native('ready', 100000);
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('sleep expiration overrides an older playing checkpoint even without a close reply', (tester) async {
+    PipPlaybackResult? result;
+    await tester.pumpWidget(MaterialApp(home: Builder(builder: (context) => TextButton(
+      onPressed: () async { result = await Navigator.push<PipPlaybackResult>(context,
+        MaterialPageRoute(builder: (_) => const NativePipPage(uri: '/movie.mp4', positionMs: 0))); },
+      child: const Text('open')))));
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await native('position', {'positionMs': 8000, 'playing': true});
+    PlaybackSleepTimer.instance.start(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 2));
+    expect(calls.any((call) => call.method == 'pause'), isTrue);
+    await tester.tap(find.text('返回原播放器'));
+    await tester.pumpAndSettle();
+    expect(result?.positionMs, 8000);
+    expect(result?.playing, isFalse);
+    PlaybackSleepTimer.instance.cancel();
   });
 }

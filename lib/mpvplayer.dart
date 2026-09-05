@@ -1283,20 +1283,23 @@ class _MPVPlayerState extends State<MPVPlayer>
   Future<void> _seekActivePlayback(Duration position) => _pipController?.seek(position) ?? player.seek(position);
   NativePipController? _pipController;
   bool _pipPlaying = false;
+  bool _openingPip = false;
   Future<void> _openSystemPip() async {
-    if (Platform.operatingSystem != 'ohos' || _openingMedia || _pipController != null) return;
+    if (Platform.operatingSystem != 'ohos' || _openingMedia || _openingPip || _pipController != null) return;
+    _openingPip = true;
     final wasPlaying = player.state.playing;
-    final position = player.state.position;
-    final media = _mediaFor(_currentFilePath);
-    final uri = await resolveLnkFile(_currentFilePath);
-    await player.pause();
-    await _flushPosition();
-    if (!mounted || _disposing) return;
-    final pip = NativePipController();
-    _pipController = pip;
-    _pipPlaying = wasPlaying;
     PipPlaybackResult? resumed;
     try {
+      if (mounted) setState(() => _showSettings = false);
+      final position = player.state.position;
+      final media = _mediaFor(_currentFilePath);
+      final uri = await resolveLnkFile(_currentFilePath);
+      await player.pause();
+      await _flushPosition();
+      if (!mounted || _disposing) return;
+      final pip = NativePipController();
+      _pipController = pip;
+      _pipPlaying = wasPlaying;
       resumed = await Navigator.push<PipPlaybackResult>(context, MaterialPageRoute(builder: (_) => NativePipPage(uri: uri, positionMs: position.inMilliseconds, playing: wasPlaying, headers: media?.httpHeaders ?? {}, controller: pip,
         onPosition: (state) {
           if (_disposing || !mounted) return;
@@ -1305,11 +1308,18 @@ class _MPVPlayerState extends State<MPVPlayer>
           _flushPosition();
           _updatePlaybackState();
         })));
-    } finally { _pipController = null; }
-    if (!mounted || _disposing) return;
-    PlaybackSleepTimer.instance.attach(this, () => player.pause());
-    if (resumed != null) { _lastPosition = Duration(milliseconds: resumed.positionMs); await player.seek(_lastPosition); }
-    if (resumed?.playing ?? wasPlaying) await player.play();
+    } catch (_) {
+      if (mounted && !_disposing) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('画中画暂时无法打开，已返回原播放器')));
+    } finally {
+      _pipController = null;
+      _openingPip = false;
+      if (mounted && !_disposing) {
+        PlaybackSleepTimer.instance.attach(this, () => player.pause());
+        if (resumed != null) { _lastPosition = Duration(milliseconds: resumed.positionMs); await player.seek(_lastPosition); }
+        if (resumed?.playing ?? wasPlaying) await player.play();
+      }
+    }
   }
 
   Future<void> _showPlaybackTools() async {
@@ -2975,7 +2985,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       top: 0,
       bottom: 0,
       child: Container(
-        width: 320,
+        width: MediaQuery.sizeOf(context).width.clamp(0, 400).toDouble(),
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.9),
         ),
@@ -2990,15 +3000,14 @@ class _MPVPlayerState extends State<MPVPlayer>
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
                       children: [
-                        const Text(
+                        const Expanded(child: Text(
                           '播放器设置',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
-                        ),
-                        const Spacer(),
+                        )),
                         IconButton(
                           icon: const Icon(Icons.close, color: Colors.white),
                           onPressed: () =>
@@ -3013,6 +3022,23 @@ class _MPVPlayerState extends State<MPVPlayer>
                     child: ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
+                        ListenableBuilder(listenable: _imageEnhancer, builder: (_, __) => Card(
+                          color: const Color(0xFF183547), elevation: 0,
+                          child: ListTile(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            leading: const Icon(Icons.auto_awesome_outlined, color: Color(0xFF8DD2F5)),
+                            title: const Text('超分与画质', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            subtitle: Text(_imageEnhancer.settings.mode.label, style: const TextStyle(color: Colors.white70)),
+                            trailing: const Icon(Icons.chevron_right, color: Colors.white70),
+                            onTap: () {
+                              setState(() => _showSettings = false);
+                              showImageEnhancementSheet(context, _imageEnhancer);
+                            }))),
+                        if (Platform.operatingSystem == 'ohos') ListTile(
+                          leading: const Icon(Icons.picture_in_picture_alt, color: Colors.white),
+                          title: const Text('系统画中画', style: TextStyle(color: Colors.white)),
+                          subtitle: const Text('在悬浮小窗中继续播放', style: TextStyle(color: Colors.white70)),
+                          onTap: _openSystemPip),
+                        const Divider(color: Colors.white24, height: 24),
                         _buildSettingItem(
                           title: '播放速度',
                           subtitle: '${_playbackSpeed}x',
@@ -3073,8 +3099,6 @@ class _MPVPlayerState extends State<MPVPlayer>
                           value: _backgroundPlayEnabled,
                           onChanged: _toggleBackgroundPlay,
                         ),
-                        if (Platform.operatingSystem == 'ohos') ListTile(leading: const Icon(Icons.picture_in_picture_alt, color: Colors.white), title: const Text('系统画中画', style: TextStyle(color: Colors.white)), onTap: _openSystemPip),
-                        ListTile(leading: const Icon(Icons.auto_awesome_outlined, color: Colors.white), title: const Text('超分与画质', style: TextStyle(color: Colors.white)), onTap: () => showImageEnhancementSheet(context, _imageEnhancer)),
                         ListTile(leading: const Icon(Icons.tune, color: Colors.white), title: const Text('字幕同步、书签与章节', style: TextStyle(color: Colors.white)), onTap: _showPlaybackTools),
                         ListTile(leading: const Icon(Icons.bedtime_outlined, color: Colors.white), title: const Text('定时停止', style: TextStyle(color: Colors.white)), onTap: () => showSleepTimer(context)),
                         _buildSettingItem(

@@ -13,6 +13,21 @@ class ImageEnhancementSheet extends StatefulWidget {
 }
 class _ImageEnhancementSheetState extends State<ImageEnhancementSheet> {
   late ImageEnhancementSettings _draft = widget.enhancer.settings;
+  late ImageEnhancementSettings _lastApplied = widget.enhancer.settings;
+  @override void initState() {
+    super.initState();
+    widget.enhancer.addListener(_syncApplied);
+  }
+  void _syncApplied() {
+    final current = widget.enhancer.settings;
+    if (!identical(current, _lastApplied) && mounted) {
+      setState(() { _lastApplied = current; _draft = current; });
+    }
+  }
+  @override void dispose() {
+    widget.enhancer.removeListener(_syncApplied);
+    super.dispose();
+  }
   Future<void> _apply(ImageEnhancementSettings next) async {
     await widget.enhancer.apply(next);
     if (mounted) setState(() => _draft = widget.enhancer.settings);

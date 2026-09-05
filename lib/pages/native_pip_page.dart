@@ -56,7 +56,7 @@ class NativePipPage extends StatefulWidget {
 
 class _NativePipPageState extends State<NativePipPage> {
   static const _channel = MethodChannel('aloeplayer/system-pip');
-  bool _closing = false, _allowPop = false;
+  bool _closing = false, _allowPop = false, _ready = false;
   String? _error;
   String _phase = '正在打开系统画中画';
   PipPlaybackResult? _returnState;
@@ -84,7 +84,7 @@ class _NativePipPageState extends State<NativePipPage> {
       await _channel.invokeMethod<void>('open', {
         'uri': widget.uri,
         'positionMs': widget.positionMs,
-        'playing': widget.playing,
+        'playing': !_timerStopped && widget.playing,
         'headers': widget.headers,
       });
     } catch (_) {
@@ -107,6 +107,7 @@ class _NativePipPageState extends State<NativePipPage> {
       setState(() => _phase = call.arguments as String);
     } else if (call.method == 'ready') {
       _watchdog?.cancel();
+      setState(() => _ready = true);
     } else if (call.method == 'error') {
       _watchdog?.cancel();
       setState(() => _error = call.arguments as String);
@@ -129,12 +130,10 @@ class _NativePipPageState extends State<NativePipPage> {
     _watchdog?.cancel();
     setState(() => _allowPop = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted)
-        Navigator.pop(
-            context,
-            _returnState ??
-                PipPlaybackResult(
-                    widget.positionMs, !_timerStopped && widget.playing));
+      if (mounted) {
+        final state = _returnState ?? PipPlaybackResult(widget.positionMs, widget.playing);
+        Navigator.pop(context, PipPlaybackResult(state.positionMs, !_timerStopped && state.playing));
+      }
     });
   }
 
@@ -160,7 +159,7 @@ class _NativePipPageState extends State<NativePipPage> {
               leading: IconButton(
                   onPressed: _close, icon: const Icon(Icons.arrow_back))),
           body: Center(
-              child: Padding(
+              child: SingleChildScrollView(child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Icon(
@@ -172,7 +171,7 @@ class _NativePipPageState extends State<NativePipPage> {
                     const SizedBox(height: 20),
                     Text(_error ?? _phase, textAlign: TextAlign.center),
                     const SizedBox(height: 20),
-                    if (_error == null)
+                    if (_error == null && !_ready)
                       const SizedBox(
                           width: 24,
                           height: 24,
@@ -180,7 +179,7 @@ class _NativePipPageState extends State<NativePipPage> {
                     const SizedBox(height: 20),
                     FilledButton(
                         onPressed: _close, child: const Text('返回原播放器')),
-                  ]))),
+                  ])))),
         ),
       );
 }
