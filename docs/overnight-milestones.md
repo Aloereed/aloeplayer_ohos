@@ -27,3 +27,11 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Sequential stream-cache writer with threshold-specific waiters; this growing-file playback path remains disabled.
 - Removed unused external Chewie dependency (the app imports its embedded fork).
 - Dart application analysis: no errors (archived examples and disabled SMB prototype excluded); 5 tests passed. HAP build passed with native Asset Store bridge. No device validation.
+
+## Milestone 03 — network continuity
+
+- Stable server/file identity, same-folder network queue and subtitle candidates. Saved network history reconnects the configured server and regenerates playback URLs.
+- MPV awaits settings and queue initialization, restores after duration is available, checkpoints position every 5 seconds and on pause/background/exit. Player subscriptions are canceled before disposal.
+- Opening media preserves existing progress; recent-list limits no longer delete long-term resume records.
+- History toolbar links to Continue Watching / Listening with local/network filters, completed marker, and local-file relocation.
+- Six tests passed including Unicode/percent/fragment filename identity; application Dart analysis has no errors; HAP build passed.

@@ -1,3 +1,6 @@
+import 'pages/continue_watching_page.dart';
+import 'models/playback_media.dart';
+import 'pages/remote_playback_page.dart';
 import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -62,6 +65,7 @@ class _HistoryPageState extends State<HistoryPage>
     } catch (e) {
       _showErrorSnackBar('加载历史记录失败: $e');
     } finally {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         if (_selectedMediaPath != null) {
@@ -90,6 +94,10 @@ class _HistoryPageState extends State<HistoryPage>
   }
 
   void _playMedia(HistoryItem item) {
+    if (PlaybackMedia.isRemote(item.filePath)) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => RemotePlaybackPage(mediaId: item.filePath))).then((_) { if (mounted) _loadHistory(); });
+      return;
+    }
     try {
       widget.getOpenFile(item.filePath);
       widget.startPlayerPage(context);
@@ -177,6 +185,7 @@ class _HistoryPageState extends State<HistoryPage>
           ),
           Row(
             children: [
+              IconButton(tooltip: '继续观看 / 收听', icon: const Icon(Icons.play_circle_outline), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContinueWatchingPage()))),
               IconButton(
                 icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
                 onPressed: () {

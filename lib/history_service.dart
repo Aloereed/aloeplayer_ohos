@@ -94,12 +94,12 @@ class HistoryService {
 
   Database? _database;
   final String _tableName = 'play_history';
-  final int _maxHistoryItems = 100; // 最大历史记录数量
+  Future<Database>? _opening;
 
   // 获取数据库实例
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
+    _database = await (_opening ??= _initDatabase().whenComplete(() => _opening = null));
     return _database!;
   }
 
@@ -135,32 +135,21 @@ class HistoryService {
   Future<void> updateHistory(HistoryItem item) async {
     final db = await database;
 
-    // 检查是否已存在该文件的记录
-    List<Map<String, dynamic>> existing = await db.query(
-      _tableName,
-      where: 'filePath = ?',
-      whereArgs: [item.filePath],
-    );
-
-    if (existing.isNotEmpty) {
-      // 更新现有记录
-      await db.update(
-        _tableName,
-        item.toMap(),
-        where: 'filePath = ?',
-        whereArgs: [item.filePath],
-      );
-    } else {
-      // 添加新记录
-      await db.insert(
-        _tableName,
-        item.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-
-      // 检查并删除过多的历史记录
-      _trimHistory();
-    }
+    await db.transaction((txn) async {
+      final existing = await txn.query(_tableName, where: 'filePath = ?', whereArgs: [item.filePath], limit: 1);
+      final values = item.toMap()..remove('id');
+      if (existing.isNotEmpty) {
+        // Opening a file must not erase its saved progress before resume reads it.
+        if (item.lastPosition == 0) values['lastPosition'] = existing.first['lastPosition'];
+        if (item.durationMs == 0) values['durationMs'] = existing.first['durationMs'];
+        for (final field in ['title', 'artist', 'album', 'thumbnailPath']) {
+          if (values[field] == null) values.remove(field);
+        }
+        await txn.update(_tableName, values, where: 'filePath = ?', whereArgs: [item.filePath]);
+      } else {
+        await txn.insert(_tableName, values);
+      }
+    });
   }
 
   // 获取特定文件的播放历史
@@ -244,28 +233,23 @@ class HistoryService {
     );
   }
 
-  // 删除旧的历史记录以保持数量在限制范围内
-  Future<void> _trimHistory() async {
+  Future<List<HistoryItem>> getContinueWatching({int limit = 100}) async {
     final db = await database;
-    int count = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM $_tableName'),
-        ) ??
-        0;
+    final rows = await db.query(_tableName, where: 'lastPosition > 0 AND (durationMs = 0 OR lastPosition < durationMs * 0.95)', orderBy: 'lastPlayed DESC', limit: limit);
+    return rows.map(HistoryItem.fromMap).toList();
+  }
 
-    if (count > _maxHistoryItems) {
-      int deleteCount = count - _maxHistoryItems;
-      List<Map<String, dynamic>> toDelete = await db.query(
-        _tableName,
-        orderBy: 'lastPlayed ASC',
-        limit: deleteCount,
-      );
+  Future<void> markCompleted(String filePath) async {
+    final db = await database;
+    await db.rawUpdate('UPDATE $_tableName SET lastPosition = durationMs WHERE filePath = ?', [filePath]);
+  }
 
-      if (toDelete.isNotEmpty) {
-        List<int> ids = toDelete.map((item) => item['id'] as int).toList();
-        String idList = ids.join(',');
-        await db.rawDelete('DELETE FROM $_tableName WHERE id IN ($idList)');
-      }
-    }
+  Future<void> relocate(String oldPath, String newPath) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(_tableName, where: 'filePath = ?', whereArgs: [newPath]);
+      await txn.update(_tableName, {'filePath': newPath}, where: 'filePath = ?', whereArgs: [oldPath]);
+    });
   }
 
   // 快速记录当前播放位置（无需加载完整对象）

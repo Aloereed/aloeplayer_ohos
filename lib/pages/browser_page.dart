@@ -1,3 +1,5 @@
+import '../models/playback_media.dart';
+import '../services/network_playback.dart';
 // lib/pages/browser_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -210,14 +212,15 @@ class _BrowserPageState extends State<BrowserPage> {
   Future<void> _playVideo(FileItem file) async {
     try {
       // 生成HTTP链接
-      final httpUrl = _httpService.getFileUrlLocalhost(file.path);
+      final queue = networkQueue(widget.serverConfig, _displayedFiles, _httpService);
+      final httpUrl = queue.firstWhere((m) => m.id == PlaybackMedia.remoteId(widget.serverConfig.id, file.path)).url;
 
       // 导航到播放器
       if (mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MPVPlayer(filePath: httpUrl),
+            builder: (context) => MPVPlayer(filePath: httpUrl, mediaQueue: queue),
           ),
         );
       }

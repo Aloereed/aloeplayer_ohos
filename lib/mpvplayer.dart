@@ -1,3 +1,4 @@
+import 'models/playback_media.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
@@ -245,8 +246,9 @@ class _BrightnessSliderState extends State<BrightnessSlider> {
 
 class MPVPlayer extends StatefulWidget {
   final String filePath;
+  final List<PlaybackMedia>? mediaQueue;
 
-  const MPVPlayer({Key? key, required this.filePath}) : super(key: key);
+  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue}) : super(key: key);
 
   @override
   _MPVPlayerState createState() => _MPVPlayerState();
@@ -258,6 +260,29 @@ class _MPVPlayerState extends State<MPVPlayer>
   late final VideoController controller;
   late AnimationController _controlsAnimationController;
   late AnimationController _fadeAnimationController;
+
+  final List<StreamSubscription> _subscriptions = [];
+  bool _openingMedia = false;
+  bool _disposing = false;
+  String _historyId = '';
+  List<String> _openedPaths = [];
+  bool _readyForRestore = false;
+  Duration _lastPosition = Duration.zero;
+  DateTime _lastCheckpoint = DateTime(1970);
+  DateTime _lastUiUpdate = DateTime(1970);
+  int? _resumePosition;
+  PlaybackMedia? _mediaFor(String url) => widget.mediaQueue?.where((m) => m.url == url).firstOrNull;
+  String _mediaTitle(String url) => _mediaFor(url)?.title ?? path.basename(Uri.tryParse(url)?.path ?? url);
+
+  Future<void> _initializeMedia() async {
+    try {
+      await _initializeSettings();
+      await _loadPlaylist();
+      if (mounted) await _openMedia(widget.filePath);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('打开媒体失败: $e')));
+    }
+  }
 
   // 历史记录服务
   final HistoryService _historyService = HistoryService();
@@ -442,60 +467,65 @@ class _MPVPlayerState extends State<MPVPlayer>
       ),
     );
     controller = VideoController(player);
-    _loadPlaylist();
-    _openMedia(widget.filePath);
+    _initializeMedia();
 
     // 监听播放状态
-    player.stream.playing.listen((playing) {
-      if (mounted) setState(() {});
+    _subscriptions.add(player.stream.playing.listen((playing) {
+      if (mounted && !_disposing) setState(() {});
+      if (!playing) _flushPosition();
       // 同步到 Audio Service
       _updatePlaybackState();
-    });
+    }));
 
-    player.stream.position.listen((position) {
-      if (mounted && !_seeking) setState(() {});
+    _subscriptions.add(player.stream.position.listen((position) {
+      if (mounted && !_disposing && !_seeking && DateTime.now().difference(_lastUiUpdate).inMilliseconds >= 250) {
+        _lastUiUpdate = DateTime.now();
+        setState(() {});
+        _updatePlaybackState();
+      }
       _checkABLoop(position);
       // 更新播放位置到历史记录
       _updatePlaybackPosition(position);
       // 更新弹幕
       _updateDanmaku(position);
-      // 同步到 Audio Service
-      _updatePlaybackState();
-    });
+    }));
 
-    player.stream.duration.listen((duration) {
+    _subscriptions.add(player.stream.duration.listen((duration) {
       if (mounted) setState(() {});
       // 更新视频时长到历史记录
       _updateVideoDuration(duration);
       // 同步到 Audio Service
       _updatePlaybackState();
       _updateMediaItem();
-    });
+    }));
 
     // 监听缓冲状态
-    player.stream.buffering.listen((buffering) {
+    _subscriptions.add(player.stream.buffering.listen((buffering) {
       if (mounted) {
         setState(() {
           _isBuffering = buffering;
         });
       }
-    });
+    }));
 
     // 监听播放列表变化，用于同步当前播放索引
-    player.stream.playlist.listen((playlist) {
-      if (mounted && playlist.index >= 0 && playlist.index < _playlist.length) {
+    _subscriptions.add(player.stream.playlist.listen((playlist) {
+      if (mounted && !_disposing && !_openingMedia && playlist.index >= 0 && playlist.index < _openedPaths.length) {
         final newIndex = playlist.index;
-        final newFilePath = _playlist[newIndex].path;
+        final newFilePath = _openedPaths[newIndex];
 
         // 只有当索引真的改变时才更新
-        if (newIndex != _currentIndex) {
+        if (newFilePath != _currentFilePath) {
+          _flushPosition();
+          _beginHistory(newFilePath).then((_) { if (mounted && !_disposing) _tryRestorePosition(); });
           setState(() {
-            _currentIndex = newIndex;
+            _currentIndex = _playlist.indexWhere((f) => f.path == newFilePath);
+            if (_currentIndex < 0) _currentIndex = 0;
             _currentFilePath = newFilePath;
           });
         }
       }
-    });
+    }));
 
     // 自动隐藏控制栏
     _resetHideTimer();
@@ -513,15 +543,15 @@ class _MPVPlayerState extends State<MPVPlayer>
     _volumeExample = VolumeExample();
 
     // 监听音量变化
-    _eventChannel
+    _subscriptions.add(_eventChannel
         .receiveBroadcastStream()
-        .listen(_onVolumeChanged, onError: _onError);
+        .listen(_onVolumeChanged, onError: _onError));
 
     // 获取系统音量信息
     _initializeVolume();
 
     // 初始化设置
-    _initializeSettings();
+    // Settings are awaited before opening the media.
 
     // 初始化 Audio Service
     _initializeAudioService();
@@ -534,7 +564,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   // 初始化所有设置
-  void _initializeSettings() async {
+  Future<void> _initializeSettings() async {
     try {
       _backgroundPlayEnabled = await _settingsService.getBackgroundPlay();
       _useSeekToLatest = await _settingsService.getUseSeekToLatest();
@@ -611,6 +641,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _flushPosition();
     _handleLifecycleChange(state);
   }
 
@@ -785,7 +816,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   void _onVolumeChanged(dynamic volume) {
-    print('Volume changed: $volume');
+    if (!mounted || _disposing) return;
     setState(() {
       _systemVolume = (volume as int).toDouble();
     });
@@ -951,17 +982,24 @@ class _MPVPlayerState extends State<MPVPlayer>
     return uri;
   }
 
-  void _loadPlaylist() async {
+  Future<void> _loadPlaylist() async {
+    if (widget.mediaQueue != null) {
+      _playlist = widget.mediaQueue!.map((m) => File(m.url)).toList();
+      _originalPlaylist = List.from(_playlist);
+      _currentIndex = _playlist.indexWhere((f) => f.path == widget.filePath);
+      if (_currentIndex < 0) _currentIndex = 0;
+      return;
+    }
     // 检查是否为HTTP/HTTPS URL
     final isHttpUrl = widget.filePath.startsWith('http://') ||
         widget.filePath.startsWith('https://');
 
     // 如果是HTTP URL或未启用播放列表导入，只创建当前文件的播放列表
-    if (isHttpUrl || !_usePlaylist) {
+    if (isHttpUrl || widget.filePath.startsWith('file://') || !_usePlaylist) {
       // 对于HTTP URL，不使用File对象，直接使用路径字符串
       if (isHttpUrl) {
-        _playlist = [];
-        _originalPlaylist = [];
+        _playlist = [File(widget.filePath)];
+        _originalPlaylist = List.from(_playlist);
       } else {
         _playlist = [File(widget.filePath)];
         _originalPlaylist = [File(widget.filePath)];
@@ -972,7 +1010,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     }
 
     final directory = Directory(path.dirname(widget.filePath));
-    final files = directory.listSync();
+    final files = await directory.list().toList();
 
     final mediaExtensions = [
       // Video formats
@@ -1066,8 +1104,8 @@ class _MPVPlayerState extends State<MPVPlayer>
         case PlaylistSortType.modified:
           _playlist = List.from(_originalPlaylist);
           _playlist.sort((a, b) {
-            final modifiedA = a.statSync().modified;
-            final modifiedB = b.statSync().modified;
+            final modifiedA = _mediaFor(a.path)?.modified ?? (widget.mediaQueue != null ? DateTime(1970) : a.statSync().modified);
+            final modifiedB = _mediaFor(b.path)?.modified ?? (widget.mediaQueue != null ? DateTime(1970) : b.statSync().modified);
             final comparison = modifiedA.compareTo(modifiedB);
             return sortOrder == PlaylistSortOrder.ascending
                 ? comparison
@@ -1092,7 +1130,11 @@ class _MPVPlayerState extends State<MPVPlayer>
     _sortPlaylist(_sortType, newOrder);
   }
 
-  void _openMedia(String filePath) async {
+  Future<void> _openMedia(String filePath) async {
+    if (_openingMedia || !mounted || _disposing) return;
+    _openingMedia = true;
+    try {
+    await _flushPosition();
     // 检查是否为HTTP/HTTPS URL
     final isHttpUrl =
         filePath.startsWith('http://') || filePath.startsWith('https://');
@@ -1113,6 +1155,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       resolvedPath = await resolveLnkFile(filePath);
     }
 
+    if (!mounted || _disposing) return;
     // 更新当前播放文件路径
     setState(() {
       _currentFilePath = filePath;
@@ -1120,7 +1163,11 @@ class _MPVPlayerState extends State<MPVPlayer>
 
     // 创建播放列表
     final List<Media> mediaList = [];
-    if (isHttpUrl || isFileUrl) {
+    if (widget.mediaQueue != null) {
+      for (final file in _playlist) { mediaList.add(Media(file.path)); }
+      _currentIndex = _playlist.indexWhere((f) => f.path == filePath);
+      if (_currentIndex < 0) _currentIndex = 0;
+    } else if (isHttpUrl || isFileUrl) {
       // HTTP URL直接创建单个媒体项
       mediaList.add(Media(resolvedPath));
     } else {
@@ -1131,24 +1178,23 @@ class _MPVPlayerState extends State<MPVPlayer>
       }
     }
 
-    final playlist = Playlist(mediaList, index: _currentIndex);
+    if (mediaList.isEmpty) mediaList.add(Media(resolvedPath));
+    _openedPaths = (widget.mediaQueue != null || (!isHttpUrl && !isFileUrl)) && _playlist.isNotEmpty
+        ? _playlist.map((f) => f.path).toList() : [filePath];
+    final selected = mediaList.indexWhere((m) => m.uri == resolvedPath);
+    final playlist = Playlist(mediaList, index: selected < 0 ? 0 : selected);
+    await _beginHistory(filePath);
+    if (!mounted || _disposing) return;
 
     await _applyMpvHardwareDecoding();
 
     // 打开播放列表
     await player.open(playlist);
+    _readyForRestore = true;
     player.setPlaylistMode(_loopMode);
-    _hasRestoredPosition = false;
-
-    // 尝试恢复历史播放位置 (只对本地文件)
-    if (!isHttpUrl && !isFileUrl) {
-      _restorePlaybackPosition(resolvedPath);
-    }
-
-    // 记录到历史 (只对本地文件)
-    if (!isHttpUrl && !isFileUrl) {
-      _recordToHistory(resolvedPath);
-    }
+    _tryRestorePosition();
+    final remoteSubtitles = _mediaFor(filePath)?.subtitles ?? [];
+    if (remoteSubtitles.isNotEmpty) await player.setSubtitleTrack(SubtitleTrack.uri(remoteSubtitles.first));
 
     // 更新 Audio Service 的媒体信息
     _updateMediaItem();
@@ -1162,6 +1208,9 @@ class _MPVPlayerState extends State<MPVPlayer>
     if (!isHttpUrl && !isFileUrl) {
       _checkAndHandleHDR(resolvedPath);
     }
+      } catch (e) {
+      if (mounted && !_disposing) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('播放失败: $e')));
+    } finally { _openingMedia = false; }
   }
 
   // 自动检测并载入字幕文件
@@ -1181,7 +1230,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       final subtitleExtensions = ['.srt', '.ass', '.ssa', '.vtt'];
 
       // 列出目录中的所有文件
-      final files = directory.listSync();
+      final files = await directory.list().toList();
 
       // 查找匹配的字幕文件
       File? matchedSubtitle;
@@ -1239,85 +1288,47 @@ class _MPVPlayerState extends State<MPVPlayer>
     }
   }
 
-  void _restorePlaybackPosition(String filePath) async {
-    // 如果未启用"使用上次播放位置"，则不恢复
-    if (!_useSeekToLatest) return;
+  Future<void> _beginHistory(String url) async {
+    _readyForRestore = !_openingMedia;
+    final media = _mediaFor(url);
+    _historyId = media?.id ?? PlaybackMedia.localId(url);
+    final previous = await _historyService.getHistoryByPath(_historyId);
+    _resumePosition = _useSeekToLatest ? previous?.lastPosition : null;
+    _hasRestoredPosition = false;
+    _lastPosition = Duration.zero;
+    await _historyService.updateHistory(HistoryItem(filePath: _historyId, durationMs: previous?.durationMs ?? 0,
+      lastPosition: previous?.lastPosition ?? 0, lastPlayed: DateTime.now(),
+      mediaType: {'.mp3', '.flac', '.m4a', '.wav', '.ogg', '.aac', '.opus'}.contains(path.extension(media?.title ?? url).toLowerCase()) ? 'audio' : 'video', title: _mediaTitle(url)));
+  }
 
-    try {
-      final history = await _historyService.getHistoryByPath(filePath);
-      if (history != null && history.lastPosition > 0) {
-        // 延迟一点时间确保播放器已经加载完成
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted && player.state.duration.inMilliseconds > 0) {
-            // 只有当历史位置小于总时长的90%时才恢复
-            if (history.lastPosition <
-                (player.state.duration.inMilliseconds * 0.9).toInt()) {
-              player.seek(Duration(milliseconds: history.lastPosition));
-              _hasRestoredPosition = true;
-
-              // 显示恢复位置的提示
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      '已恢复到上次播放位置: ${_formatDuration(Duration(milliseconds: history.lastPosition))}'),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            }
-          }
-        });
-      }
-    } catch (e) {
-      // 静默处理错误，不影响播放
+  void _tryRestorePosition() {
+    if (_disposing || !_readyForRestore || _hasRestoredPosition || player.state.duration <= Duration.zero) return;
+    _hasRestoredPosition = true;
+    final position = _resumePosition;
+    _resumePosition = null;
+    if (position != null && position > 0 && position < player.state.duration.inMilliseconds * 0.95) {
+      player.seek(Duration(milliseconds: position));
     }
   }
 
-  void _updatePlaybackPosition(Duration position) async {
-    // 只在非拖动状态且播放器有有效时长时更新位置
-    if (!_seeking &&
-        player.state.duration.inMilliseconds > 0 &&
-        position.inMilliseconds > 0) {
-      try {
-        await _historyService.updatePosition(
-            _currentFilePath.isNotEmpty ? _currentFilePath : widget.filePath,
-            position.inMilliseconds);
-        // print("更新播放位置到历史记录, 文件: ${_currentFilePath.isNotEmpty ? _currentFilePath : widget.filePath}, 毫秒: ${position.inMilliseconds}");
-      } catch (e) {
-        // 静默处理错误，不影响播放
-      }
-    }
+  Future<void> _flushPosition() async {
+    final id = _historyId;
+    final position = _lastPosition;
+    if (id.isEmpty || position <= Duration.zero) return;
+    _lastCheckpoint = DateTime.now();
+    try { await _historyService.updatePosition(id, position.inMilliseconds); } catch (_) {}
   }
 
-  void _updateVideoDuration(Duration duration) async {
-    // 只在播放器有有效时长时更新时长
-    if (duration.inMilliseconds > 0) {
-      try {
-        await _historyService.updateDuration(
-            _currentFilePath.isNotEmpty ? _currentFilePath : widget.filePath,
-            duration.inMilliseconds);
-        // print("更新视频时长到历史记录, 文件: ${_currentFilePath.isNotEmpty ? _currentFilePath : widget.filePath}, 毫秒: ${duration.inMilliseconds}");
-      } catch (e) {
-        // 静默处理错误，不影响播放
-      }
-    }
+  void _updatePlaybackPosition(Duration position) {
+    if (_disposing || _openingMedia || _seeking || position <= Duration.zero) return;
+    _lastPosition = position;
+    if (DateTime.now().difference(_lastCheckpoint) >= const Duration(seconds: 5)) _flushPosition();
   }
 
-  void _recordToHistory(String filePath) async {
-    try {
-      print(
-          "记录到历史记录, 文件: $filePath, 时长: ${player.state.duration.inMilliseconds}");
-      final historyItem = HistoryItem(
-        filePath: filePath,
-        durationMs: player.state.duration.inMilliseconds,
-        lastPosition: 0,
-        lastPlayed: DateTime.now(),
-        mediaType: 'video',
-        title: path.basenameWithoutExtension(filePath),
-      );
-
-      await _historyService.updateHistory(historyItem);
-    } catch (e) {
-      // 静默处理错误，不影响播放
+  void _updateVideoDuration(Duration duration) {
+    if (_historyId.isNotEmpty && duration > Duration.zero) {
+      _historyService.updateDuration(_historyId, duration.inMilliseconds).catchError((_) {});
+      _tryRestorePosition();
     }
   }
 
@@ -1461,13 +1472,13 @@ class _MPVPlayerState extends State<MPVPlayer>
         );
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已加载 ASS 特效字幕: ${path.basename(file.path)}')),
+          SnackBar(content: Text('已加载 ASS 特效字幕: ${_mediaTitle(file.path)}')),
         );
       } else {
         // SRT/VTT 等其他格式字幕
         player.setSubtitleTrack(SubtitleTrack.uri(file.path));
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已加载字幕: ${path.basename(file.path)}')),
+          SnackBar(content: Text('已加载字幕: ${_mediaTitle(file.path)}')),
         );
       }
     }
@@ -1502,7 +1513,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已加载弹幕: ${path.basename(file.path)}')),
+          SnackBar(content: Text('已加载弹幕: ${_mediaTitle(file.path)}')),
         );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2008,6 +2019,10 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   @override
   void dispose() {
+    _disposing = true;
+    _flushPosition();
+    for (final subscription in _subscriptions) { subscription.cancel(); }
+
     _speedAdjustTimer?.cancel(); // 清理定时器
     _brightnessSliderTimer?.cancel(); // 清理亮度调节计时器
     _doubleTapTimer?.cancel(); // 清理双击检测定时器
@@ -3401,7 +3416,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                               final isPlaying = index == _currentIndex;
 
                               // Check if this is a .lnk file and get display name
-                              String displayName = path.basename(file.path);
+                              String displayName = _mediaTitle(file.path);
                               bool isLnkFile =
                                   file.path.toLowerCase().endsWith('.lnk');
 
