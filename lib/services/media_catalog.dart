@@ -30,8 +30,8 @@ class MediaCatalog extends ChangeNotifier {
   void cancel() { _generation++; }
   Future<void> scan() async {
     if (scanning) return;
-    await initialize();
     scanning = true;
+    try { await initialize(); } catch (_) { scanning = false; _loading = null; rethrow; }
     scanned = 0;
     error = null;
     final generation = ++_generation;

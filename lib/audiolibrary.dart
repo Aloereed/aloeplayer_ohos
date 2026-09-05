@@ -127,15 +127,25 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
     });
   }
 
+  bool _savingMetadata = false;
   Future<void> _saveMetadata() async {
+    if (_savingMetadata) return;
+    int? number(String value) => value.trim().isEmpty ? 0 : int.tryParse(value.trim());
+    final year = number(_yearController.text), track = number(_trackController.text), disc = number(_discController.text);
+    if (year == null || track == null || disc == null || year < 0 || track < 0 || disc < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('年份、音轨和碟号请填写非负整数，或留空')));
+      return;
+    }
+    _savingMetadata = true;
+    try {
     final filename = widget.filePath;
 
     await AudioMetadata.setTitle(filename, _titleController.text);
     await AudioMetadata.setArtist(filename, _artistController.text);
     await AudioMetadata.setAlbum(filename, _albumController.text);
-    await AudioMetadata.setYear(filename, int.parse(_yearController.text));
-    await AudioMetadata.setTrack(filename, int.parse(_trackController.text));
-    await AudioMetadata.setDisc(filename, int.parse(_discController.text));
+    await AudioMetadata.setYear(filename, year);
+    await AudioMetadata.setTrack(filename, track);
+    await AudioMetadata.setDisc(filename, disc);
     await AudioMetadata.setGenre(filename, _genreController.text);
     await AudioMetadata.setAlbumArtist(filename, _albumArtistController.text);
     await AudioMetadata.setComposer(filename, _composerController.text);
@@ -143,9 +153,10 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
     await AudioMetadata.setComment(filename, _commentController.text);
     await AudioMetadata.setLyrics(filename, _lyricsController.text);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('元信息保存成功')),
-    );
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('元信息保存成功')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('元信息保存失败，部分字段可能已写入，请重新打开检查')));
+    } finally { _savingMetadata = false; }
   }
 
 // 获取音频缩略图

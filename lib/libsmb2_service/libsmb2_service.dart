@@ -1,3 +1,4 @@
+import 'smb_stat_time.dart';
 import '../services/credential_store.dart';
 // Libsmb2 Service - 兼容 smb_service.dart 接口的实现
 import 'dart:async';
@@ -25,7 +26,7 @@ class Libsmb2Service {
   final Map<String, Libsmb2StreamReader> _streamReaders = {};
   final Set<Libsmb2StreamReader> _rangeReaders = {};
 
-  bool get isConnected => _context != null && !_context!.address.isNegative;
+  bool get isConnected => _context != null && _context!.address != 0;
 
   // 保存登录信息
   Future<void> saveCredentials({
@@ -98,7 +99,7 @@ class Libsmb2Service {
         // 设置安全模式 - 根据配置启用或要求签名
         int securityMode;
         if (signingRequired) {
-          securityMode = SMB2_NEGOTIATE_SIGNING_REQUIRED;
+          securityMode = SMB2_NEGOTIATE_SIGNING_ENABLED | SMB2_NEGOTIATE_SIGNING_REQUIRED;
           print('[libsmb2] Security mode set to SIGNING_REQUIRED');
         } else {
           securityMode = SMB2_NEGOTIATE_SIGNING_ENABLED;
@@ -106,11 +107,9 @@ class Libsmb2Service {
         }
         _bindings.smb2_set_security_mode(_context!, securityMode);
 
-        // 注意: libsmb2 可能不直接支持加密设置，这取决于服务器协商
-        // SMB3 加密通常在协议协商时自动处理
-        if (encryption) {
-          print('[libsmb2] Encryption requested (will be negotiated with server)');
-        }
+        _bindings.smb2_set_sign(_context!, signingRequired ? 1 : 0);
+        _bindings.smb2_set_seal(_context!, encryption ? 1 : 0);
+        _bindings.smb2_set_timeout(_context!, 30);
 
         // 解析 host 和 share
         // 格式: //server/share 或 server/share
@@ -317,8 +316,8 @@ class Libsmb2Service {
             path: filePath,
             isDirectory: stat.smb2_type == SMB2_TYPE_DIRECTORY,
             size: stat.smb2_size,
-            modifiedTime: _winTimeToDateTime(stat.smb2_mtime),
-            createdTime: _winTimeToDateTime(stat.smb2_btime),
+            modifiedTime: smbStatTime(stat.smb2_mtime, stat.smb2_mtime_nsec),
+            createdTime: smbStatTime(stat.smb2_btime, stat.smb2_btime_nsec),
           );
           files.add(file);
         }
@@ -571,8 +570,8 @@ class Libsmb2Service {
             path: path,  // 保持原始路径格式
             isDirectory: stat.ref.smb2_type == SMB2_TYPE_DIRECTORY,
             size: stat.ref.smb2_size,
-            modifiedTime: _winTimeToDateTime(stat.ref.smb2_mtime),
-            createdTime: _winTimeToDateTime(stat.ref.smb2_btime),
+            modifiedTime: smbStatTime(stat.ref.smb2_mtime, stat.ref.smb2_mtime_nsec),
+            createdTime: smbStatTime(stat.ref.smb2_btime, stat.ref.smb2_btime_nsec),
           );
         } finally {
           malloc.free(stat);
@@ -583,18 +582,6 @@ class Libsmb2Service {
     } finally {
       malloc.free(pathPtr);
     }
-  }
-
-  // 将 Windows 时间戳转换为 DateTime
-  DateTime _winTimeToDateTime(int winTime) {
-    if (winTime == 0) {
-      return DateTime.now();
-    }
-    // Windows 时间戳是从 1601-01-01 开始的 100 纳秒间隔
-    // Unix 时间戳是从 1970-01-01 开始的秒数
-    const windowsTicksToUnixEpoch = 116444736000000000;
-    final unixTime = (winTime - windowsTicksToUnixEpoch) ~/ 10000000;
-    return DateTime.fromMillisecondsSinceEpoch(unixTime * 1000);
   }
 
   // 资源清理

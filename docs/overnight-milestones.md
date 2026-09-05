@@ -101,3 +101,10 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Cleanup closes streams, writers and connections even when an individual release fails. Finished-record cleanup preserves downloaded files; duplicate concurrent additions are rejected.
 - Twenty-six tests passed, including pause/cancel during an open stream and release completion before returning. Native HAP build passed and canonical timestamp verified.
 - Background task APIs compile against the configured HarmonyOS SDK; notification authorization, OS cancellation and long-duration retention still require device validation.
+
+## Milestone 13 — effective SMB security and metadata boundaries
+
+- SMB encryption/signing now call the native seal/sign controls; required signing includes the enabled bit. Added a 30-second native operation timeout. Exported functions were checked in the exact packaged libsmb2.so.
+- libsmb2 stat fields are Unix seconds/nanoseconds, not Windows FILETIME. Corrected timestamps and added a fractional-revision regression. Existing SMB download tasks created with the old incorrect revision may report source changes; cancel/re-add those jobs rather than bypassing revision protection.
+- Server pages guard disposed callbacks; catalog scans reject overlapping starts; metadata editing validates numeric fields and reports write failures.
+- Twenty-seven full-suite tests passed, HAP build passed and canonical timestamp verified. A separate worker-isolate scaffold test also passed; that scaffold is integrated in the next milestone.

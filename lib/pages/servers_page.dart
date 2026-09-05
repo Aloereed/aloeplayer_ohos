@@ -29,28 +29,33 @@ class _ServersPageState extends State<ServersPage> {
   }
 
   Future<void> _loadServers() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final servers = await _configService.getAllConfigs();
       final activeId = await _configService.getActiveConfigId();
+      if (!mounted) return;
       setState(() {
         _servers = servers;
         _activeConfigId = activeId;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       _showError('加载服务器配置失败: $e');
     }
   }
 
   void _showError(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
   void _showSuccess(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
     );

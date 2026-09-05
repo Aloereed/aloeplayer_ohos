@@ -179,6 +179,9 @@ final class Smb2Dirent extends ffi.Struct {
   external Smb2Stat64 st;
 }
 
+typedef Smb2SetIntNative = ffi.Void Function(ffi.Pointer<Smb2Context>, ffi.Int32);
+typedef Smb2SetIntDart = void Function(ffi.Pointer<Smb2Context>, int);
+
 // Libsmb2 绑定类
 class Libsmb2Bindings {
   late final ffi.DynamicLibrary _lib;
@@ -201,6 +204,10 @@ class Libsmb2Bindings {
   late final Smb2LseekDart smb2_lseek;
   late final Smb2GetErrorDart smb2_get_error;
   late final Smb2SetSecurityModeDart smb2_set_security_mode;
+
+  late final Smb2SetIntDart smb2_set_seal = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_seal');
+  late final Smb2SetIntDart smb2_set_sign = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_sign');
+  late final Smb2SetIntDart smb2_set_timeout = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_timeout');
 
   Libsmb2Bindings() {
     // 根据平台加载不同的库

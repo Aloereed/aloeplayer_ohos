@@ -23,6 +23,7 @@ class AudioMetadata {
           .invokeMethod('setTitle', {'filename': filename, 'value': title});
     } on PlatformException catch (e) {
       print("Failed to set title: ${e.message}");
+      rethrow;
     }
   }
 
@@ -45,6 +46,7 @@ class AudioMetadata {
           .invokeMethod('setArtist', {'filename': filename, 'value': artist});
     } on PlatformException catch (e) {
       print("Failed to set artist: ${e.message}");
+      rethrow;
     }
   }
 
@@ -67,6 +69,7 @@ class AudioMetadata {
           .invokeMethod('setAlbum', {'filename': filename, 'value': album});
     } on PlatformException catch (e) {
       print("Failed to set album: ${e.message}");
+      rethrow;
     }
   }
 
@@ -89,6 +92,7 @@ class AudioMetadata {
           .invokeMethod('setYear', {'filename': filename, 'value': year});
     } on PlatformException catch (e) {
       print("Failed to set year: ${e.message}");
+      rethrow;
     }
   }
 
@@ -111,6 +115,7 @@ class AudioMetadata {
           .invokeMethod('setTrack', {'filename': filename, 'value': track});
     } on PlatformException catch (e) {
       print("Failed to set track: ${e.message}");
+      rethrow;
     }
   }
 
@@ -133,6 +138,7 @@ class AudioMetadata {
           .invokeMethod('setDisc', {'filename': filename, 'value': disc});
     } on PlatformException catch (e) {
       print("Failed to set disc: ${e.message}");
+      rethrow;
     }
   }
 
@@ -155,6 +161,7 @@ class AudioMetadata {
           .invokeMethod('setGenre', {'filename': filename, 'value': genre});
     } on PlatformException catch (e) {
       print("Failed to set genre: ${e.message}");
+      rethrow;
     }
   }
 
@@ -178,6 +185,7 @@ class AudioMetadata {
           'setAlbumArtist', {'filename': filename, 'value': albumArtist});
     } on PlatformException catch (e) {
       print("Failed to set album artist: ${e.message}");
+      rethrow;
     }
   }
 
@@ -200,6 +208,7 @@ class AudioMetadata {
           'setComposer', {'filename': filename, 'value': composer});
     } on PlatformException catch (e) {
       print("Failed to set composer: ${e.message}");
+      rethrow;
     }
   }
 
@@ -222,6 +231,7 @@ class AudioMetadata {
           'setLyricist', {'filename': filename, 'value': lyricist});
     } on PlatformException catch (e) {
       print("Failed to set lyricist: ${e.message}");
+      rethrow;
     }
   }
 
@@ -244,6 +254,7 @@ class AudioMetadata {
           .invokeMethod('setComment', {'filename': filename, 'value': comment});
     } on PlatformException catch (e) {
       print("Failed to set comment: ${e.message}");
+      rethrow;
     }
   }
 
@@ -267,6 +278,7 @@ class AudioMetadata {
           .invokeMethod('setLyrics', {'filename': filename, 'value': lyrics});
     } on PlatformException catch (e) {
       print("Failed to set lyrics: ${e.message}");
+      rethrow;
     }
   }
 
@@ -289,6 +301,7 @@ class AudioMetadata {
           'setCover', {'filename': filename, 'value': coverBase64});
     } on PlatformException catch (e) {
       print("Failed to set cover: ${e.message}");
+      rethrow;
     }
   }
 }
