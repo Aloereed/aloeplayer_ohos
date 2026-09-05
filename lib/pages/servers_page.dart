@@ -172,7 +172,7 @@ class _ServersPageState extends State<ServersPage> {
   Widget _quickAction(IconData icon, String title, Widget page) => ActionChip(
       avatar: Icon(icon, size: 19),
       label: Text(title),
-      padding: const EdgeInsets.all(8),
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       onPressed: () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => page)));
   @override
@@ -263,7 +263,7 @@ class _ServersPageState extends State<ServersPage> {
                                                     const ContinueWatchingPage()),
                                                 _quickAction(
                                                     Icons.movie_outlined,
-                                                    '本地海报库',
+                              '海报库',
                                                     const CatalogPage()),
                                                 _quickAction(
                                                     Icons.download_outlined,

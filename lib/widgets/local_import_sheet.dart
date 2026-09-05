@@ -41,7 +41,9 @@ class LocalImportSheet extends StatelessWidget {
       ])),
       Expanded(child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(24, 8, 24, 24), child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('选择适合你的添加方式', style: theme.textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant)),
+        Align(alignment: Alignment.centerLeft, child: TextButton.icon(
+          onPressed: () => choose(LocalImportAction.shortcut), icon: const Icon(Icons.add_link_rounded),
+          label: const Text('不想复制？添加快捷方式'))),
         const SizedBox(height: 20),
         LayoutBuilder(builder: (_, box) {
           final copy = option(icon: Icons.file_copy_outlined, title: '复制到媒体库',
