@@ -18,7 +18,7 @@ export default class PipPlugin implements FlutterPlugin {
           this.session?.dispose(); result.error('PIP_PAGE', '无法打开画中画页面', null);
         });
       } else if (call.method === 'close') {
-        this.session?.close().then(() => result.success(null));
+        this.session?.close().then(() => result.success(null)).catch(() => result.error('PIP_CLOSE', '画中画关闭失败', null));
         if (!this.session) result.success(null);
       } else if (call.method === 'dispose') {
         this.session?.dispose(); this.session = undefined; result.success(null);

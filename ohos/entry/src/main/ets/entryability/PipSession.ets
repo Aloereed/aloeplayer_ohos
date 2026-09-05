@@ -15,12 +15,14 @@ export class PipSession implements MethodCallHandler {
   private failure: string = '';
   private watchdog?: number;
   private closing: boolean = false;
+  private starting: boolean = false;
   private pageVisible: boolean = false;
   private releasing?: Promise<void>;
   private channel: MethodChannel;
   private player?: media.AVPlayer;
   private pip?: pictureInPicture.PiPController;
   private component?: XComponentController;
+  private surfaceId: string = '';
   private opened: boolean = false;
   private requested: boolean = false;
   private disposed: boolean = false;
@@ -47,8 +49,11 @@ export class PipSession implements MethodCallHandler {
     PipSession.active = this;
     this.watchdog = setTimeout(() => this.fail('准备超时：' + this.phase + '。可返回 mpv 继续播放。'), 30000);
   }
-  surfaceReady(controller: XComponentController): void {
+  surfaceReady(controller: XComponentController, surfaceId: string): void {
+    if (this.disposed || this.closing) return;
+    if (!surfaceId) { this.fail('无法创建视频画面，请返回播放器重试'); return; }
     this.component = controller;
+    this.surfaceId = surfaceId;
     this.status('打开媒体');
     if (this.requested) this.open();
   }
@@ -70,7 +75,7 @@ export class PipSession implements MethodCallHandler {
         try {
           if (state === 'initialized') {
             this.status('准备系统解码器');
-            player.surfaceId = this.component!.getXComponentSurfaceId();
+            player.surfaceId = this.surfaceId;
             await player.prepare();
           } else if (state === 'prepared') {
             this.prepared = true;
@@ -94,14 +99,20 @@ export class PipSession implements MethodCallHandler {
     } catch (error) { this.fail('无法打开媒体，请返回 mpv 继续播放'); }
   }
   async start(): Promise<void> {
-    if (this.disposed || this.closing) return;
+    if (this.disposed || this.closing || this.starting) return;
+    this.starting = true;
     try {
       if (!pictureInPicture.isPiPEnabled() || !this.component || !this.player) {
         this.fail('此设备或当前窗口不支持画中画'); return;
       }
       if (!this.pip) {
-        this.pip = await pictureInPicture.create({ context: this.context, componentController: this.component,
+        const created = await pictureInPicture.create({ context: this.context, componentController: this.component,
           templateType: pictureInPicture.PiPTemplateType.VIDEO_PLAY, contentWidth: this.player.width || 1280, contentHeight: this.player.height || 720 });
+        if (this.disposed || this.closing) {
+          try { await created.stopPiP(); } catch (error) {}
+          return;
+        }
+        this.pip = created;
         this.pip.on('controlPanelActionEvent', (event: pictureInPicture.PiPActionEventType, status?: number) => {
           if (event === 'playbackStateChanged') {
             this.shouldPlay = status === pictureInPicture.PiPControlStatus.PLAY;
@@ -110,8 +121,19 @@ export class PipSession implements MethodCallHandler {
         });
       }
       await this.pip.startPiP();
+      if (this.disposed || this.closing) {
+        try { await this.pip.stopPiP(); } catch (error) {}
+        return;
+      }
+      this.failure = '';
+      this.syncControls();
       this.status('画中画已开启');
-    } catch (error) { this.failure = '画中画启动失败，请检查系统画中画权限'; this.status(this.phase); }
+    } catch (error) {
+      if (!this.disposed && !this.closing) {
+        this.failure = `画中画启动失败（${(error as BusinessError).code ?? '未知'}），可重试或返回播放器`;
+        this.status(this.phase);
+      }
+    } finally { this.starting = false; }
   }
   private async stopPip(result: MethodResult): Promise<void> {
     try { await this.pip?.stopPiP(); } catch (error) {}
@@ -138,8 +160,15 @@ export class PipSession implements MethodCallHandler {
   }
   private emitPosition(): void {
     if (this.disposed) return;
+    this.syncControls();
     this.lastCheckpoint = Date.now();
     this.channel.invokeMethod('position', { positionMs: this.currentPosition, playing: this.player?.state === 'playing' });
+  }
+  private syncControls(): void {
+    try {
+      this.pip?.updatePiPControlStatus(pictureInPicture.PiPControlType.VIDEO_PLAY_PAUSE,
+        this.player?.state === 'playing' ? pictureInPicture.PiPControlStatus.PLAY : pictureInPicture.PiPControlStatus.PAUSE);
+    } catch (error) {}
   }
   private async changePlayback(): Promise<void> {
     try {

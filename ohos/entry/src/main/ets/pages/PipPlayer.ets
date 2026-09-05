@@ -2,7 +2,7 @@ import { PipSession } from '../entryability/PipSession';
 
 class PipSurfaceController extends XComponentController {
   onSurfaceCreated(surfaceId: string): void {
-    PipSession.active?.surfaceReady(this);
+    PipSession.active?.surfaceReady(this, surfaceId);
   }
 }
 

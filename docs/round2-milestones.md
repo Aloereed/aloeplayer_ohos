@@ -95,3 +95,11 @@
 - 快捷方式移除前后明确“原视频保留”；删除结果等文件操作完成后再显示，失败不会误报成功。
 - 全部 56 项自动测试通过，7 张组件预览重新生成，全局 Dart 静态检查无错误；HAP 编译和 canonical 时间戳验证通过。
 
+## 28 — 画中画关闭竞态与系统控制状态
+
+- 重复开启请求去重；创建 / 启动完成时再次检查会话是否已关闭，迟到的小窗停止后返回。
+- 直接使用 Surface 创建回调传入的 ID；同步系统悬浮窗播放 / 暂停图标，重试成功清除旧错误。
+- 关闭失败会完成 MethodChannel 错误返回，避免遗留未完成调用；错误保留系统错误码便于定位。
+- 本项只改 ArkTS；原生和 HAP 编译通过，canonical 时间戳已验证。Flutter 全量回归结果仍为 56 项通过。
+- 依据：[OpenHarmony Surface 生命周期](https://github.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-basic-components-xcomponent.md#onsurfacecreated12)与本机 API 24 PiPWindow 类型声明；最终窗口行为需明早实机确认。
+
