@@ -1,3 +1,5 @@
+import 'services/audio_scan_service.dart';
+import 'services/work_queue.dart';
 import 'services/thumbnail_cache.dart';
 import 'dart:collection';
 import 'dart:ui';
@@ -149,10 +151,9 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
 // 获取音频缩略图
   Future<Uint8List?> _getAudioThumbnail(File file) async {
     final filePath = file.path;
-    final metadata = readMetadata(file, getImage: true);
-    if (metadata.pictures.isNotEmpty) {
-      return metadata.pictures[0].bytes;
-    }
+    Uint8List? artwork;
+    try { artwork = await readAudioArtwork(file.path); } catch (_) {}
+    if (artwork != null) return artwork;
     final coverNative =
         await _settingsService.fetchCoverNative(pathToUri(file.path));
     return coverNative;
@@ -521,6 +522,10 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   final SettingsService _settingsService = SettingsService();
   // 添加缓存
   final ThumbnailCache _thumbnailCache = ThumbnailCache();
+  final AudioScanService _audioScanner = AudioScanService();
+  final WorkQueue _artworkQueue = WorkQueue();
+  final Map<String, Future<Uint8List?>> _pendingArtwork = {};
+  int _loadGeneration = 0;
   Map<String, Duration?> _durationCache = {};
   // For metadata sorted view
   late TabController _tabController;
@@ -541,7 +546,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     super.initState();
     _tabController = TabController(length: _tabTitles.length, vsync: this);
     _tabController.addListener(_handleTabChange);
-    _ensureAudioDirectoryExists();
+    await _ensureAudioDirectoryExists();
     _isGridView = !(await _settingsService.getDefaultListmode());
     _useMediaKit = (await _settingsService.getUseFfmpegForPlay() == 2);
     _loadItems();
@@ -574,24 +579,21 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
 
   // Load items and process metadata
   Future<void> _loadItems() async {
-    setState(() {
-      _isLoading = false;
-    });
-
-    // Load directories and files
-    await _loadDirectoriesAndFiles();
     if (!mounted) return;
-
-    // Process metadata for categorized views
-    await _processMetadata();
-    if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-    });
+    final generation = ++_loadGeneration;
+    setState(() => _isLoading = true);
+    try {
+      await _loadDirectoriesAndFiles(generation);
+      if (!mounted || generation != _loadGeneration) return;
+      await _processMetadata(generation);
+    } catch (error) {
+      if (mounted && generation == _loadGeneration) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取音乐库失败: $error')));
+    } finally {
+      if (mounted && generation == _loadGeneration) setState(() => _isLoading = false);
+    }
   }
 
-  Future<void> _loadDirectoriesAndFiles() async {
+  Future<void> _loadDirectoriesAndFiles(int generation) async {
     final directory = Directory(_currentPath);
     List<File> files = [];
     List<Directory> directories = [];
@@ -629,7 +631,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
       }
     }
 
-    if (!mounted) return;
+    if (!mounted || generation != _loadGeneration) return;
     setState(() {
       _audioFiles = files;
       _directories = directories;
@@ -638,44 +640,49 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   }
 
   // Process metadata for all audio files
-  Future<void> _processMetadata() async {
-    _artistMap = {};
-    _albumMap = {};
-    _songsList = [];
+  Future<void> _processMetadata(int generation) async {
+    final artistMap = <String, List<AudioMetadataLite>>{};
+    final albumMap = <String, List<AudioMetadataLite>>{};
+    final songsList = <AudioMetadataLite>[];
 
-    for (File file in _audioFiles) {
+    for (File file in List<File>.of(_audioFiles)) {
+      if (!mounted || generation != _loadGeneration) return;
       try {
         final metadata = await _extractAudioMetadataLite(file);
 
         // Add to Artists map
         if (metadata.artist.isNotEmpty) {
-          _artistMap.putIfAbsent(metadata.artist, () => []).add(metadata);
+          artistMap.putIfAbsent(metadata.artist, () => []).add(metadata);
         } else {
-          _artistMap.putIfAbsent('Unknown Artist', () => []).add(metadata);
+          artistMap.putIfAbsent('Unknown Artist', () => []).add(metadata);
         }
 
         // Add to Albums map
         if (metadata.album.isNotEmpty) {
-          _albumMap.putIfAbsent(metadata.album, () => []).add(metadata);
+          albumMap.putIfAbsent(metadata.album, () => []).add(metadata);
         } else {
-          _albumMap.putIfAbsent('Unknown Album', () => []).add(metadata);
+          albumMap.putIfAbsent('Unknown Album', () => []).add(metadata);
         }
 
         // Add to Songs list
-        _songsList.add(metadata);
+        songsList.add(metadata);
       } catch (e) {
         print('Error processing metadata for ${file.path}: $e');
       }
     }
 
     // Sort songs by name
-    _songsList.sort((a, b) {
+    songsList.sort((a, b) {
       String nameA = a.title;
       String nameB = b.title;
       return nameA.compareTo(nameB);
     });
 
     // Create categorized lists
+    if (!mounted || generation != _loadGeneration) return;
+    _artistMap = artistMap;
+    _albumMap = albumMap;
+    _songsList = songsList;
     _createCategorizedLists();
   }
 
@@ -745,38 +752,25 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
 
   // Extract metadata from audio file
   Future<AudioMetadataLite> _extractAudioMetadataLite(File file) async {
+    AudioScanResult? metadata;
+    try { metadata = await _audioScanner.read(file.path); } catch (_) {}
+    String title = metadata?.title ?? '';
+    String artist = metadata?.artist ?? '';
+    String album = metadata?.album ?? '';
+    // Native fallback covers formats the Dart parser cannot read; no artwork is
+    // held by the full-library index. Visible rows request bounded covers below.
     try {
-      final metadata = readMetadata(file, getImage: true);
-      String title = await AudioMetadata.getTitle(file.path);
-      String artist = await AudioMetadata.getArtist(file.path);
-      String album = await AudioMetadata.getAlbum(file.path);
-      title =
-          title.isNotEmpty ? title : path.basenameWithoutExtension(file.path);
-      artist = artist.isNotEmpty ? artist : 'Unknown Artist';
-      album = album.isNotEmpty ? album : 'Unknown Album';
-      int trackNumber = metadata.trackNumber ?? 0;
-      Uint8List? albumArt = metadata.pictures.isEmpty
-          ? await _settingsService.fetchCoverNative(pathToUri(file.path))
-          : metadata.pictures[0].bytes;
-
-      return AudioMetadataLite(
-        title: title,
-        artist: artist,
-        album: album,
-        trackNumber: trackNumber,
-        filePath: file.path,
-        albumArt: albumArt,
-      );
-    } catch (e) {
-      // If metadata extraction fails, use filename
-      return AudioMetadataLite(
-        title: path.basenameWithoutExtension(file.path),
-        artist: 'Unknown Artist',
-        album: 'Unknown Album',
-        trackNumber: 0,
-        filePath: file.path,
-      );
-    }
+      if (title.isEmpty) title = await AudioMetadata.getTitle(file.path);
+      if (artist.isEmpty) artist = await AudioMetadata.getArtist(file.path);
+      if (album.isEmpty) album = await AudioMetadata.getAlbum(file.path);
+    } catch (_) {}
+    return AudioMetadataLite(
+      title: title.isEmpty ? path.basenameWithoutExtension(file.path) : title,
+      artist: artist.isEmpty ? 'Unknown Artist' : artist,
+      album: album.isEmpty ? 'Unknown Album' : album,
+      trackNumber: metadata?.track ?? 0,
+      filePath: file.path,
+    );
   }
 
   void _filterItems(String query) {
@@ -1114,16 +1108,27 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   }
 
   // 获取音频缩略图
-  Future<Uint8List?> _getAudioThumbnail(File file) async {
-    try {
-      final key = await ThumbnailCache.fileKey(file.path);
-      final cached = _thumbnailCache.get(key);
-      if (cached != null) return cached;
-      final metadata = readMetadata(file, getImage: true);
-      final bytes = metadata.pictures.isNotEmpty ? metadata.pictures[0].bytes : await _settingsService.fetchCoverNative(pathToUri(file.path));
-      if (bytes != null) _thumbnailCache.put(key, bytes);
-      return bytes;
-    } catch (_) { return null; }
+  Future<Uint8List?> _getAudioThumbnail(File file) => _pendingArtwork.putIfAbsent(file.path,
+    () => _artworkQueue.run(() async {
+      try {
+        final key = await ThumbnailCache.fileKey(file.path);
+        final cached = _thumbnailCache.get(key);
+        if (cached != null) return cached;
+        Uint8List? bytes;
+        try { bytes = await readAudioArtwork(file.path); } catch (_) {}
+        bytes ??= await _settingsService.fetchCoverNative(pathToUri(file.path));
+        if (bytes != null) _thumbnailCache.put(key, bytes);
+        return bytes;
+      } catch (_) { return null; }
+    }).whenComplete(() { _pendingArtwork.remove(file.path); }));
+
+  Widget _audioCover(String? source, {IconData icon = Icons.album}) {
+    final placeholder = Icon(icon, color: Theme.of(context).colorScheme.primary, size: 36);
+    if (source == null) return placeholder;
+    return FutureBuilder<Uint8List?>(future: _getAudioThumbnail(File(source)), builder: (context, snapshot) {
+      final bytes = snapshot.data;
+      return bytes == null ? placeholder : Image.memory(bytes, fit: BoxFit.cover, cacheWidth: 256, errorBuilder: (_, __, ___) => placeholder);
+    });
   }
 
   // 获取音频时长
@@ -1930,23 +1935,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                   Container(
                     width: 100,
                     height: 100,
-                    child: albumArt != null
-                        ? Image.memory(
-                            albumArt,
-                            fit: BoxFit.cover,
-                            width: 100,
-                            height: 100,
-                          )
-                        : Container(
-                            color:
-                                Theme.of(context).primaryColor.withOpacity(0.2),
-                            alignment: Alignment.center,
-                            child: Icon(
-                              Icons.album,
-                              size: 60,
-                              color: Theme.of(context).primaryColor,
-                            ),
-                          ),
+                    child: _audioCover(songs.isEmpty ? null : songs.first.filePath),
                   ),
                   // 专辑信息区域
                   Expanded(
@@ -3472,9 +3461,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                           ],
                         ),
                       ),
-                      child: albumArt != null
-                          ? Image.memory(albumArt, fit: BoxFit.cover)
-                          : Icon(Icons.album, size: 64, color: Colors.white),
+                      child: _audioCover(albumSongs.isEmpty ? null : albumSongs.first.filePath),
                     ),
                     Container(
                       decoration: BoxDecoration(
@@ -3635,9 +3622,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
             ],
           ),
           child: ClipOval(
-            child: albumArt != null
-                ? Image.memory(albumArt, fit: BoxFit.cover)
-                : Icon(Icons.person, color: Colors.white, size: 28),
+            child: _audioCover(artistSongs.isEmpty ? null : artistSongs.first.filePath, icon: Icons.person),
           ),
         ),
         title: Text(
@@ -3732,9 +3717,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: song.albumArt != null
-                ? Image.memory(song.albumArt!, fit: BoxFit.cover)
-                : Icon(Icons.music_note, size: 28, color: Colors.white),
+            child: _audioCover(song.filePath, icon: Icons.music_note),
           ),
         ),
         title: Text(
@@ -3831,9 +3814,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: albumArt != null
-                ? Image.memory(albumArt, fit: BoxFit.cover)
-                : Icon(Icons.album, size: 28, color: Colors.white),
+            child: _audioCover(albumSongs.isEmpty ? null : albumSongs.first.filePath),
           ),
         ),
         title: Text(

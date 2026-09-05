@@ -1,3 +1,4 @@
+import 'services/disk_thumbnail_cache.dart';
 import 'services/work_queue.dart';
 import 'services/thumbnail_cache.dart';
 import 'dart:convert';
@@ -332,6 +333,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   late SortOrder _currentSortOrder = SortOrder.ascending;
   // 添加缓存
   final ThumbnailCache _thumbnailCache = ThumbnailCache();
+  late DiskThumbnailCache _diskThumbnails;
   final WorkQueue _thumbnailQueue = WorkQueue();
   final Map<String, Future<Uint8List?>> _pendingThumbnails = {};
   final Map<String, DateTime> _modifiedTimes = {};
@@ -401,6 +403,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
           path.join((await getTemporaryDirectory()).path, 'Thumbnails');
     }
     await _ensureVideoDirectoryExists();
+    _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
     final defaultList = await _settingsService.getDefaultListmode();
     if (!mounted) return;
     setState(() => _isGridView = !defaultList);
@@ -764,6 +767,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   // 使用file_picker选择视频文件
   Future<void> _pickVideoWithFilePicker() async {
     await _ensureVideoDirectoryExists();
+    _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('请不要从"最近"选项卡中选择文件'),
@@ -804,6 +808,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   Future<void> _pickVideoWithPersist() async {
     await _ensureVideoDirectoryExists();
+    _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
     // 创建实例
     final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
     // 调用方法 persistPermission
@@ -837,6 +842,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   Future<void> _pickVideoWithFileManager(BuildContext context) async {
     await _ensureVideoDirectoryExists();
+    _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
 
     // 显示美观的对话框
     bool shouldProceed = await _showImportInfoDialog(context);
@@ -995,6 +1001,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   // 使用image_picker选择视频文件
   Future<void> _pickVideoWithImagePicker() async {
     await _ensureVideoDirectoryExists();
+    _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
     final picker = ImagePicker();
     final List<XFile> files =
         await picker.pickMultipleVideo(source: ImageSource.gallery);
@@ -1200,28 +1207,30 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   // 获取视频缩略图
   Future<Uint8List?> _getVideoThumbnail(File file) {
-    return _pendingThumbnails.putIfAbsent(file.path, () => _thumbnailQueue.run(() => _loadVideoThumbnail(file)).whenComplete(() => _pendingThumbnails.remove(file.path)));
+    return _pendingThumbnails.putIfAbsent(file.path, () => _thumbnailQueue.run(() => _loadVideoThumbnail(file)).whenComplete(() { _pendingThumbnails.remove(file.path); }));
   }
 
   Future<Uint8List?> _loadVideoThumbnail(File file) async {
     if (disableThumbnail) return null;
     try {
       final realPath = file.path.endsWith('.lnk') ? (await file.readAsString()).trim() : file.path;
-      final stat = await file.stat();
+      // A local shortcut must track the target revision as well as its own path.
+      final target = realPath.startsWith('file://') ? File.fromUri(Uri.parse(realPath)) : File(realPath);
+      final targetStat = await target.stat();
+      final stat = targetStat.type == FileSystemEntityType.file ? targetStat : await file.stat();
       final key = ThumbnailCache.key(realPath, stat.size, stat.modified.millisecondsSinceEpoch);
       final cached = _thumbnailCache.get(key);
       if (cached != null) return cached;
-      final disk = File('$_thumbnailPath/$key.jpg');
-      if (await disk.exists()) {
-        final bytes = await disk.readAsBytes();
+      final diskBytes = await _diskThumbnails.read(key);
+      if (diskBytes != null) {
+        final bytes = diskBytes;
         _thumbnailCache.put(key, bytes);
         return bytes;
       }
       final bytes = await VideoThumbnailOhos.thumbnailData(video: realPath, imageFormat: ImageFormat.JPEG, maxWidth: 256, quality: 60);
       if (bytes != null) {
         _thumbnailCache.put(key, bytes);
-        await disk.parent.create(recursive: true);
-        await disk.writeAsBytes(bytes, flush: true);
+        await _diskThumbnails.write(key, bytes);
       }
       return bytes;
     } catch (_) { return null; }

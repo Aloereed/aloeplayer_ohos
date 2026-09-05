@@ -80,3 +80,10 @@ Start with the newest signed HAP. Keep existing app data when comparing versions
 - Queue selection uses original source paths, avoiding Media URI normalization selecting the first item; files picked outside the queue are appended explicitly.
 - PiP returns position and playback state, pauses its decoder before returning, and respects sleep-timer pauses even during preparation.
 - Twenty tests passed, application analysis has no errors, native HAP build passed. Canonical unsigned HAP timestamp verified after build.
+
+## Milestone 10 — bounded caches and background audio indexing
+
+- Video revision thumbnails have a 256 MiB disk budget, serialized atomic writes and least-recently-used eviction. Only hash-named cache JPEGs are owned; user posters and media are not removed. Local shortcut revisions track their target.
+- Audio tag parsing runs in worker isolates with revision caching. Full-library indexes no longer retain every embedded cover; visible items load covers through a bounded queue/memory cache and limited decoded image width. Superseded scans cannot overwrite the latest folder.
+- A real WAV regression uncovered a self-waiting Future in pending-task cleanup, fixed for video thumbnails and audio work. **If testing milestones 06–09 and thumbnails remain blank, compare milestone 10 or newer.**
+- Twenty-two tests passed, including real WAV parsing/invalidation and disk-cache eviction. Application analysis has no errors; HAP build passed and canonical timestamp verified. No measured device performance claims are made.
