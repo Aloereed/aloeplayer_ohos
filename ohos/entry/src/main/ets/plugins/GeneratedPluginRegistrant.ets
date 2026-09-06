@@ -13,6 +13,7 @@ import PathProviderPlugin from 'path_provider_ohos';
 import ScreenPlugin from 'screen';
 import MediaKitVideoPlugin from 'media_kit_video';
 import FlutterPluginMediaInfoPlugin from 'media_info';
+import InAppPurchasePlugin from 'in_app_purchase_ohos';
 import ImagePickerPlugin from 'image_picker_ohos';
 import FluttertoastPlugin from 'fluttertoast';
 import FileSelectorOhosPlugin from 'file_selector_ohos';
@@ -46,6 +47,7 @@ export class GeneratedPluginRegistrant {
       flutterEngine.getPlugins()?.add(new ScreenPlugin());
       flutterEngine.getPlugins()?.add(new MediaKitVideoPlugin());
       flutterEngine.getPlugins()?.add(new FlutterPluginMediaInfoPlugin());
+      flutterEngine.getPlugins()?.add(new InAppPurchasePlugin());
       flutterEngine.getPlugins()?.add(new ImagePickerPlugin());
       flutterEngine.getPlugins()?.add(new FluttertoastPlugin());
       flutterEngine.getPlugins()?.add(new FileSelectorOhosPlugin());

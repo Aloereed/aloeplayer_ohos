@@ -1,0 +1,35 @@
+name: in_app_purchase_ohos
+description: An implementation for the Ohos platform of the Flutter `in_app_purchase` plugin. This uses the ohoa IAPKit APIs.
+repository: https://gitcode.com/CPF-Flutter/flutter_packages/tree/master/packages/in_app_purchase/in_app_purchase_ohos
+issue_tracker: https://gitcode.com/CPF-Flutter/flutter_packages/issues
+version: 1.1.0
+
+environment:
+  sdk: ^3.5.0
+  flutter: ">=3.24.0"
+
+flutter:
+  plugin:
+    implements: in_app_purchase
+    platforms:
+      ohos:
+        pluginClass: InAppPurchasePlugin
+
+dependencies:
+  collection: ^1.15.0
+  flutter:
+    sdk: flutter
+  in_app_purchase_platform_interface: ^1.4.0
+  json_annotation: ^4.8.0
+
+dev_dependencies:
+  build_runner: ^2.0.0
+  flutter_test:
+    sdk: flutter
+  json_serializable: ^6.3.1
+  mockito: ^5.6.4
+  test: ^1.16.0
+
+topics:
+  - in-app-purchase
+  - payment

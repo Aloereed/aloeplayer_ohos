@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,8 +34,6 @@ class MembershipService {
   // 产品ID列表 - 需要在应用商店配置
   static const Set<String> _productIds = {
     'premium_monthly', // 月度会员
-    'premium_yearly', // 年度会员
-    'premium_lifetime', // 终身会员
   };
 
   MembershipStatus _currentStatus = MembershipStatus.free;
@@ -69,6 +68,12 @@ class MembershipService {
     try {
       await _loadMembershipStatus();
       await _checkMembershipExpiry();
+
+      // HarmonyOS checkout is handled by the native IAP Kit service when opened.
+      if (Platform.operatingSystem == 'ohos') {
+        _isInitialized = true;
+        return;
+      }
 
       // 初始化 InAppPurchase 实例
       print('正在初始化 InAppPurchase 实例...');
@@ -630,6 +635,33 @@ class MembershipService {
         'badge': '超值',
       },
     ];
+  }
+
+  Future<Map<String, dynamic>> iapConfiguration() async {
+    if (_apiToken == null) throw StateError('Login required');
+    final response = await Dio(BaseOptions(connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 20))).get('$_apiBaseUrl/iap/config',
+      options: Options(headers: {'Authorization': 'Bearer $_apiToken'}));
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<void> verifyIapPurchase(PurchaseDetails purchase) async {
+    final token = _apiToken;
+    if (token == null) throw StateError('Login required');
+    final response = await Dio(BaseOptions(connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 20))).post('$_apiBaseUrl/iap/verify',
+      data: {'receipt': purchase.verificationData.serverVerificationData, 'purchase_id': purchase.purchaseID},
+      options: Options(headers: {'Authorization': 'Bearer $token'}));
+    final data = response.data as Map;
+    if (_apiToken != token || data['verified'] != true || data['purchase_id'] != purchase.purchaseID) {
+      throw StateError('Account changed or receipt not verified');
+    }
+    final expiry = DateTime.parse(data['expiry_date'] as String).toLocal();
+    if (!expiry.isAfter(DateTime.now())) throw StateError('Membership expired');
+    _currentStatus = MembershipStatus.premium;
+    _expiryDate = expiry;
+    _subscriptionName = data['subscription_name'] as String;
+    await _saveMembershipStatus();
   }
 
   // 获取商品列表

@@ -1,4 +1,8 @@
 dependencies:
+  in_app_purchase:
+    path: third_party/huawei_iap/in_app_purchase
+  in_app_purchase_ohos:
+    path: third_party/huawei_iap/in_app_purchase_ohos
   crypto: 3.0.7
   audio_service: 0.18.18
   audio_session: 0.1.18
@@ -99,27 +103,6 @@ dependency_overrides:
     path: ./image_picker/image_picker_macos
   image_picker_windows:
     path: ./image_picker/image_picker_windows
-  # in_app_purchase:
-  #   git:
-  #     path: packages/in_app_purchase/in_app_purchase
-  #     ref: b176e2eb854544a9c743e69ddb8b9d0e016e379c
-  #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
-  # in_app_purchase_platform_interface:
-  #   git:
-  #     path: packages/in_app_purchase/in_app_purchase_platform_interface
-  #     ref: b176e2eb854544a9c743e69ddb8b9d0e016e379c
-  #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
-  # in_app_purchase_storekit:
-  #   git:
-  #     path: packages/in_app_purchase/in_app_purchase_storekit
-  #     ref: b176e2eb854544a9c743e69ddb8b9d0e016e379c
-  #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
-  # in_app_purchase_ohos:
-  #   git:
-  #     path: packages/in_app_purchase/in_app_purchase_ohos
-  #     ref: b176e2eb854544a9c743e69ddb8b9d0e016e379c
-  #     url: https://gitcode.com/openharmony-sig/flutter_packages.git
-  in_app_purchase: 3.3.0
   # just_audio:
   #   git:
   #     path: just_audio
@@ -279,4 +262,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 3.1.1+181
+version: 3.1.1+182

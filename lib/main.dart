@@ -1,3 +1,4 @@
+import 'services/ohos_iap_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/responsive_app_shell.dart';
 /*
@@ -238,6 +239,9 @@ Future<void> _initializeAfterFirstFrame(ThemeProvider themeProvider) async {
   });
   await runStep('HTTP settings', HttpServiceSettings.loadSettings);
   await runStep('membership', () => MembershipService().initialize());
+  if (Platform.operatingSystem == 'ohos') {
+    await runStep('iap-listener', () async { OhosIapService.instance.start(); });
+  }
 }
 
 class MyApp extends StatefulWidget {

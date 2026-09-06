@@ -1,0 +1,11 @@
+{
+  "module": {
+    "name": "in_app_purchase_ohos",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet",
+      "2in1"
+    ]
+  }
+}
