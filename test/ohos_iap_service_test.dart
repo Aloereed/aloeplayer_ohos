@@ -13,15 +13,17 @@ class Store extends InAppPurchasePlatform {
   final completed = <String>[];
   int launches = 0;
   bool failCompletion = false;
+  String? selectedId;
   @override Stream<List<PurchaseDetails>> get purchaseStream => updates.stream;
   @override Future<bool> isAvailable() async => true;
   @override Future<ProductDetailsResponse> queryProductDetails(Set<String> ids) async {
-    expect(ids, {'premium_monthly'});
+    expect(ids, {'premium_monthly', 'premium_1year'});
     return ProductDetailsResponse(productDetails: [ProductDetails(id: 'premium_monthly',
-      title: '月会员', description: '月会员', price: '¥6.00', rawPrice: 6, currencyCode: 'CNY')], notFoundIDs: []);
+      title: '月会员', description: '月会员', price: '¥6.00', rawPrice: 6, currencyCode: 'CNY'),
+      ProductDetails(id: 'premium_1year', title: '年会员', description: '年会员', price: '¥60.00', rawPrice: 60, currencyCode: 'CNY')], notFoundIDs: []);
   }
   @override Future<bool> buyNonConsumable({required PurchaseParam purchaseParam}) async {
-    expect(purchaseParam.applicationUserName, 'bound-account'); launches++; return true;
+    expect(purchaseParam.applicationUserName, 'bound-account'); selectedId = purchaseParam.productDetails.id; launches++; return true;
   }
   @override Future<void> completePurchase(PurchaseDetails purchase) async {
     if (failCompletion) throw StateError('store unavailable');
@@ -139,7 +141,7 @@ void main() {
     store.updates.add([receipt('year', productId: 'premium_1year', status: PurchaseStatus.restored)]);
     await Future<void>.delayed(Duration.zero);
     expect(verified, ['premium_1year']); expect(store.completed, ['year']);
-    expect(service.message, '年会员已到账');
+    expect(service.message, '会员状态已同步');
     expect(service.product!.id, 'premium_monthly');
   });
   test('expired yearly purchase does not block monthly checkout', () async {
@@ -153,6 +155,26 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(service.pendingVerification, isFalse); expect(store.completed, isEmpty);
     await service.purchase(); expect(store.launches, 1);
+  });
+  test('yearly selection uses selected product and shows scheduled change', () async {
+    service = OhosIapService(configuration: () async => {'product_id': 'premium_monthly',
+      'product_ids': ['premium_monthly', 'premium_1year'], 'account_binding': 'bound-account',
+      'subscription_plans': [{'current_product_id': 'premium_monthly', 'next_product_id': 'premium_1year'}]},
+      verify: (_) async {});
+    await service.load();
+    expect(service.products.length, 2);
+    service.selectProduct('premium_1year'); await service.purchase();
+    expect(store.selectedId, 'premium_1year');
+    // Huawei returns the old, still-active order for a deferred change.
+    store.updates.add([receipt('current-month')]); await Future<void>.delayed(Duration.zero);
+    expect(service.message, contains('切换已预约'));
+    expect(service.message, isNot(contains('年会员已到账')));
+  });
+  test('server without yearly mapping cannot launch yearly checkout', () async {
+    service = OhosIapService(configuration: () async => {'product_id': 'premium_monthly', 'account_binding': 'bound-account'}, verify: (_) async {});
+    await service.load(); service.selectProduct('premium_1year');
+    expect(service.products.map((p) => p.id), ['premium_monthly']);
+    await service.purchase(); expect(store.selectedId, 'premium_monthly');
   });
   });
 }

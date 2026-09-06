@@ -275,6 +275,9 @@ export class MethodCallHandlerImpl implements MethodCallHandler {
           Log.e(TAG, 'Missing last subscription status while building transaction map.')
           return null
         }
+        // A deferred plan change returns the CURRENT subscription's order.
+        // Keep transaction identity consistent with the signed receipt, not checkout selection.
+        if (paymentOverride) paymentOverride.set('productId', lastPurchaseOrder.productId)
         let payment = paymentOverride
           ? paymentOverride
           : this.buildPaymentMap(lastPurchaseOrder.productId, iap.ProductType.AUTORENEWABLE)

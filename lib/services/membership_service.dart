@@ -649,7 +649,7 @@ class MembershipService {
     final token = _apiToken;
     if (token == null) throw StateError('Login required');
     final response = await Dio(BaseOptions(connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 20))).post('$_apiBaseUrl/iap/verify',
+      receiveTimeout: const Duration(seconds: 60))).post('$_apiBaseUrl/iap/verify',
       data: {'receipt': purchase.verificationData.serverVerificationData, 'purchase_id': purchase.purchaseID},
       options: Options(headers: {'Authorization': 'Bearer $token'}));
     final data = response.data as Map;

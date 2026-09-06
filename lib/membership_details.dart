@@ -16,8 +16,24 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
   void initState() {
     super.initState();
     _iap.load();
+    _iap.addListener(_onIapChanged);
     _refreshMembership();
   }
+
+  bool _wasBusy = false;
+  void _onIapChanged() {
+    if (_wasBusy && !_iap.busy) _refreshMembership();
+    _wasBusy = _iap.busy;
+  }
+
+  @override
+  void dispose() {
+    _iap.removeListener(_onIapChanged);
+    super.dispose();
+  }
+
+  String _planName(Object? id) => id == 'premium_1year' ? '年会员' : '月会员';
+  String _date(Object? value) => DateTime.tryParse(value?.toString() ?? '')?.toLocal().toString().split(' ').first ?? '当前周期结束后';
 
   Future<void> _refreshMembership() async {
     try { await widget.membershipService.fetchMySubscriptions().timeout(const Duration(seconds: 20)); }
@@ -38,14 +54,29 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
             style: Theme.of(context).textTheme.titleSmall),
           if (membership.expiryDate != null) Text('有效期至 ${membership.expiryDate!.toLocal().toString().split(' ').first}'),
           const SizedBox(height: 20),
-          Text(product?.title ?? '月度会员', style: Theme.of(context).textTheme.titleLarge),
+          Wrap(spacing: 10, runSpacing: 8, children: [
+            for (final plan in _iap.products)
+              ChoiceChip(label: Text('${_planName(plan.id)}  ${plan.price}'),
+                selected: product?.id == plan.id,
+                onSelected: _iap.busy ? null : (_) => _iap.selectProduct(plan.id)),
+          ]),
+          const SizedBox(height: 12),
+          Text(product?.title ?? '会员方案', style: Theme.of(context).textTheme.titleLarge),
           if (product != null) ...[
             const SizedBox(height: 8),
             Text(product.price, style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: colors.primary)),
             if (product.description.isNotEmpty) Text(product.description),
           ],
           const SizedBox(height: 8),
-          const Text('按月自动续费，价格及优惠以华为支付页面为准。可在“管理订阅”中取消续费。'),
+          Text('${product?.id == 'premium_1year' ? '按年' : '按月'}自动续费，价格、优惠及切换生效时间以华为支付页面为准。可在“管理订阅”中取消续费。'),
+          const SizedBox(height: 8),
+          const Text('月、年方案权益相同。同等级方案通常在当前周期结束后切换，现有会员继续有效。'),
+          for (final plan in _iap.subscriptionPlans)
+            Padding(padding: const EdgeInsets.only(top: 10), child: Text(
+              plan['next_product_id'] != null && plan['next_product_id'] != plan['current_product_id']
+                ? '当前：${_planName(plan['current_product_id'])}；预计 ${_date(plan['change_date'])} 切换为${_planName(plan['next_product_id'])}'
+                : '当前华为方案：${_planName(plan['current_product_id'])}，有效期至 ${_date(plan['expiry_date'])}',
+              style: TextStyle(color: colors.primary))),
           const SizedBox(height: 12),
           if (!_iap.serverReady) const Text('购买前请先登录应用账号，会员将绑定到该账号。'),
           const SizedBox(height: 16),
@@ -55,7 +86,7 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
           const SizedBox(height: 8),
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: _iap.busy || product == null || !_iap.serverReady || _iap.pendingVerification ? null : _iap.purchase,
-            child: Text(_iap.pendingVerification ? '订单待验证' : '购买月会员'))),
+            child: Text(_iap.pendingVerification ? '订单待验证' : membership.isPremium ? '订购或切换方案' : '开通${_planName(product?.id)}'))),
           Wrap(spacing: 8, children: [
             TextButton(onPressed: _iap.busy ? null : _iap.load, child: const Text('重新加载')),
             TextButton(onPressed: _iap.busy ? null : _iap.restore, child: const Text('恢复购买')),

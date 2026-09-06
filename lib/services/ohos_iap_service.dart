@@ -20,6 +20,31 @@ class OhosIapService extends ChangeNotifier {
         verify = verify ?? MembershipService().verifyIapPurchase;
 
   ProductDetails? product;
+  final List<ProductDetails> products = [];
+  List<Map<String, dynamic>> subscriptionPlans = [];
+  Set<String> _allowedProducts = {productId};
+
+  void selectProduct(String id) {
+    if (busy || _restoring || !serverReady) return;
+    for (final item in products) {
+      if (item.id == id && _allowedProducts.contains(id)) {
+        product = item; serverReady = true; notifyListeners(); return;
+      }
+    }
+  }
+
+  void _applyConfiguration(Map<String, dynamic> config) {
+    final ids = config['product_ids'];
+    _allowedProducts = ids is List ? ids.whereType<String>().toSet() : {config['product_id'] as String? ?? ''};
+    products.removeWhere((item) => !_allowedProducts.contains(item.id));
+    if (product == null || !products.any((item) => item.id == product!.id)) {
+      product = products.isEmpty ? null : products.first;
+    }
+    serverReady = product != null && _allowedProducts.contains(product!.id) &&
+        (config['account_binding'] as String? ?? '').isNotEmpty;
+    final plans = config['subscription_plans'];
+    subscriptionPlans = plans is List ? plans.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList() : [];
+  }
   bool busy = false;
   bool pendingVerification = false;
   bool serverReady = false;
@@ -67,7 +92,9 @@ class OhosIapService extends ChangeNotifier {
       stage = 'complete';
       if (purchase.pendingCompletePurchase) await _store.completePurchase(purchase);
       _pending.remove(id);
-      message = purchase.productID == 'premium_1year' ? '年会员已到账' : '月会员已到账';
+      try { _applyConfiguration(await configuration()); } catch (_) { /* Delivery already verified. */ }
+      message = subscriptionPlans.any((plan) => plan['next_product_id'] != null && plan['next_product_id'] != plan['current_product_id'])
+          ? '方案切换已预约，当前会员继续有效，具体日期见下方' : '会员状态已同步';
     } catch (error) {
       // Log only stage/status, never credentials, receipt bodies or purchase tokens.
       final status = error is DioException ? error.response?.statusCode : null;
@@ -80,7 +107,7 @@ class OhosIapService extends ChangeNotifier {
         // Only an authenticated server determination for THIS order releases it.
         // An expired purchase is not a delivery and must not be acknowledged.
         _pending.remove(id);
-        message = '原订阅已失效，可重新开通月会员';
+        message = '原订阅已失效，可重新选择会员方案';
       } else if (stage == 'complete') {
         message = '会员已验证，商店确认暂未完成，请恢复购买重试；请勿重复支付';
       } else if (status == 401 || status == 403) {
@@ -102,23 +129,26 @@ class OhosIapService extends ChangeNotifier {
 
   Future<void> load() async {
     if (busy || _restoring) return;
-    busy = true; message = null; product = null; serverReady = false; notifyListeners();
+    busy = true; message = null; product = null; products.clear(); subscriptionPlans = []; serverReady = false; notifyListeners();
     try {
       start();
       if (!await _store.isAvailable().timeout(const Duration(seconds: 30))) {
         message = '华为支付暂不可用，请检查设备账号、商店配置和网络'; return;
       }
-      final response = await _store.queryProductDetails({productId}).timeout(const Duration(seconds: 30));
-      if (response.error != null) throw StateError(response.error!.message);
-      for (final item in response.productDetails) { if (item.id == productId) product = item; }
-      if (product == null) { message = '暂未找到月会员商品，请检查商店配置后重试'; return; }
-      if (product is AppGalleryProductDetails &&
-          (product as AppGalleryProductDetails).skProduct.type != ProductType.AUTORENEWABLE) {
-        product = null; message = '月会员商品类型应配置为自动续期订阅'; return;
+      final response = await _store.queryProductDetails(supportedProductIds).timeout(const Duration(seconds: 30));
+      if (response.error != null && response.productDetails.isEmpty) throw StateError(response.error!.message);
+      for (final id in supportedProductIds) {
+        for (final item in response.productDetails) {
+          if (item.id == id && (item is! AppGalleryProductDetails || item.skProduct.type == ProductType.AUTORENEWABLE)) {
+            products.add(item);
+          }
+        }
       }
+      if (products.isEmpty) { message = '暂未找到会员方案，请稍后重试'; return; }
+      product = products.first;
       try {
         final config = await configuration();
-        serverReady = config['product_id'] == productId && (config['account_binding'] as String? ?? '').isNotEmpty;
+        _applyConfiguration(config);
         if (!serverReady) message = '支付服务尚未就绪，请稍后重试';
       } catch (_) { message = '请先登录应用账号；若已登录，请稍后重试支付服务'; }
     } catch (_) { message = '暂时无法加载商品，请检查支付环境后重试'; }
@@ -127,15 +157,17 @@ class OhosIapService extends ChangeNotifier {
 
   Future<void> purchase() async {
     if (busy || _restoring || product == null || !serverReady || pendingVerification) return;
+    final selected = product!;
     busy = true; message = '正在打开华为支付'; notifyListeners();
     try {
       // Recheck server and account immediately before opening checkout.
       final config = await configuration();
-      if (config['product_id'] != productId) throw StateError('Wrong product');
+      _applyConfiguration(config);
+      if (!serverReady || !_allowedProducts.contains(selected.id)) throw StateError('Product unavailable');
       final binding = config['account_binding'] as String;
       if (binding.isEmpty) throw StateError('Missing account');
       final launched = await _store.buyNonConsumable(purchaseParam:
-        PurchaseParam(productDetails: product!, applicationUserName: binding));
+        PurchaseParam(productDetails: selected, applicationUserName: binding));
       if (!launched) { busy = false; message = '未能打开支付，请重试'; }
       // Success means checkout was launched, never that membership was granted.
     } catch (_) { busy = false; message = '未能发起购买，请检查登录和支付服务后重试'; }
