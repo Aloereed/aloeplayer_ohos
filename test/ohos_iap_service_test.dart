@@ -30,8 +30,8 @@ class Store extends InAppPurchasePlatform {
   @override Future<void> restorePurchases({String? applicationUserName}) async {}
 }
 
-PurchaseDetails receipt(String id, {PurchaseStatus status = PurchaseStatus.purchased}) => PurchaseDetails(
-  purchaseID: id, productID: 'premium_monthly', transactionDate: '1000', status: status,
+PurchaseDetails receipt(String id, {PurchaseStatus status = PurchaseStatus.purchased, String productId = 'premium_monthly'}) => PurchaseDetails(
+  purchaseID: id, productID: productId, transactionDate: '1000', status: status,
   verificationData: PurchaseVerificationData(localVerificationData: 'receipt-$id',
     serverVerificationData: 'receipt-$id', source: 'huawei'))..pendingCompletePurchase = true;
 
@@ -129,6 +129,30 @@ void main() {
     expect(service.pendingVerification, isTrue);
     await service.purchase(); expect(store.launches, 0);
     expect(store.completed, isEmpty);
+  });
+  test('hidden yearly product restores while checkout remains monthly', () async {
+    final verified = <String>[];
+    service = OhosIapService(configuration: () async => {'product_id': 'premium_monthly', 'account_binding': 'bound-account'},
+      verify: (purchase) async { verified.add(purchase.productID); });
+    await service.load();
+    expect(service.product!.id, 'premium_monthly');
+    store.updates.add([receipt('year', productId: 'premium_1year', status: PurchaseStatus.restored)]);
+    await Future<void>.delayed(Duration.zero);
+    expect(verified, ['premium_1year']); expect(store.completed, ['year']);
+    expect(service.message, '年会员已到账');
+    expect(service.product!.id, 'premium_monthly');
+  });
+  test('expired yearly purchase does not block monthly checkout', () async {
+    service = OhosIapService(configuration: () async => {'product_id': 'premium_monthly', 'account_binding': 'bound-account'},
+      verify: (purchase) async => throw DioException(requestOptions: RequestOptions(),
+        response: Response(requestOptions: RequestOptions(), statusCode: 410, data: {
+          'detail': {'code': 'subscription_inactive', 'purchase_id': purchase.purchaseID,
+            'product_id': 'premium_1year'}})));
+    await service.load();
+    store.updates.add([receipt('year-expired', productId: 'premium_1year')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(service.pendingVerification, isFalse); expect(store.completed, isEmpty);
+    await service.purchase(); expect(store.launches, 1);
   });
   });
 }

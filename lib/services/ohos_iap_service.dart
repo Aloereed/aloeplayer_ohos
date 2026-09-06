@@ -11,6 +11,7 @@ import 'membership_service.dart';
 class OhosIapService extends ChangeNotifier {
   static final instance = OhosIapService();
   static const productId = 'premium_monthly';
+  static const supportedProductIds = {productId, 'premium_1year'};
   final Future<Map<String, dynamic>> Function() configuration;
   final Future<void> Function(PurchaseDetails) verify;
   OhosIapService({Future<Map<String, dynamic>> Function()? configuration,
@@ -42,7 +43,7 @@ class OhosIapService extends ChangeNotifier {
   }
 
   Future<void> _handle(PurchaseDetails purchase) async {
-    if (purchase.productID != productId) return;
+    if (!supportedProductIds.contains(purchase.productID)) return;
     if (purchase.status == PurchaseStatus.pending) {
       busy = true; message = '等待支付结果'; notifyListeners(); return;
     }
@@ -66,7 +67,7 @@ class OhosIapService extends ChangeNotifier {
       stage = 'complete';
       if (purchase.pendingCompletePurchase) await _store.completePurchase(purchase);
       _pending.remove(id);
-      message = '月会员已到账';
+      message = purchase.productID == 'premium_1year' ? '年会员已到账' : '月会员已到账';
     } catch (error) {
       // Log only stage/status, never credentials, receipt bodies or purchase tokens.
       final status = error is DioException ? error.response?.statusCode : null;
@@ -75,7 +76,7 @@ class OhosIapService extends ChangeNotifier {
       final detail = body is Map ? body['detail'] : null;
       if (stage == 'verify' && status == 410 && detail is Map &&
           detail['code'] == 'subscription_inactive' &&
-          detail['purchase_id'] == id && detail['product_id'] == productId) {
+          detail['purchase_id'] == id && detail['product_id'] == purchase.productID) {
         // Only an authenticated server determination for THIS order releases it.
         // An expired purchase is not a delivery and must not be acknowledged.
         _pending.remove(id);
