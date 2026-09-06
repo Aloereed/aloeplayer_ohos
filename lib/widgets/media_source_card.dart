@@ -20,16 +20,23 @@ class MediaSourceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final accent = switch (protocol.toLowerCase()) {
+      'smb' => const Color(0xFF008D83), 'jellyfin' => const Color(0xFF8254EB),
+      'emby' => const Color(0xFFDC5E38), _ => const Color(0xFF1768ED),
+    };
     return Card(
-      elevation: 0,
+      elevation: 2,
+      shadowColor: accent.withValues(alpha: .12),
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(26),
           side: BorderSide(
               color: active
                   ? colors.primary.withValues(alpha: .45)
-                  : colors.outlineVariant)),
+                  : Colors.transparent)),
+      color: colors.surfaceContainerLowest,
       child: InkWell(
           onTap: onOpen,
           child: Padding(
@@ -42,16 +49,19 @@ class MediaSourceCard extends StatelessWidget {
                       Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                              color: colors.primaryContainer,
-                              borderRadius: BorderRadius.circular(14)),
-                          child: Icon(icon, color: colors.onPrimaryContainer)),
+                              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+                                colors: [Color.lerp(accent, Colors.white, .28)!, accent]),
+                              boxShadow: [BoxShadow(color: accent.withValues(alpha: .23), blurRadius: 12, offset: const Offset(0, 4))],
+                              border: Border.all(color: Colors.white.withValues(alpha: .4)),
+                              borderRadius: BorderRadius.circular(17)),
+                          child: Icon(icon, color: Colors.white)),
                       const SizedBox(width: 12),
                       Expanded(
                           child: Text(protocol,
                               style: Theme.of(context)
                                   .textTheme
                                   .labelLarge
-                                  ?.copyWith(color: colors.primary))),
+                                  ?.copyWith(color: dark ? Color.lerp(accent, Colors.white, .45) : accent))),
                       if (onEdit != null || onRemove != null)
                         PopupMenuButton<String>(
                             tooltip: '管理 $name',

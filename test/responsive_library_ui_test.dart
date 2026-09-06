@@ -1,3 +1,4 @@
+import 'package:aloeplayer/widgets/harmony_navigation_bar.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,22 @@ import 'package:aloeplayer/widgets/responsive_app_shell.dart';
 import 'package:aloeplayer/widgets/video_library_tile.dart';
 
 void main() {
+  testWidgets('glass navigation keeps large text tappable and removes blur in high contrast', (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var selected = 0;
+    await tester.pumpWidget(MaterialApp(home: MediaQuery(data: const MediaQueryData(
+      textScaler: TextScaler.linear(2), highContrast: true), child: ResponsiveAppShell(
+        desktop: false, fullScreen: false, selectedIndex: 0, onSelected: (value) => selected = value,
+        child: const Scaffold(body: Text('content'))))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('媒体库'));
+    expect(selected, 2);
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('desktop shell falls back on small windows and supports keyboard navigation', (tester) async {
     var index = 0;
     for (final size in [const Size(320, 700), const Size(900, 400), const Size(1280, 800)]) {
@@ -14,7 +31,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: ResponsiveAppShell(desktop: true, fullScreen: false,
         selectedIndex: index, onSelected: (v) => index = v, child: const Scaffold(body: Text('content')))));
       await tester.pumpAndSettle();
-      expect(find.byType(NavigationBar), size.width < 840 ? findsOneWidget : findsNothing);
+      expect(find.byType(HarmonyNavigationBar), size.width < 840 ? findsOneWidget : findsNothing);
       expect(tester.takeException(), isNull);
       if (size.width >= 840) {
         await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);

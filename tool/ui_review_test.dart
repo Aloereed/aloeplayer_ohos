@@ -27,6 +27,9 @@ class PreviewBackend implements MpvImageBackend {
 }
 void main() {
   testWidgets('render review screens using production widgets', (tester) async {
+    final previousShadows = debugDisableShadows;
+    debugDisableShadows = false;
+    try {
     await tester.runAsync(() async {
       final font = File(Platform.environment['UI_REVIEW_FONT'] ?? 'C:/Windows/Fonts/msyh.ttc');
       if (await font.exists()) {
@@ -34,6 +37,7 @@ void main() {
         await loader.load();
       }
       await (FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+      await (FontLoader('packages/cupertino_icons/CupertinoIcons')..addFont(rootBundle.load('packages/cupertino_icons/assets/CupertinoIcons.ttf'))).load();
       await Directory('build/ui-review').create(recursive: true);
     });
     SharedPreferences.setMockInitialValues({
@@ -97,6 +101,9 @@ void main() {
         '<h1>AloePlayer 界面预览</h1><p>桌面 widget 渲染，示例数据；不代表鸿蒙实机或 GPU 验证。</p>'
         '${captures.map((name) => '<section><h2>$name</h2><img src="$name.png"></section>').join()}');
     });
-    tester.view.resetPhysicalSize(); tester.view.resetDevicePixelRatio();
+    } finally {
+      debugDisableShadows = previousShadows;
+      tester.view.resetPhysicalSize(); tester.view.resetDevicePixelRatio();
+    }
   });
 }

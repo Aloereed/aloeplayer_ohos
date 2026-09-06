@@ -1,3 +1,5 @@
+import 'package:flutter/cupertino.dart' show CupertinoSwitch;
+import 'widgets/harmony_switch_tile.dart';
 /*
  * @Author: 
  * @Date: 2025-01-12 15:11:12
@@ -1919,14 +1921,13 @@ class _SettingsTabState extends State<SettingsTab> {
               activeColor: Colors.lightBlue,
             ),
             Divider(height: 1, indent: 16, endIndent: 16),
-            SwitchListTile(
+            HarmonySwitchTile(
               title: const Text('PC模式'),
               subtitle: const Text('优化界面适配桌面操作'),
               value: themeProvider.pcMode,
               onChanged: (bool value) {
                 themeProvider.setPCMode(value);
               },
-              activeColor: Colors.lightBlue,
             ),
           ],
         ),
@@ -2412,13 +2413,13 @@ class _SettingsTabState extends State<SettingsTab> {
       future: future,
       builder: (context, snapshot) {
         if (snapshot.hasData) {
-          return Switch(
+          return CupertinoSwitch(
             value: snapshot.data!,
             onChanged: (v) {
               onChanged(v);
               setState(() {});
             },
-            activeColor: Colors.lightBlue,
+            activeTrackColor: Theme.of(context).colorScheme.primary,
           );
         }
         return SizedBox(

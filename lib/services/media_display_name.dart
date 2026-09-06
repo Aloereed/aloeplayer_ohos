@@ -8,7 +8,10 @@ String mediaDisplayName(String source) {
       final uri = Uri.parse(source);
       final segments = uri.pathSegments.where((part) => part.isNotEmpty);
       return segments.isEmpty ? uri.host : segments.last;
-    } on FormatException { /* Keep malformed input readable without throwing. */ }
+    } on FormatException {
+      // Even malformed URI text must not expose query tokens in the title.
+      return path.basename(source.split(RegExp(r'[?#]')).first);
+    }
   }
   return path.basename(source.replaceAll('\\', '/'));
 }

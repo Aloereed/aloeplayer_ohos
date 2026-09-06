@@ -2,19 +2,28 @@ import 'package:flutter/material.dart';
 
 ThemeData buildAloeTheme(Brightness brightness, {bool desktop = false, String? fontFamily}) {
   final dark = brightness == Brightness.dark;
-  final colors = ColorScheme.fromSeed(seedColor: const Color(0xFF1687B8), brightness: brightness).copyWith(
-    surface: dark ? const Color(0xFF111820) : const Color(0xFFF9FBFE),
-    surfaceContainerLowest: dark ? const Color(0xFF0C1219) : Colors.white,
-    surfaceContainerLow: dark ? const Color(0xFF18222D) : const Color(0xFFF0F5FA),
-    surfaceContainer: dark ? const Color(0xFF1D2935) : const Color(0xFFEBF1F7),
-    surfaceContainerHigh: dark ? const Color(0xFF24323F) : const Color(0xFFE5EDF5),
-    surfaceContainerHighest: dark ? const Color(0xFF2C3B49) : const Color(0xFFDDE7F0),
-    outlineVariant: dark ? const Color(0xFF354554) : const Color(0xFFD6E1EB),
+  final colors = ColorScheme.fromSeed(seedColor: const Color(0xFF0A59F7), brightness: brightness).copyWith(
+    primary: dark ? const Color(0xFF8CB4FF) : const Color(0xFF0A59F7),
+    onPrimary: dark ? const Color(0xFF071C46) : Colors.white,
+    primaryContainer: dark ? const Color(0xFF18366A) : const Color(0xFFE7EFFF),
+    onPrimaryContainer: dark ? const Color(0xFFDCE8FF) : const Color(0xFF164CAF),
+    secondary: dark ? const Color(0xFF80E0D7) : const Color(0xFF008579),
+    secondaryContainer: dark ? const Color(0xFF133C3B) : const Color(0xFFDDF7F1),
+    onSecondaryContainer: dark ? const Color(0xFFBFF9EF) : const Color(0xFF00594F),
+    surface: dark ? const Color(0xFF090F1C) : const Color(0xFFF5F7FC),
+    onSurface: dark ? const Color(0xFFF4F6FC) : const Color(0xFF141B2B),
+    onSurfaceVariant: dark ? const Color(0xFFADB9CF) : const Color(0xFF596579),
+    surfaceContainerLowest: dark ? const Color(0xFF121C2F) : Colors.white,
+    surfaceContainerLow: dark ? const Color(0xFF162239) : Colors.white,
+    surfaceContainer: dark ? const Color(0xFF1B2942) : const Color(0xFFF0F4FC),
+    surfaceContainerHigh: dark ? const Color(0xFF21314F) : const Color(0xFFEAF0FB),
+    surfaceContainerHighest: dark ? const Color(0xFF2B3C59) : const Color(0xFFE4ECFA),
+    outlineVariant: dark ? const Color(0xFF2F405E) : const Color(0xFFE2E8F3),
   );
   final base = ThemeData(useMaterial3: true, brightness: brightness, colorScheme: colors,
     fontFamily: fontFamily, scaffoldBackgroundColor: colors.surface,
-    visualDensity: VisualDensity.standard);
-  final rounded = RoundedRectangleBorder(borderRadius: BorderRadius.circular(14));
+    visualDensity: VisualDensity.standard, splashFactory: NoSplash.splashFactory);
+  final rounded = RoundedRectangleBorder(borderRadius: BorderRadius.circular(22));
   return base.copyWith(
     textTheme: base.textTheme.copyWith(
       headlineSmall: base.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -.4),
@@ -26,14 +35,14 @@ ThemeData buildAloeTheme(Brightness brightness, {bool desktop = false, String? f
     appBarTheme: AppBarTheme(backgroundColor: colors.surface, foregroundColor: colors.onSurface,
       elevation: 0, scrolledUnderElevation: 0, centerTitle: false, toolbarHeight: desktop ? 68 : 60,
       titleSpacing: 20, titleTextStyle: base.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-    cardTheme: CardThemeData(elevation: 0, color: colors.surfaceContainerLowest, clipBehavior: Clip.antiAlias,
+    cardTheme: CardThemeData(elevation: 1, shadowColor: const Color(0x120D367B), surfaceTintColor: Colors.transparent, color: colors.surfaceContainerLowest, clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: colors.outlineVariant))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28))),
     inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: colors.surfaceContainerLow,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: colors.outlineVariant)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: colors.outlineVariant)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: colors.primary, width: 1.5))),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: colors.primary, width: 1.5))),
     filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(shape: rounded,
       minimumSize: const Size(44, 46), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12))),
     elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(shape: rounded, elevation: 0,
@@ -42,20 +51,25 @@ ThemeData buildAloeTheme(Brightness brightness, {bool desktop = false, String? f
       minimumSize: const Size(44, 46), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12))),
     textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(shape: rounded, minimumSize: const Size(44, 44))),
     listTileTheme: ListTileThemeData(iconColor: colors.onSurfaceVariant, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      minVerticalPadding: 10, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-    dialogTheme: DialogThemeData(backgroundColor: colors.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24))),
+      minVerticalPadding: 10, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22))),
+    dialogTheme: DialogThemeData(backgroundColor: colors.surfaceContainerLow, surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28))),
     bottomSheetTheme: BottomSheetThemeData(backgroundColor: colors.surface, modalBackgroundColor: colors.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))), clipBehavior: Clip.antiAlias),
     snackBarTheme: SnackBarThemeData(behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22))),
     floatingActionButtonTheme: FloatingActionButtonThemeData(elevation: 2, highlightElevation: 3,
-      backgroundColor: colors.primaryContainer, foregroundColor: colors.onPrimaryContainer,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+      backgroundColor: colors.primary, foregroundColor: colors.onPrimary,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26))),
     navigationBarTheme: NavigationBarThemeData(indicatorColor: colors.primaryContainer,
       labelTextStyle: WidgetStateProperty.resolveWith((states) => base.textTheme.labelMedium?.copyWith(
         fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
         color: states.contains(WidgetState.selected) ? colors.onSurface : colors.onSurfaceVariant))),
+    chipTheme: base.chipTheme.copyWith(backgroundColor: colors.surfaceContainerLowest,
+      side: BorderSide.none, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7)),
+    tabBarTheme: TabBarThemeData(labelColor: colors.primary, unselectedLabelColor: colors.onSurfaceVariant,
+      dividerColor: Colors.transparent, indicatorSize: TabBarIndicatorSize.label,
+      labelStyle: base.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
     dividerTheme: DividerThemeData(color: colors.outlineVariant.withValues(alpha: .7), thickness: .7, space: 1),
   );
 }

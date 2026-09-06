@@ -1,3 +1,4 @@
+import 'harmony_switch_tile.dart';
 import 'package:flutter/material.dart';
 import '../services/mpv_image_enhancement.dart';
 
@@ -64,7 +65,7 @@ class _ImageEnhancementSheetState extends State<ImageEnhancementSheet> {
         Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(
           'FSR 1.0 使用空间超分与锐化，最多放大至原尺寸的 2 倍。原视频已达输出上限时不放大。HDR / RGB 视频使用高清缩放。若发热或卡顿，请切回原始画质。',
           style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant))),
-        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('去色带'), subtitle: const Text('减轻天空、暗部渐变中的色阶条纹'),
+        HarmonySwitchTile(contentPadding: EdgeInsets.zero, title: const Text('去色带'), subtitle: const Text('减轻天空、暗部渐变中的色阶条纹'),
           value: enhancer.settings.deband, onChanged: enhancer.busy ? null : (v) => _apply(_draft.copyWith(deband: v))),
         const Divider(height: 32), Text('色彩调节', style: theme.textTheme.titleSmall), const SizedBox(height: 16),
         _slider('亮度', _draft.brightness, (v) => _draft.copyWith(brightness: v)),

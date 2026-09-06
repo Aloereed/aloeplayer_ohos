@@ -13,5 +13,6 @@ void main() {
     expect(mediaDisplayName('/Videos/%E4%B8%AD.mp4'), '%E4%B8%AD.mp4');
     expect(mediaDisplayName('file:///Videos/%2520.mp4'), '%20.mp4');
     expect(mediaDisplayName('/Videos/100%.mp4'), '100%.mp4');
+    expect(mediaDisplayName('https://nas.home/%FF.mp4?token=secret'), '%FF.mp4');
   });
 }

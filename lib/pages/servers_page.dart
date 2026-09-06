@@ -169,12 +169,14 @@ class _ServersPageState extends State<ServersPage> {
     ),
     (name: 'Emby', description: '连接个人影视媒体库', icon: Icons.movie_filter_outlined),
   ];
-  Widget _quickAction(IconData icon, String title, Widget page) => ActionChip(
-      avatar: Icon(icon, size: 19),
-      label: Text(title),
-    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      onPressed: () =>
-          Navigator.push(context, MaterialPageRoute(builder: (_) => page)));
+  Widget _quickAction(IconData icon, String title, Widget page) => SizedBox(width: 90, child: TextButton(
+      style: TextButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest.withValues(alpha: .8),
+        foregroundColor: Theme.of(context).colorScheme.primary,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22))),
+      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 24), const SizedBox(height: 7),
+        Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))])));
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context), colors = Theme.of(context).colorScheme;
@@ -232,22 +234,26 @@ class _ServersPageState extends State<ServersPage> {
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(24),
                                     decoration: BoxDecoration(
-                                        color: colors.primaryContainer
-                                            .withValues(alpha: .45),
+                                        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+                                          colors: theme.brightness == Brightness.dark
+                                            ? const [Color(0xFF123C71), Color(0xFF24254F), Color(0xFF163D49)]
+                                            : const [Color(0xFFD6EDFF), Color(0xFFEEE8FF), Color(0xFFDAF8F4)]),
+                                        border: Border.all(color: Colors.white.withValues(alpha: theme.brightness == Brightness.dark ? .12 : .9)),
+                                        boxShadow: [BoxShadow(color: colors.primary.withValues(alpha: .07), blurRadius: 28, offset: const Offset(0, 8))],
                                         borderRadius:
-                                            BorderRadius.circular(24)),
+                                            BorderRadius.circular(30)),
                                     child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text('你的媒体，汇聚于此',
+                                          Text('我的媒体空间',
                                               style: theme
                                                   .textTheme.headlineSmall
                                                   ?.copyWith(
                                                       fontWeight:
                                                           FontWeight.w700)),
                                           const SizedBox(height: 10),
-                                          Text('收藏本地影片，连接远程媒体库，接着上次的进度继续观看。',
+                                          Text('本地收藏与远程片库，都在这里。',
                                               style: theme.textTheme.bodyMedium
                                                   ?.copyWith(
                                                       color: colors

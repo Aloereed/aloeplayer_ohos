@@ -54,8 +54,9 @@ class _VideoLibraryTileState extends State<VideoLibraryTile> {
     return MouseRegion(onEnter: (_) => setState(() => _hovered = true), onExit: (_) => setState(() => _hovered = false),
       child: Card(elevation: 0, margin: widget.list ? const EdgeInsets.symmetric(horizontal: 16, vertical: 5) : EdgeInsets.zero,
         color: _hovered ? colors.surfaceContainerHigh : colors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: _hovered ? colors.primary.withValues(alpha: .5) : colors.outlineVariant.withValues(alpha: .65))),
+        shadowColor: colors.primary.withValues(alpha: .08),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: _hovered ? colors.primary.withValues(alpha: .4) : Colors.transparent)),
         clipBehavior: Clip.antiAlias, child: InkWell(onTap: widget.onPlay,
           onLongPress: widget.onOptions, onSecondaryTap: widget.onOptions,
           child: FutureBuilder<VideoTileInfo>(future: widget.info, builder: (_, snapshot) {
