@@ -15,6 +15,8 @@ enum MembershipStatus {
 
 class MembershipService extends ChangeNotifier {
   int _membershipRevision = 0;
+  DateTime? _redeemBlockedUntil;
+  bool get canRedeemCode => _redeemBlockedUntil == null || !_redeemBlockedUntil!.isAfter(DateTime.now());
   static const String _membershipStatusKey = 'membership_status';
   static const String _expiryDateKey = 'membership_expiry_date';
   static const String _purchaseTokenKey = 'purchase_token';
@@ -301,6 +303,7 @@ class MembershipService extends ChangeNotifier {
 
   // 退出登录
   Future<void> logout() async {
+    _redeemBlockedUntil = null;
     _isHuaweiLogin = false;
     _nickname = null;
     _apiToken = null;
@@ -597,6 +600,7 @@ class MembershipService extends ChangeNotifier {
 
   // 清除会员状态（用于测试）
   Future<void> clearMembership() async {
+    _redeemBlockedUntil = null;
     _currentStatus = MembershipStatus.free;
     _expiryDate = null;
     _purchaseToken = null;
@@ -664,6 +668,7 @@ class MembershipService extends ChangeNotifier {
     _currentStatus = MembershipStatus.premium;
     _expiryDate = expiry;
     _subscriptionName = data['subscription_name'] as String;
+    _redeemBlockedUntil = DateTime.tryParse(data['purchase_expiry_date'] as String? ?? data['expiry_date'] as String);
     await _saveMembershipStatus();
   }
 
@@ -699,6 +704,7 @@ class MembershipService extends ChangeNotifier {
       if (_apiToken != token || _membershipRevision != revision) return {};
       if (response.statusCode == 200) {
         final data = response.data;
+        _redeemBlockedUntil = DateTime.tryParse(data['redeem_blocked_until'] as String? ?? '');
         final active = (data['active_subscriptions'] as List)
             .map((e) => Subscription.fromJson(e))
             .toList();
@@ -766,6 +772,9 @@ class MembershipService extends ChangeNotifier {
   Future<RedeemResult> redeemCode(String code) async {
     if (_apiToken == null) {
       return RedeemResult(success: false, message: '请先登录');
+    }
+    if (!canRedeemCode) {
+      return RedeemResult(success: false, message: '当前付费会员仍有效，暂不能使用兑换码；到期后可再兑换');
     }
     try {
       final dio = Dio();

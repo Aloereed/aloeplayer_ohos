@@ -1840,8 +1840,15 @@ class _SettingsTabState extends State<SettingsTab> {
                     context: context,
                     icon: Icons.redeem,
                     title: '兑换码',
-                    subtitle: '使用兑换码获取会员',
-                    onTap: () => _showRedeemDialog(context),
+                    subtitle: _membershipService.canRedeemCode ? '使用兑换码获取会员' : '付费会员有效期内不可兑换',
+                    onTap: () {
+                      if (_membershipService.canRedeemCode) {
+                        _showRedeemDialog(context);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('当前付费会员仍有效，请在到期后使用兑换码')));
+                      }
+                    },
                     trailing: Icon(Icons.chevron_right, color: Colors.grey),
                   ),
                   // 续费提示
