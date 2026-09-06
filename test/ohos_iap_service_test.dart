@@ -2,6 +2,7 @@ import 'package:in_app_purchase_ohos/in_app_purchase_ohos.dart';
 import 'package:in_app_purchase_ohos/iap_kit_wrappers.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:aloeplayer/services/ohos_iap_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
@@ -11,6 +12,7 @@ class Store extends InAppPurchasePlatform {
   final updates = StreamController<List<PurchaseDetails>>.broadcast();
   final completed = <String>[];
   int launches = 0;
+  bool failCompletion = false;
   @override Stream<List<PurchaseDetails>> get purchaseStream => updates.stream;
   @override Future<bool> isAvailable() async => true;
   @override Future<ProductDetailsResponse> queryProductDetails(Set<String> ids) async {
@@ -21,7 +23,10 @@ class Store extends InAppPurchasePlatform {
   @override Future<bool> buyNonConsumable({required PurchaseParam purchaseParam}) async {
     expect(purchaseParam.applicationUserName, 'bound-account'); launches++; return true;
   }
-  @override Future<void> completePurchase(PurchaseDetails purchase) async { completed.add(purchase.purchaseID!); }
+  @override Future<void> completePurchase(PurchaseDetails purchase) async {
+    if (failCompletion) throw StateError('store unavailable');
+    completed.add(purchase.purchaseID!);
+  }
   @override Future<void> restorePurchases({String? applicationUserName}) async {}
 }
 
@@ -77,6 +82,24 @@ void main() {
     store.updates.add([receipt('canceled', status: PurchaseStatus.canceled)]);
     await Future<void>.delayed(Duration.zero);
     expect(store.completed, isEmpty); expect(service.busy, isFalse);
+  });
+  test('HTTP rejection is distinct from store completion failure', () async {
+    var reject = true;
+    service = OhosIapService(configuration: () async => {}, verify: (_) async {
+      if (reject) throw DioException(requestOptions: RequestOptions(),
+        response: Response(requestOptions: RequestOptions(), statusCode: 422));
+    });
+    service.start();
+    store.updates.add([receipt('diagnose')]); await Future<void>.delayed(Duration.zero);
+    expect(service.message, contains('422'));
+    expect(store.completed, isEmpty);
+    reject = false; store.failCompletion = true;
+    await service.restore();
+    expect(service.message, contains('商店确认'));
+    expect(service.pendingVerification, isTrue);
+    store.failCompletion = false; await service.restore();
+    expect(service.pendingVerification, isFalse);
+    expect(store.completed, ['diagnose']);
   });
   });
 }

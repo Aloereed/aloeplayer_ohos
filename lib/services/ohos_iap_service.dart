@@ -3,6 +3,7 @@ import 'package:in_app_purchase_ohos/iap_kit_wrappers.dart' show ProductType;
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:dio/dio.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'membership_service.dart';
 
@@ -59,13 +60,30 @@ class OhosIapService extends ChangeNotifier {
     }
     _pending[id] = purchase;
     pendingVerification = true; busy = true; message = '正在验证订单'; notifyListeners();
+    var stage = 'verify';
     try {
       await verify(purchase);
+      stage = 'complete';
       if (purchase.pendingCompletePurchase) await _store.completePurchase(purchase);
       _pending.remove(id);
       message = '月会员已到账';
-    } catch (_) {
-      message = '订单尚未处理完成，请登录购买时的账号后恢复购买；请勿重复支付';
+    } catch (error) {
+      // Log only stage/status, never credentials, receipt bodies or purchase tokens.
+      final status = error is DioException ? error.response?.statusCode : null;
+      debugPrint('[AloeIAP] stage=$stage failed type=${error.runtimeType} http=${status ?? 0}');
+      if (stage == 'complete') {
+        message = '会员已验证，商店确认暂未完成，请恢复购买重试；请勿重复支付';
+      } else if (status == 401 || status == 403) {
+        message = '登录已失效，请重新登录购买时的应用账号，再恢复购买；请勿重复支付';
+      } else if (status == 422) {
+        message = '后端未能验证购买凭证，或订阅已过期（422），请恢复购买重试；请勿重复支付';
+      } else if (status == 409) {
+        message = '订阅状态或账号关联需要确认（409），请使用购买时的账号恢复购买；请勿重复支付';
+      } else if (status == 503) {
+        message = '后端验单服务暂不可用（503），请稍后恢复购买；请勿重复支付';
+      } else {
+        message = '订单验证暂未完成，请检查网络后恢复购买；请勿重复支付';
+      }
     } finally {
       pendingVerification = _pending.isNotEmpty;
       busy = false; notifyListeners();
