@@ -89,6 +89,8 @@ void main() {
               onPlay: () => plays++, onOptions: () => options++, onFavorite: () {}))))));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        expect(find.text('HDR'), findsOneWidget);
+        expect(find.text('快捷方式'), list ? findsNothing : findsOneWidget);
         await tester.tap(find.text('一部很长名字的电影_1080p.mkv'));
         await tester.tap(find.byTooltip('更多操作'));
       }

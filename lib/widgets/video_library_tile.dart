@@ -68,7 +68,10 @@ class _VideoLibraryTileState extends State<VideoLibraryTile> {
             if (widget.list) return Padding(padding: const EdgeInsets.all(12), child: Row(children: [
               SizedBox(width: 96, child: ClipRRect(borderRadius: BorderRadius.circular(10), child: _image(info))),
               const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min, children: [name, const SizedBox(height: 6), detail])),
+                mainAxisSize: MainAxisSize.min, children: [name, const SizedBox(height: 6),
+                  Row(children: [if (info.hdr) ...[_badge('HDR'), const SizedBox(width: 6)],
+                    Expanded(child: detail)]),
+                ])),
               IconButton(tooltip: '更多操作', onPressed: widget.onOptions, icon: const Icon(Icons.more_horiz)),
             ]));
             return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

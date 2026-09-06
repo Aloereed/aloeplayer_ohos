@@ -347,7 +347,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   final Map<String, Future<VideoTileInfo>> _pendingTileInfo = {};
   final Map<String, DateTime> _modifiedTimes = {};
   Map<String, Duration?> _durationCache = {};
-  Map<String, bool?> _hdrCache = {};
+  final Map<(String, int), bool> _hdrCache = {};
   final SettingsService _settingsService = SettingsService();
   final FavoritesDatabase _favoritesDb = FavoritesDatabase.instance;
   Map<String, bool> _favoriteStatus = {};
@@ -403,6 +403,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   void initState() async {
     super.initState();
 
+    SettingsService.hdrDetectionChanges.addListener(_refreshHdrDetection);
     // 添加搜索框焦点监听器
     _searchFocusNode.addListener(() {
       setState(() {
@@ -429,9 +430,18 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   @override
   void dispose() {
+    SettingsService.hdrDetectionChanges.removeListener(_refreshHdrDetection);
     _searchFocusNode.dispose();
     _searchTextController.dispose();
     super.dispose();
+  }
+
+  void _refreshHdrDetection() {
+    if (!mounted) return;
+    setState(() {
+      _hdrCache.clear();
+      _pendingTileInfo.clear();
+    });
   }
 
   // 加载所有项目的收藏状态
@@ -994,7 +1004,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     }
     try { await _favoritesDb.removeFavorite(file.path); } catch (_) {}
     _favoriteStatus.remove(file.path);
-    _durationCache.remove(file.path); _hdrCache.remove(file.path);
+    _durationCache.remove(file.path);
+    _hdrCache.removeWhere((key, _) => key.$1 == file.path);
     _videoFiles.removeWhere((item) => item.path == file.path);
     _allItems.removeWhere((item) => item is File && item.path == file.path);
     _filteredItems.removeWhere((item) => item is File && item.path == file.path);
@@ -1033,15 +1044,13 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
   /// 检查视频文件是否为HDR格式
   Future<bool> _getHdr(File file) async {
-    if (disableThumbnail) {
-      return false;
-    }
     try {
+      final getHdrMethod = await _settingsService.getHdrDetect();
+      if (getHdrMethod == 0) return false;
+      final cacheKey = (file.path, getHdrMethod);
+      if (_hdrCache.containsKey(cacheKey)) return _hdrCache[cacheKey]!;
       await _activateShortcut(file);
       String filePath = file.path;
-      if (_hdrCache.containsKey(filePath)) {
-        return _hdrCache[filePath] ?? false;
-      }
       // 调用原生方法获取HDR信息的JSON字符串
       if (file.path.endsWith('.lnk')) {
         // 读取文件内容
@@ -1049,11 +1058,6 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       }
       final _ffmpegplatform =
           const MethodChannel('samples.flutter.dev/ffmpegplugin');
-      int getHdrMethod = await _settingsService.getHdrDetect();
-      if (getHdrMethod == 0) {
-        _hdrCache[file.path] = false;
-        return false;
-      }
       String hdrJson = '';
       if (getHdrMethod == 1) {
         hdrJson = await _ffmpegplatform
@@ -1068,7 +1072,6 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       // 如果返回的JSON字符串为空，默认为非HDR
       if (hdrJson.isEmpty) {
         print('获取HDR信息失败：返回空JSON');
-        _hdrCache[file.path] = false;
         return false;
       }
 
@@ -1080,17 +1083,15 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         final bool isHdr = data['isHDR'] ?? false;
 
         print('视频HDR状态: ${isHdr ? "是HDR" : "非HDR"}');
-        _hdrCache[file.path] = isHdr;
+        _hdrCache[cacheKey] = isHdr;
         return isHdr;
       } catch (e) {
         print('解析HDR JSON出错: $e');
         print('原始JSON: $hdrJson');
-        _hdrCache[file.path] = false;
         return false;
       }
     } catch (e) {
       print('获取HDR信息时发生错误: $e');
-      _hdrCache[file.path] = false;
       return false;
     }
   }
@@ -2266,8 +2267,13 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     );
   }
 
-  Future<VideoTileInfo> _tileInfo(File file) => _pendingTileInfo.putIfAbsent(file.path,
-    () => _metadataQueue.run(() => _loadTileInfo(file)).whenComplete(() { _pendingTileInfo.remove(file.path); }));
+  Future<VideoTileInfo> _tileInfo(File file) => _pendingTileInfo.putIfAbsent(file.path, () {
+    late final Future<VideoTileInfo> pending;
+    pending = _metadataQueue.run(() => _loadTileInfo(file)).whenComplete(() {
+      if (identical(_pendingTileInfo[file.path], pending)) _pendingTileInfo.remove(file.path);
+    });
+    return pending;
+  });
 
   Future<VideoTileInfo> _loadTileInfo(File file) async {
     if (!mounted) return const VideoTileInfo();

@@ -497,6 +497,7 @@ DeviceInfo getDeviceInfo(BuildContext context) {
 }
 
 class SettingsService {
+  static final ValueNotifier<int> hdrDetectionChanges = ValueNotifier(0);
   static const String _fontSizeKey = 'subtitle_font_size';
   static const String _backgroundPlayKey = 'background_play';
   static const String _autoLoadSubtitleKey = 'auto_load_subtitle';
@@ -646,13 +647,20 @@ class SettingsService {
 
   Future<void> saveUseFfmpegForPlay(int useFfmpeg) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_useFfmpegForPlayKey, useFfmpeg);
+    await prefs.setInt(_useFfmpegForPlayKey, _supportedPlaybackEngine(useFfmpeg));
   }
 
   Future<int> getUseFfmpegForPlay() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_useFfmpegForPlayKey) ?? 2; // 默认值为false
+    final saved = prefs.getInt(_useFfmpegForPlayKey) ?? 2;
+    final engine = _supportedPlaybackEngine(saved);
+    if (engine != saved) await prefs.setInt(_useFfmpegForPlayKey, engine);
+    return engine;
   }
+
+  // Retired software playback modes migrate to MPV for every playback entry.
+  static int _supportedPlaybackEngine(int engine) =>
+      engine == 1 || engine == 3 ? 2 : engine;
 
   Future<void> saveAutoFullscreenBeginPlay(bool autoFullscreen) async {
     final prefs = await SharedPreferences.getInstance();
@@ -727,6 +735,7 @@ class SettingsService {
   Future<void> saveHdrDetect(int hdrDetect) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_hdrDetect, hdrDetect);
+    hdrDetectionChanges.value++;
   }
 
   Future<int> getHdrDetect() async {
@@ -1985,10 +1994,6 @@ class _SettingsTabState extends State<SettingsTab> {
                     String label = '全新MPV(推荐)';
                     if (val == 0)
                       label = '系统硬解(高码率)';
-                    else if (val == 1)
-                      label = 'FFmpeg软解';
-                    else if (val == 3)
-                      label = '系统播放(仅音频软解)';
                     else if (val == 4) label = '流心视频(HDR)';
                     return Text(label,
                         style: TextStyle(fontSize: 12, color: Colors.grey));
@@ -2012,16 +2017,6 @@ class _SettingsTabState extends State<SettingsTab> {
                             'value': 0,
                             'label': '系统硬解(高码率)',
                             'icon': Icons.phone_android
-                          },
-                          {
-                            'value': 1,
-                            'label': 'FFmpeg软解',
-                            'icon': Icons.settings_applications
-                          },
-                          {
-                            'value': 3,
-                            'label': '系统播放(仅音频软解)',
-                            'icon': Icons.mic_external_on_sharp
                           },
                           {
                             'value': 4,
