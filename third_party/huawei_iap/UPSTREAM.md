@@ -6,3 +6,6 @@ Local patches: sibling path dependency; per-transaction full signed receipt thro
 ArkTS and Dart serialization (never use the mutable global last receipt for verification).
 Examples/tests omitted from vendoring; application integration tests cover checkout.
 Additional patches: forward account binding as signed developerPayload; expose subscription management.
+Product queries retain successful results when probes for other product types fail;
+errors are returned when no products were found. Native regression coverage:
+tool/iap_product_query_test.cjs (requires the SDK's TypeScript compiler).

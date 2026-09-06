@@ -152,14 +152,16 @@ export class MethodCallHandlerImpl implements MethodCallHandler {
         })
         productList.push(...resultTemp)
       }).catch((err: BusinessError) => {
-        Log.e(TAG, `Failed to query products. Code is ${err.code}, message is ${err.message}`);
+        Log.e(TAG, `Failed to query products of type ${type}. Code is ${err.code}, message is ${err.message}`);
         if (!firstError) {
           firstError = err
         }
       }).finally(() => {
         count++
         if (count === ProductType.length) {
-          if (firstError) {
+          // A product belongs to one type. Failed probes for the other types
+          // must not discard products returned by a successful query.
+          if (firstError && productList.length === 0) {
             result.error('' + firstError.code, firstError.message, firstError)
             return
           }
