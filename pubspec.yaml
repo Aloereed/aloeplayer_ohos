@@ -259,7 +259,8 @@ flutter:
   - Assets/privacy_policy.html
   - Assets/thanksfor.txt
   - Assets/shaders/FSR.glsl
+  - Assets/shaders/anime4k/
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 3.1.1+189
+version: 4.0.0+198

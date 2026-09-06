@@ -1,3 +1,4 @@
+import 'services/member_access.dart';
 import 'package:flutter/material.dart';
 import 'package:aloeplayer/services/membership_service.dart';
 import 'package:aloeplayer/services/ohos_iap_service.dart';
@@ -17,9 +18,20 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
   void initState() {
     super.initState();
     _iap.load();
+    MemberAccess.instance.initialize().then((_) { if (mounted) setState(() {}); }).catchError((_) {});
+    MemberAccess.instance.addListener(_onMembershipChanged);
     _iap.addListener(_onIapChanged);
     widget.membershipService.addListener(_onMembershipChanged);
     _refreshMembership();
+  }
+
+  bool _startingTrial = false;
+  String? _trialError;
+  Future<void> _startTrial() async {
+    setState(() { _startingTrial = true; _trialError = null; });
+    try { await MemberAccess.instance.startTrial(); }
+    catch (_) { if (mounted) setState(() => _trialError = '体验未能开启，请稍后重试'); }
+    finally { if (mounted) setState(() => _startingTrial = false); }
   }
 
   bool _wasBusy = false;
@@ -33,6 +45,7 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
 
   @override
   void dispose() {
+    MemberAccess.instance.removeListener(_onMembershipChanged);
     _iap.removeListener(_onIapChanged);
     widget.membershipService.removeListener(_onMembershipChanged);
     super.dispose();
@@ -49,64 +62,92 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(listenable: _iap, builder: (context, _) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context), colors = theme.colorScheme;
     final product = _iap.product;
     final price = product == null ? null : IapPrice.forProduct(product);
     final membership = widget.membershipService;
     return AlertDialog(
-      title: const Text('会员服务'),
+      titlePadding: const EdgeInsets.fromLTRB(24, 12, 12, 0),
+      title: Row(children: [
+        const Expanded(child: Text('会员服务')),
+        IconButton(tooltip: '关闭', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+      ]),
+      contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
       content: SizedBox(width: 420, child: SingleChildScrollView(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(membership.isPremium ? '当前会员：${membership.subscriptionName ?? '付费会员'}' : '当前未开通会员',
-            style: Theme.of(context).textTheme.titleSmall),
-          if (membership.expiryDate != null) Text('有效期至 ${membership.expiryDate!.toLocal().toString().split(' ').first}'),
-          const SizedBox(height: 20),
+          Text(membership.isPremium ? '${membership.subscriptionName ?? '付费会员'} · ${_date(membership.expiryDate?.toIso8601String())}到期' : 'Anime4K / FSR 画质增强 · 更多服务器 · 批量下载',
+            style: theme.textTheme.bodyMedium),
+          const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 8, children: [
             for (final plan in _iap.products)
               ChoiceChip(label: Text('${_planName(plan.id)}  ${IapPrice.forProduct(plan).displayPrice}'),
                 selected: product?.id == plan.id,
                 onSelected: _iap.busy ? null : (_) => _iap.selectProduct(plan.id)),
           ]),
-          const SizedBox(height: 12),
-          Text(product?.title ?? '会员方案', style: Theme.of(context).textTheme.titleLarge),
-          if (product != null) ...[
-            const SizedBox(height: 8),
-            Text(price!.displayPrice, style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: colors.primary)),
-            if (price.originalPrice != null) Text(price.originalPrice!,
-              style: TextStyle(color: colors.onSurfaceVariant, decoration: TextDecoration.lineThrough)),
-            if (price.explanation != null) Text(price.explanation!, style: TextStyle(color: colors.primary)),
-            if (product.description.isNotEmpty) Text(product.description),
-          ],
-          const SizedBox(height: 8),
-          Text('${product?.id == 'premium_1year' ? '按年' : '按月'}自动续费，价格、优惠及切换生效时间以华为支付页面为准。可在“管理订阅”中取消续费。'),
-          const SizedBox(height: 8),
-          const Text('月、年方案权益相同。同等级方案通常在当前周期结束后切换，现有会员继续有效。'),
           for (final plan in _iap.subscriptionPlans)
-            Padding(padding: const EdgeInsets.only(top: 10), child: Text(
-              plan['next_product_id'] != null && plan['next_product_id'] != plan['current_product_id']
-                ? '当前：${_planName(plan['current_product_id'])}；预计 ${_date(plan['change_date'])} 切换为${_planName(plan['next_product_id'])}'
-                : '当前华为方案：${_planName(plan['current_product_id'])}，有效期至 ${_date(plan['expiry_date'])}',
-              style: TextStyle(color: colors.primary))),
-          const SizedBox(height: 12),
-          if (!_iap.serverReady) const Text('购买前请先登录应用账号，会员将绑定到该账号。'),
-          const SizedBox(height: 16),
-          if (_iap.busy) const LinearProgressIndicator(),
-          if (_iap.message != null) Padding(padding: const EdgeInsets.symmetric(vertical: 12),
+            if (plan['next_product_id'] != null && plan['next_product_id'] != plan['current_product_id'])
+              Padding(padding: const EdgeInsets.only(top: 8), child: Text(
+                '已预约：${_date(plan['change_date'])} 切换为${_planName(plan['next_product_id'])}',
+                style: TextStyle(color: colors.primary))),
+          if (!_iap.serverReady) const Padding(padding: EdgeInsets.only(top: 8),
+            child: Text('请先登录，会员将绑定到应用账号。')),
+          if (_iap.busy) const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
+          if (_iap.message != null) Padding(padding: const EdgeInsets.only(top: 8),
             child: Semantics(liveRegion: true, child: Text(_iap.message!))),
-          const SizedBox(height: 8),
-          SizedBox(width: double.infinity, child: FilledButton(
-            onPressed: _iap.busy || product == null || !_iap.serverReady || _iap.pendingVerification ? null : _iap.purchase,
-            child: Text(_iap.pendingVerification ? '订单待验证' : membership.isPremium ? '订购或切换方案' : '开通${_planName(product?.id)}'))),
-          Wrap(spacing: 8, children: [
-            TextButton(onPressed: _iap.busy ? null : _iap.load, child: const Text('重新加载')),
+          if (MemberAccess.instance.trialActive)
+            Padding(padding: const EdgeInsets.only(top: 8), child: Text('本机体验至 ${_date(MemberAccess.instance.trialEnds?.toIso8601String())}，不自动续费。')),
+          if (MemberAccess.instance.initialized && MemberAccess.instance.canStartTrial)
+            Padding(padding: const EdgeInsets.only(top: 8), child: TextButton(
+              onPressed: _startingTrial ? null : _startTrial,
+              child: Text(_startingTrial ? '正在开启…' : '免费体验 7 天 · 不自动续费'))),
+          if (_trialError != null) Text(_trialError!),
+          Wrap(spacing: 4, children: [
             TextButton(onPressed: _iap.busy ? null : _iap.restore, child: const Text('恢复购买')),
             TextButton(onPressed: _iap.busy ? null : _iap.manage, child: const Text('管理订阅')),
+            TextButton(onPressed: _iap.busy ? null : _iap.load, child: const Text('重新加载')),
           ]),
-          TextButton.icon(onPressed: () => launchUrl(Uri.parse('https://afdian.com/a/aloereed'),
-            mode: LaunchMode.externalApplication), icon: const Icon(Icons.favorite_border), label: const Text('支持作者')),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 8),
+            title: Text('权益与订阅说明', style: theme.textTheme.bodyMedium),
+            children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final feature in MemberFeature.values)
+                Padding(padding: const EdgeInsets.only(bottom: 10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(feature.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Text(feature.description),
+                ])),
+              const Text('基础播放、字幕、画中画、继续观看、海报库及单文件下载免费。到期后保留已有来源、文件和记录，已加入的下载可继续。'),
+              const SizedBox(height: 8),
+              const Text('月、年方案权益相同。同等级方案通常在当前周期结束后切换，现有会员继续有效。价格、优惠及切换时间以华为支付页面为准。'),
+              if (product != null && product.description.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(top: 8), child: Text(product.description)),
+              TextButton.icon(onPressed: () => launchUrl(Uri.parse('https://afdian.com/a/aloereed'),
+                mode: LaunchMode.externalApplication), icon: const Icon(Icons.favorite_border), label: const Text('支持作者')),
+            ])],
+          ),
         ],
       ))),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+      // Checkout stays visible while the optional details scroll independently.
+      actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+      actions: [SizedBox(width: double.infinity, child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          if (price != null) ...[
+            Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text('${_planName(product!.id)} · ${price.displayPrice}',
+                style: theme.textTheme.titleLarge?.copyWith(color: colors.primary)),
+              if (price.originalPrice != null) Text(price.originalPrice!,
+                style: TextStyle(color: colors.onSurfaceVariant, decoration: TextDecoration.lineThrough)),
+            ]),
+            if (price.explanation != null) Text(price.explanation!, style: theme.textTheme.bodySmall),
+          ],
+          const SizedBox(height: 6),
+          Text('${product?.id == 'premium_1year' ? '按年' : '按月'}自动续费，可在“管理订阅”取消。', style: theme.textTheme.bodySmall),
+          const SizedBox(height: 10),
+          FilledButton(
+            onPressed: _iap.busy || product == null || !_iap.serverReady || _iap.pendingVerification ? null : _iap.purchase,
+            child: Text(_iap.pendingVerification ? '订单待验证' : membership.isPremium ? '订购或切换方案' : '开通${_planName(product?.id)}')),
+        ],
+      ))],
     );
   });
 }

@@ -1394,7 +1394,8 @@ class _PlayerTabState extends State<PlayerTab>
                         this.setState(() {});
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).primaryColor,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       ),
                     ),
                     ElevatedButton.icon(
@@ -1412,6 +1413,8 @@ class _PlayerTabState extends State<PlayerTab>
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
                             Theme.of(context).colorScheme.secondary,
+                        foregroundColor:
+                            Theme.of(context).colorScheme.onSecondary,
                       ),
                     ),
                   ],

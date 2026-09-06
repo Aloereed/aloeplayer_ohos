@@ -1,3 +1,4 @@
+import 'package:aloeplayer/services/member_access.dart';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,7 +31,7 @@ void main() {
   });
   test('default settings leave decoder rendering untouched', () async {
     final backend = FakeImageBackend();
-    final engine = MpvImageEnhancer(backend: backend);
+    final engine = MpvImageEnhancer(access: MemberAccess(paid: () => true), backend: backend);
     await engine.initialize();
     expect(backend.writes, 0);
     engine.dispose();
@@ -38,7 +39,7 @@ void main() {
   test('FSR changes actual output and disabling restores all original properties', () async {
     final backend = FakeImageBackend();
     final original = Map<String, String>.from(backend.values);
-    final engine = MpvImageEnhancer(backend: backend, shaderPath: () async => '/app/FSR.glsl');
+    final engine = MpvImageEnhancer(access: MemberAccess(paid: () => true), backend: backend, shaderPath: () async => '/app/FSR.glsl');
     engine.videoChanged(width: 1280, height: 720, gamma: 'bt.1886', format: 'yuv420p');
     await engine.apply(const ImageEnhancementSettings(mode: UpscaleMode.fsr1080, deband: true, contrast: 10));
     expect(backend.values['glsl-shaders'], '/app/FSR.glsl');
@@ -52,7 +53,7 @@ void main() {
   test('HDR skips SDR shader and unsupported options roll back instead of pretending success', () async {
     final backend = FakeImageBackend();
     var shaderLoads = 0;
-    final engine = MpvImageEnhancer(backend: backend, shaderPath: () async { shaderLoads++; return '/app/FSR.glsl'; });
+    final engine = MpvImageEnhancer(access: MemberAccess(paid: () => true), backend: backend, shaderPath: () async { shaderLoads++; return '/app/FSR.glsl'; });
     engine.videoChanged(width: 1280, height: 720, gamma: 'pq', format: 'yuv420p10');
     await engine.apply(const ImageEnhancementSettings(mode: UpscaleMode.fsr1080));
     expect(shaderLoads, 0);
@@ -76,7 +77,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'mpv.image-enhancement.v1': jsonEncode(
       const ImageEnhancementSettings(mode: UpscaleMode.fsr1080, deband: true).toJson())});
     final backend = FakeImageBackend()..reject = 'deband';
-    final engine = MpvImageEnhancer(backend: backend, shaderPath: () async => '/app/FSR.glsl');
+    final engine = MpvImageEnhancer(access: MemberAccess(paid: () => true), backend: backend, shaderPath: () async => '/app/FSR.glsl');
     engine.videoChanged(width: 1280, height: 720);
     await engine.initialize();
     expect(engine.error, isNotNull);
@@ -86,7 +87,7 @@ void main() {
   });
   test('rapid preset changes and video updates preserve the last user choice', () async {
     final backend = FakeImageBackend();
-    final engine = MpvImageEnhancer(backend: backend, shaderPath: () async => '/app/FSR.glsl');
+    final engine = MpvImageEnhancer(access: MemberAccess(paid: () => true), backend: backend, shaderPath: () async => '/app/FSR.glsl');
     await engine.initialize();
     engine.videoChanged(width: 1280, height: 720);
     final first = engine.apply(const ImageEnhancementSettings(mode: UpscaleMode.fsr4k));

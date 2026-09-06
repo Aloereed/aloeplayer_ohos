@@ -1,3 +1,4 @@
+import 'member_access.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
@@ -16,9 +17,10 @@ class DownloadManager extends ChangeNotifier {
   static final instance = DownloadManager._();
   static const _device = MethodChannel('aloeplayer/device-tools');
   String? backgroundNotice;
-  DownloadManager._();
+  final MemberAccess access;
+  DownloadManager._() : access = MemberAccess.instance;
   @visibleForTesting
-  DownloadManager.forTesting({required String directory, required Future<FileService> Function(String serverId) openSource}) {
+  DownloadManager.forTesting({required String directory, required Future<FileService> Function(String serverId) openSource, MemberAccess? access}) : access = access ?? MemberAccess.instance {
     _directoryOverride = directory;
     _openSourceOverride = openSource;
   }
@@ -58,6 +60,25 @@ class DownloadManager extends ChangeNotifier {
     });
     return _writes;
   }
+  /// Once accepted, tasks can finish or resume even after membership expires.
+  Future<({int added, int skipped, int failed})> addBatch(ServerConfig config, List<FileItem> files) async {
+    await access.require(MemberFeature.batchDownload);
+    if (files.isEmpty || files.length > 100 || files.any((f) => f.isDirectory || f.size < 0)) {
+      throw ArgumentError('每批请选择 1 至 100 个已知大小的文件');
+    }
+    await initialize();
+    var added = 0, skipped = 0, failed = 0;
+    final paths = <String>{};
+    for (final file in files) {
+      if (!paths.add(file.path) || tasks.any((t) => t.serverId == config.id && t.remotePath == file.path && t.status != DownloadStatus.canceled)) {
+        skipped++;
+        continue;
+      }
+      try { await add(config, file); added++; } catch (_) { failed++; }
+    }
+    return (added: added, skipped: skipped, failed: failed);
+  }
+
   Future<void> add(ServerConfig config, FileItem file) async {
     await initialize();
     if (tasks.any((t) => t.serverId == config.id && t.remotePath == file.path && t.status != DownloadStatus.canceled && t.status != DownloadStatus.completed)) {

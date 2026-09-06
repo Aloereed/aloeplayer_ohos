@@ -1,3 +1,5 @@
+import '../services/member_access.dart';
+import '../widgets/member_feature_prompt.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../services/media_server_client.dart';
@@ -23,7 +25,7 @@ class _MediaServersPageState extends State<MediaServersPage> {
     catch (e) { if (mounted) setState(() => _error = _serverError(e)); }
   }
   Future<void> _login([MediaServerConnection? connection]) async {
-    final result = await showDialog<MediaServerConnection>(context: context, builder: (_) => _LoginDialog(existing: connection));
+    final result = await showMediaServerLogin(context, existing: connection);
     if (result == null) return;
     try { await MediaServerStore.save(result); await _load(); }
     catch (e) { if (mounted) setState(() => _error = _serverError(e)); }
@@ -65,11 +67,20 @@ class _LoginDialogState extends State<_LoginDialog> {
   Future<void> _login() async {
     setState(() { _busy = true; _error = null; });
     try {
+      if (!await MemberAccess.instance.canAddSource(kind: _kind, existingId: widget.existing?.id)) {
+        if (!mounted) return;
+        if (!await requestMemberFeature(context, MemberFeature.multipleSources)) {
+          if (mounted) setState(() => _busy = false);
+          return;
+        }
+      }
+      if (!mounted) return;
       final result = await MediaServerClient.login(url: _url.text, username: _user.text.trim(), password: _password.text, kind: _kind, id: widget.existing?.id);
       if (mounted) Navigator.pop(context, result);
     } catch (e) { if (mounted) setState(() { _busy = false; _error = _serverError(e); }); }
   }
   @override Widget build(BuildContext context) => AlertDialog(title: const Text('登录媒体服务器'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+    const Text('免费版可添加 1 个 Jellyfin 和 1 个 Emby，已有来源继续保留。'),
     DropdownButtonFormField<String>(initialValue: _kind, items: ['Jellyfin', 'Emby'].map((k) => DropdownMenuItem(value: k, child: Text(k))).toList(), onChanged: _busy ? null : (value) => setState(() => _kind = value!)),
     TextField(controller: _url, enabled: !_busy, decoration: const InputDecoration(labelText: '服务器地址', hintText: 'https://server.example.com')),
     TextField(controller: _user, enabled: !_busy, decoration: const InputDecoration(labelText: '用户名')),

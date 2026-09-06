@@ -1,0 +1,4 @@
+# Anime4K files are pinned upstream bytes and verified with SHA-256 at runtime.
+# Preserve their original line endings and upstream whitespace across checkouts.
+Assets/shaders/anime4k/*.glsl -text -whitespace
+Assets/shaders/anime4k/LICENSE -text

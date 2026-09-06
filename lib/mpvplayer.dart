@@ -391,7 +391,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   bool _backgroundPlayEnabled = true;
   bool _useSeekToLatest = false;
   bool _usePlaylist = true;
-  int _mpvHardwareDecoding = 0;
+  int _mpvHardwareDecoding = 1;
   bool _isInBackground = false;
   AppLifecycleState? _lastLifecycleState;
 
@@ -489,7 +489,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     }));
     _subscriptions.add(player.stream.log.listen((log) {
       if ((log.level == 'error' || log.level == 'fatal') && RegExp(r'shader|glsl', caseSensitive: false).hasMatch(log.text)) {
-        _imageEnhancer.shaderFailed();
+        _imageEnhancer.shaderFailed(detail: log.text);
       }
     }));
     _imageEnhancer.initialize();
@@ -608,7 +608,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       _backgroundPlayEnabled = true; // 默认启用
       _useSeekToLatest = false; // 默认不启用
       _usePlaylist = true; // 默认启用
-      _mpvHardwareDecoding = 0; // 默认关闭
+      _mpvHardwareDecoding = 1; // 默认自动（推荐）
     }
   }
 
@@ -3146,15 +3146,11 @@ class _MPVPlayerState extends State<MPVPlayer>
                               child: ElevatedButton.icon(
                                 icon: const Icon(
                                   Icons.looks_one,
-                                  color: Colors.white,
                                 ),
                                 label: Text(
                                   _pointA != null
                                       ? _formatDuration(_pointA!)
                                       : '设置A点',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                  ),
                                 ),
                                 onPressed: () {
                                   setState(
@@ -3167,15 +3163,11 @@ class _MPVPlayerState extends State<MPVPlayer>
                               child: ElevatedButton.icon(
                                 icon: const Icon(
                                   Icons.looks_two,
-                                  color: Colors.white,
                                 ),
                                 label: Text(
                                   _pointB != null
                                       ? _formatDuration(_pointB!)
                                       : '设置B点',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                  ),
                                 ),
                                 onPressed: () {
                                   setState(

@@ -1,4 +1,4 @@
-import 'serial_executor.dart';
+import 'member_access.dart';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,7 +19,7 @@ class MediaServerConnection {
   }
 }
 class MediaServerStore {
-  static final _serial = SerialExecutor();
+  static final _serial = MemberAccess.sourceWrites;
   static Future<List<MediaServerConnection>> load() => _serial.run(_load);
   static Future<List<MediaServerConnection>> _load() async {
     final raw = (await SharedPreferences.getInstance()).getString('media-server.connections') ?? '[]';
@@ -32,6 +32,7 @@ class MediaServerStore {
   }
   static Future<void> save(MediaServerConnection connection) => _serial.run(() async {
     final all = await _load();
+    await MemberAccess.instance.requireNewSource(kind: connection.kind, existingId: connection.id);
     all.removeWhere((c) => c.id == connection.id);
     await CredentialStore.write('media-server.${connection.id}', connection.token);
     all.add(connection);

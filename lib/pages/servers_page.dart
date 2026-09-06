@@ -61,6 +61,7 @@ class _ServersPageState extends State<ServersPage> {
 
   Future<void> _addFileServer(
       {ServerConfig? existing, ServerType type = ServerType.webdav}) async {
+    if (!mounted) return;
     final result = await showDialog<ServerConfig>(
         context: context,
         builder: (_) =>
@@ -76,6 +77,7 @@ class _ServersPageState extends State<ServersPage> {
 
   Future<void> _addMediaServer(
       {MediaServerConnection? existing, String kind = 'Jellyfin'}) async {
+    if (!mounted) return;
     final result =
         await showMediaServerLogin(context, existing: existing, kind: kind);
     if (result == null) return;

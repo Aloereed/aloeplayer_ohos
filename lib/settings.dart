@@ -787,8 +787,8 @@ class SettingsService {
 
   Future<int> getMpvHardwareDecoding() async {
     final prefs = await SharedPreferences.getInstance();
-    final mode = prefs.getInt(_mpvHardwareDecodingKey) ?? 0;
-    return (mode >= 0 && mode <= 2) ? mode : 0;
+    final mode = prefs.getInt(_mpvHardwareDecodingKey) ?? 1;
+    return (mode >= 0 && mode <= 2) ? mode : 1;
   }
 
   Future<void> saveUsePcMode(bool usePcMode) async {

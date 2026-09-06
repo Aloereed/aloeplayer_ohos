@@ -1,11 +1,16 @@
+import 'member_badge.dart';
+import '../services/member_access.dart';
+import 'member_feature_prompt.dart';
 import 'harmony_switch_tile.dart';
 import 'package:flutter/material.dart';
 import '../services/mpv_image_enhancement.dart';
 
-Future<void> showImageEnhancementSheet(BuildContext context, MpvImageEnhancer enhancer) =>
-  showModalBottomSheet<void>(context: context, isScrollControlled: true, useSafeArea: true,
+Future<void> showImageEnhancementSheet(BuildContext context, MpvImageEnhancer enhancer) {
+  enhancer.captureDiagnostics('panel_open');
+  return showModalBottomSheet<void>(context: context, isScrollControlled: true, useSafeArea: true,
     showDragHandle: true, constraints: const BoxConstraints(maxWidth: 700),
     builder: (_) => FractionallySizedBox(heightFactor: .9, child: ImageEnhancementSheet(enhancer: enhancer)));
+}
 
 class ImageEnhancementSheet extends StatefulWidget {
   final MpvImageEnhancer enhancer;
@@ -30,8 +35,20 @@ class _ImageEnhancementSheetState extends State<ImageEnhancementSheet> {
     super.dispose();
   }
   Future<void> _apply(ImageEnhancementSettings next) async {
-    await widget.enhancer.apply(next);
-    if (mounted) setState(() => _draft = widget.enhancer.settings);
+    try {
+      await widget.enhancer.access.initialize();
+      if (!mounted) return;
+      if (widget.enhancer.needsMember(next) && !await requestMemberFeature(context, MemberFeature.imageQuality)) return;
+      if (!mounted) return;
+      await widget.enhancer.apply(next);
+      if (mounted) setState(() => _draft = widget.enhancer.settings);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('暂时无法应用画质设置，请稍后重试')));
+    }
+  }
+  Future<void> _preset(ImageEnhancementSettings preset) async {
+    if (!await requestMemberFeature(context, MemberFeature.imageQuality) || !mounted) return;
+    await _apply(preset);
   }
   Widget _slider(String title, double value, ImageEnhancementSettings Function(double) update) => Column(children: [
     Row(children: [Expanded(child: Text(title)), Text(value.round().toString())]),
@@ -60,13 +77,22 @@ class _ImageEnhancementSheetState extends State<ImageEnhancementSheet> {
         for (final mode in UpscaleMode.values) Card(elevation: 0, margin: const EdgeInsets.only(bottom: 8),
           color: enhancer.settings.mode == mode ? colors.secondaryContainer : colors.surfaceContainerLow,
           child: ListTile(leading: Icon(enhancer.settings.mode == mode ? Icons.radio_button_checked : Icons.radio_button_unchecked),
-            title: Text(mode.label), subtitle: Text(mode.description),
+            title: mode == UpscaleMode.fsr4k || mode.isAnime4k ? MemberFeatureLabel(mode.label) : Text(mode.label), subtitle: Text(mode.description),
             onTap: enhancer.busy ? null : () => _apply(_draft.copyWith(mode: mode)))),
         Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(
           'FSR 1.0 使用空间超分与锐化，最多放大至原尺寸的 2 倍。原视频已达输出上限时不放大。HDR / RGB 视频使用高清缩放。若发热或卡顿，请切回原始画质。',
           style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant))),
-        HarmonySwitchTile(contentPadding: EdgeInsets.zero, title: const Text('去色带'), subtitle: const Text('减轻天空、暗部渐变中的色阶条纹'),
+        Padding(padding: const EdgeInsets.only(bottom: 12), child: Text('Anime4K 适合 SDR 动漫，采用 Mode A（Fast）进行线条修复与超分。每边最多放大 2 倍、最高 4K；与 FSR 切换使用。效果取决于片源，若发热或卡顿可切回高清缩放。', style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant))),
+        HarmonySwitchTile(contentPadding: EdgeInsets.zero, title: const MemberFeatureLabel('去色带'), subtitle: const Text('减轻天空、暗部渐变中的色阶条纹'),
           value: enhancer.settings.deband, onChanged: enhancer.busy ? null : (v) => _apply(_draft.copyWith(deband: v))),
+        const Divider(height: 32),
+        MemberFeatureLabel('画质预设', style: theme.textTheme.titleSmall),
+        const Text('一键应用，可继续手动调整。效果取决于片源和设备。'),
+        Wrap(spacing: 8, children: [
+          ActionChip(label: const Text('动漫'), onPressed: enhancer.busy ? null : () => _preset(const ImageEnhancementSettings(mode: UpscaleMode.anime4kFast))),
+          ActionChip(label: const Text('老片'), onPressed: enhancer.busy ? null : () => _preset(const ImageEnhancementSettings(mode: UpscaleMode.fsr1080, deband: true, contrast: 3))),
+          ActionChip(label: const Text('高清'), onPressed: enhancer.busy ? null : () => _preset(const ImageEnhancementSettings(mode: UpscaleMode.fsr4k, deband: true))),
+        ]),
         const Divider(height: 32), Text('色彩调节', style: theme.textTheme.titleSmall), const SizedBox(height: 16),
         _slider('亮度', _draft.brightness, (v) => _draft.copyWith(brightness: v)),
         _slider('对比度', _draft.contrast, (v) => _draft.copyWith(contrast: v)),

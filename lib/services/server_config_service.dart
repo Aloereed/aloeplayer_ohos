@@ -1,4 +1,4 @@
-import 'serial_executor.dart';
+import 'member_access.dart';
 import 'credential_store.dart';
 // lib/services/server_config_service.dart
 import 'dart:convert';
@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/server_config.dart';
 
 class ServerConfigService {
-  static final _serial = SerialExecutor();
+  static final _serial = MemberAccess.sourceWrites;
   static const String _configsKey = 'server_configs';
   static const String _activeConfigIdKey = 'active_server_config_id';
 
@@ -58,7 +58,7 @@ class ServerConfigService {
       // 更新现有配置
       configs[existingIndex] = config;
     } else {
-      // 添加新配置
+      // Existing sources remain usable and editable after expiry.
       configs.add(config);
     }
 

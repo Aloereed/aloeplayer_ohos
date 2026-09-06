@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// 启动画面
 /// 应用启动时显示的品牌化界面
@@ -22,10 +23,19 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _fadeAnimation;
   late Animation<double> _shimmerAnimation;
   late Animation<double> _fadeOutAnimation;
+  String _version = '';
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) setState(() => _version = info.version);
+    } catch (_) { /* Branding remains visible if package information is unavailable. */ }
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadVersion();
 
     _controller = AnimationController(
       duration: const Duration(milliseconds: 2000),
@@ -221,7 +231,7 @@ class _SplashScreenState extends State<SplashScreen>
                       return Opacity(
                         opacity: _fadeAnimation.value,
                         child: Text(
-                          'Version 3.0',
+                          _version.isEmpty ? '' : 'Version $_version',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,

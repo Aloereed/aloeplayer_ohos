@@ -1,3 +1,7 @@
+import '../widgets/member_badge.dart';
+import '../services/member_access.dart';
+import '../widgets/member_feature_prompt.dart';
+import '../widgets/batch_download_sheet.dart';
 import '../services/download_manager.dart';
 import 'downloads_page.dart';
 import '../models/playback_media.dart';
@@ -281,6 +285,28 @@ class _BrowserPageState extends State<BrowserPage> {
     }
   }
 
+  bool _addingBatch = false;
+  Future<void> _batchDownload() async {
+    if (_addingBatch || _isLoading) return;
+    final files = _displayedFiles.where((f) => !f.isDirectory && f.size >= 0).toList();
+    if (files.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('当前列表没有可下载的文件')));
+      return;
+    }
+    setState(() => _addingBatch = true);
+    try {
+      final selected = await selectBatchDownloads(context, files);
+      if (selected == null || !mounted) return;
+      if (!await requestMemberFeature(context, MemberFeature.batchDownload) || !mounted) return;
+      final result = await DownloadManager.instance.addBatch(widget.serverConfig, selected);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已加入 ${result.added} 个，跳过已有任务 ${result.skipped} 个，失败 ${result.failed} 个')));
+      if (result.added > 0) await Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage()));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('部分任务可能已加入，请在下载任务中查看后重试')));
+    } finally { if (mounted) setState(() => _addingBatch = false); }
+  }
+
   Future<void> _downloadFile(FileItem file) async {
     try {
       await DownloadManager.instance.add(widget.serverConfig, file);
@@ -548,10 +574,15 @@ class _BrowserPageState extends State<BrowserPage> {
                 icon: const Icon(Icons.sort),
                 onPressed: _showSortDialog,
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () => _loadFiles(_currentPath),
-              ),
+              PopupMenuButton<String>(tooltip: '更多操作',
+                onSelected: (value) {
+                  if (value == 'refresh') _loadFiles(_currentPath);
+                  if (value == 'batch') _batchDownload();
+                }, itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'refresh', child: Text('刷新')),
+                  PopupMenuItem(value: 'batch', enabled: !_isLoading && !_addingBatch,
+                    child: _addingBatch ? const Text('正在添加下载…') : const MemberFeatureLabel('批量下载')),
+                ]),
             ],
           ],
         ),

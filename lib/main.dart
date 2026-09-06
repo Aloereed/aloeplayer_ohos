@@ -1,3 +1,5 @@
+import 'services/anime4k_shaders.dart';
+import 'services/member_access.dart';
 import 'services/ohos_iap_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/responsive_app_shell.dart';
@@ -74,6 +76,7 @@ import 'widgets/animated_widgets.dart';
 
 // late MyAudioHandler audioHandler;
 void main() {
+  Anime4kShaders.registerLicense();
   WidgetsFlutterBinding.ensureInitialized();
 
   // Flutter 3.41 OHOS currently omits dartPluginClass entries from the
@@ -239,6 +242,7 @@ Future<void> _initializeAfterFirstFrame(ThemeProvider themeProvider) async {
   });
   await runStep('HTTP settings', HttpServiceSettings.loadSettings);
   await runStep('membership', () => MembershipService().initialize());
+  await runStep('member access', MemberAccess.instance.initialize);
   if (Platform.operatingSystem == 'ohos') {
     await runStep('iap-listener', () async { OhosIapService.instance.start(); });
   }
