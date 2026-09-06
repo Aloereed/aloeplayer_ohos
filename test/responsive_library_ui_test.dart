@@ -7,6 +7,42 @@ import 'package:aloeplayer/widgets/responsive_app_shell.dart';
 import 'package:aloeplayer/widgets/video_library_tile.dart';
 
 void main() {
+  testWidgets('floating navigation reserves space for nested page actions', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final size in [const Size(320, 568), const Size(780, 360)]) {
+      tester.view.physicalSize = size;
+      for (final desktop in [false, true]) {
+        for (final scale in [1.0, 2.0]) {
+          var adds = 0;
+          var bottomActions = 0;
+          await tester.pumpWidget(MaterialApp(home: MediaQuery(
+            data: MediaQueryData(size: size, padding: const EdgeInsets.only(bottom: 34),
+              textScaler: TextScaler.linear(scale)),
+            child: ResponsiveAppShell(desktop: desktop, fullScreen: false,
+              selectedIndex: 0, onSelected: (_) {}, child: PageView(children: [
+                Scaffold(body: Align(alignment: Alignment.bottomLeft,
+                  child: TextButton(onPressed: () => bottomActions++, child: const Text('底部操作'))),
+                  floatingActionButton: FloatingActionButton.extended(
+                    onPressed: () => adds++, label: const Text('添加视频'))),
+              ])),
+          )));
+          await tester.pumpAndSettle();
+          final navigation = tester.getRect(find.byType(HarmonyNavigationBar));
+          expect(tester.getRect(find.byType(FloatingActionButton)).bottom,
+            lessThanOrEqualTo(navigation.top));
+          expect(tester.getRect(find.text('底部操作')).bottom,
+            lessThanOrEqualTo(navigation.top));
+          await tester.tap(find.text('添加视频'));
+          await tester.tap(find.text('底部操作'));
+          expect(adds, 1);
+          expect(bottomActions, 1);
+          expect(tester.takeException(), isNull);
+        }
+      }
+    }
+  });
   testWidgets('glass navigation keeps large text tappable and removes blur in high contrast', (tester) async {
     tester.view.physicalSize = const Size(320, 568);
     tester.view.devicePixelRatio = 1;

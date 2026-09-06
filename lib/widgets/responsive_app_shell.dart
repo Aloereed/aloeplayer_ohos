@@ -19,7 +19,9 @@ class ResponsiveAppShell extends StatelessWidget {
   @override Widget build(BuildContext context) => LayoutBuilder(builder: (context, size) {
     final colors = Theme.of(context).colorScheme;
     if (fullScreen) return child;
-    if (!desktop || size.maxWidth < 840) return Scaffold(extendBody: true, body: child,
+    // Nested page Scaffolds need the navigation's measured height reserved,
+    // including large text and the system inset, to keep their FABs reachable.
+    if (!desktop || size.maxWidth < 840) return Scaffold(body: child,
       bottomNavigationBar: HarmonyNavigationBar(selectedIndex: selectedIndex, onSelected: onSelected, destinations: destinations));
     final expanded = size.maxWidth >= 1200;
     return CallbackShortcuts(bindings: {
