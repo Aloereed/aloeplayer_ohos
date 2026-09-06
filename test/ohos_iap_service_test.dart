@@ -101,5 +101,34 @@ void main() {
     expect(service.pendingVerification, isFalse);
     expect(store.completed, ['diagnose']);
   });
+  test('confirmed inactive order releases checkout without delivery', () async {
+    service = OhosIapService(configuration: () async => {'product_id': 'premium_monthly', 'account_binding': 'bound-account'},
+      verify: (purchase) async => throw DioException(requestOptions: RequestOptions(),
+        response: Response(requestOptions: RequestOptions(), statusCode: 410, data: {
+          'detail': {'code': 'subscription_inactive', 'purchase_id': purchase.purchaseID,
+            'product_id': 'premium_monthly'}})));
+    await service.load();
+    store.updates.add([receipt('expired')]); await Future<void>.delayed(Duration.zero);
+    expect(service.pendingVerification, isFalse);
+    expect(service.message, contains('已失效'));
+    expect(store.completed, isEmpty);
+    // Repeated restore callbacks for the old order cannot lock checkout again.
+    store.updates.add([receipt('expired', status: PurchaseStatus.restored)]);
+    await Future<void>.delayed(Duration.zero);
+    expect(service.pendingVerification, isFalse);
+    await service.purchase(); expect(store.launches, 1);
+  });
+  test('unrelated terminal response cannot release a pending order', () async {
+    service = OhosIapService(configuration: () async => {'product_id': 'premium_monthly', 'account_binding': 'bound-account'},
+      verify: (_) async => throw DioException(requestOptions: RequestOptions(),
+        response: Response(requestOptions: RequestOptions(), statusCode: 410, data: {
+          'detail': {'code': 'subscription_inactive', 'purchase_id': 'different-order',
+            'product_id': 'premium_monthly'}})));
+    await service.load();
+    store.updates.add([receipt('pending')]); await Future<void>.delayed(Duration.zero);
+    expect(service.pendingVerification, isTrue);
+    await service.purchase(); expect(store.launches, 0);
+    expect(store.completed, isEmpty);
+  });
   });
 }

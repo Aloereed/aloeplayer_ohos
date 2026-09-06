@@ -71,7 +71,16 @@ class OhosIapService extends ChangeNotifier {
       // Log only stage/status, never credentials, receipt bodies or purchase tokens.
       final status = error is DioException ? error.response?.statusCode : null;
       debugPrint('[AloeIAP] stage=$stage failed type=${error.runtimeType} http=${status ?? 0}');
-      if (stage == 'complete') {
+      final body = error is DioException ? error.response?.data : null;
+      final detail = body is Map ? body['detail'] : null;
+      if (stage == 'verify' && status == 410 && detail is Map &&
+          detail['code'] == 'subscription_inactive' &&
+          detail['purchase_id'] == id && detail['product_id'] == productId) {
+        // Only an authenticated server determination for THIS order releases it.
+        // An expired purchase is not a delivery and must not be acknowledged.
+        _pending.remove(id);
+        message = '原订阅已失效，可重新开通月会员';
+      } else if (stage == 'complete') {
         message = '会员已验证，商店确认暂未完成，请恢复购买重试；请勿重复支付';
       } else if (status == 401 || status == 403) {
         message = '登录已失效，请重新登录购买时的应用账号，再恢复购买；请勿重复支付';
