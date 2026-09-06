@@ -13,7 +13,8 @@ param(
 
     [switch]$Offline,
     [switch]$Locked,
-    [switch]$NoVersionBump
+    [switch]$NoVersionBump,
+    [switch]$UseCurrentProfile
 )
 
 $ErrorActionPreference = "Stop"
@@ -113,21 +114,28 @@ $buildProfilePath = "ohos\build-profile.json5"
 $buildProfileSource = "ohos\build-profile.json5.$Config"
 
 # 检查源配置文件是否存在
-if (-not (Test-Path $buildProfileSource)) {
+if ($UseCurrentProfile -and -not (Test-Path $buildProfilePath)) {
+    throw "Current build profile does not exist: $buildProfilePath"
+}
+if (-not $UseCurrentProfile -and -not (Test-Path $buildProfileSource)) {
     Write-Error "配置文件不存在: $buildProfileSource"
     exit 1
 }
 
 # 备份当前配置文件（如果存在）
-if (Test-Path $buildProfilePath) {
+if (-not $UseCurrentProfile -and (Test-Path $buildProfilePath)) {
     Write-Host "备份当前配置文件..."
     Copy-Item $buildProfilePath "$buildProfilePath.backup" -Force
 }
 
 # 复制对应的配置文件
-Write-Host "使用配置: $Config"
-Write-Host "复制 $buildProfileSource 到 $buildProfilePath"
-Copy-Item $buildProfileSource $buildProfilePath -Force
+if ($UseCurrentProfile) {
+    Write-Host "Using existing build profile: $buildProfilePath"
+} else {
+    Write-Host "使用配置: $Config"
+    Write-Host "复制 $buildProfileSource 到 $buildProfilePath"
+    Copy-Item $buildProfileSource $buildProfilePath -Force
+}
 
 try {
     Write-Host "Flutter SDK: $FlutterRoot" -ForegroundColor Cyan
