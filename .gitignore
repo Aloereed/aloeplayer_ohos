@@ -45,3 +45,7 @@ app.*.map.json
 nul
 .env
 lib/env/env.g.dart
+
+# Local Huawei IAP server credentials
+/issuer_config.txt
+/IAPKey_*.p8
