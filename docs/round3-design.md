@@ -1,5 +1,7 @@
 # 中文标题与鸿蒙风格调整
 
+最新交付：`30-harmony-luminous-design` / `3.1.1+178` / `4c27c57`。标题独立回退包：`29-readable-chinese-titles` / `dbee7d3`。预览见 [界面图库](../build/ui-review/index.html)。
+
 ## 29 — 中文标题
 
 普通文件路径不再经过 URI.path 后直接显示；URI 使用解码后的 pathSegments，且只解码一次。普通文件名里的百分号和加号保留，媒体服务器提供的片名保留。新增 2 项回归通过，HAP 编译与 canonical 时间校验通过。
