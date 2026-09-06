@@ -54,8 +54,7 @@ function Repair-MediaKitVideoSurfaceDispose([string]$PluginRoot) {
     }
 }
 
-function Repair-MediaKitNativeDispose([string]$MediaKitVideoRoot) {
-    $mediaKitRoot = Join-Path (Split-Path -Parent $MediaKitVideoRoot) 'media_kit'
+function Repair-MediaKitNativeDispose([string]$mediaKitRoot) {
     $nativePlayerPath = Join-Path $mediaKitRoot 'lib\src\player\native\player\real.dart'
     if (-not (Test-Path -LiteralPath $nativePlayerPath)) {
         throw "media_kit native player source not found: $nativePlayerPath"
@@ -90,6 +89,16 @@ function Repair-MediaKitNativeDispose([string]$MediaKitVideoRoot) {
 
 $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
 $ohosPlugins = @($metadata.plugins.ohos)
+
+# Resolve the player independently: media_kit_video is now a local fork and no
+# longer shares the Git cache directory with media_kit.
+$packageConfigPath = Join-Path $projectPath '.dart_tool\package_config.json'
+$packageConfig = Get-Content -LiteralPath $packageConfigPath -Raw | ConvertFrom-Json
+$mediaKitPackage = $packageConfig.packages | Where-Object { $_.name -eq 'media_kit' }
+if ($mediaKitPackage) {
+    $mediaKitUri = [Uri]::new([Uri]::new($packageConfigPath), [string]$mediaKitPackage.rootUri)
+    Repair-MediaKitNativeDispose $mediaKitUri.LocalPath
+}
 
 if ($ohosPlugins.Count -eq 0) {
     Write-Host 'No OHOS plugins found in Flutter metadata.' -ForegroundColor Yellow
@@ -137,7 +146,6 @@ foreach ($plugin in $ohosPlugins) {
                 Copy-Item -LiteralPath $_.FullName -Destination $destinationOhos -Recurse -Force
             }
         if ([string]$plugin.name -eq 'media_kit_video') {
-            Repair-MediaKitNativeDispose $sourceRoot
             Repair-MediaKitVideoSurfaceDispose $destinationRoot
             Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ohos_patches\ohos_video_controller.dart') -Destination (Join-Path $sourceRoot 'lib\src\video_controller\ohos_video_controller\real.dart') -Force
         }

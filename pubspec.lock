@@ -948,11 +948,9 @@ packages:
   media_kit_video:
     dependency: "direct main"
     description:
-      path: media_kit_video
-      ref: f609ef6244191d9ceaa6d7b547d76032f1f554af
-      resolved-ref: f609ef6244191d9ceaa6d7b547d76032f1f554af
-      url: "https://github.com/ErBWs/media-kit.git"
-    source: git
+      path: "third_party/media_kit_video"
+      relative: true
+    source: path
     version: "1.3.1"
   meta:
     dependency: transitive

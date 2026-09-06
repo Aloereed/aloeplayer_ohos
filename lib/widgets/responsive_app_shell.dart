@@ -12,7 +12,7 @@ class ResponsiveAppShell extends StatelessWidget {
     required this.selectedIndex, required this.onSelected, required this.child});
   static const destinations = [
     (label: '视频库', icon: CupertinoIcons.play_rectangle, selected: CupertinoIcons.play_rectangle_fill),
-    (label: '音频库', icon: CupertinoIcons.music_note_list, selected: CupertinoIcons.music_note_2),
+    (label: '音频库', icon: CupertinoIcons.music_note_list, selected: CupertinoIcons.music_note_list),
     (label: '媒体库', icon: CupertinoIcons.square_stack_3d_up, selected: CupertinoIcons.square_stack_3d_up_fill),
     (label: '设置', icon: CupertinoIcons.gear, selected: CupertinoIcons.gear_solid),
   ];

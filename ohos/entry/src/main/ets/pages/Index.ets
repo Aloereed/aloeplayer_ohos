@@ -15,6 +15,7 @@
 
 import common from '@ohos.app.ability.common';
 import { FlutterPage } from '@ohos/flutter_ohos'
+import { MediaKitNativeVideoHost } from 'media_kit_video'
 
 let storage = LocalStorage.getShared()
 const EVENT_BACK_PRESS = 'EVENT_BACK_PRESS'
@@ -27,9 +28,10 @@ struct Index {
 
 
   build() {
-    Column() {
-      FlutterPage({ viewId: this.viewId })
-    }
+    Stack() {
+      MediaKitNativeVideoHost()
+      FlutterPage({ viewId: this.viewId, xComponentColor: Color.Transparent })
+    }.width('100%').height('100%')
   }
 
   onBackPress(): boolean {

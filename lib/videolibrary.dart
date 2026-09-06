@@ -1363,7 +1363,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               hint: '搜索当前文件夹', searching: _mobileSearch || _searchQuery.isNotEmpty,
               controller: _searchTextController, focusNode: _searchFocusNode, onChanged: _filterItems,
               onSearchChanged: (value) => setState(() => _mobileSearch = value)),
-        actions: [IconButton(tooltip: '刷新视频库', onPressed: _loadItems, icon: const Icon(Icons.refresh_rounded)),
+        actions: [IconButton(tooltip: '播放历史', onPressed: _openHistory, icon: const Icon(Icons.history_rounded)),
+          IconButton(tooltip: '刷新视频库', onPressed: _loadItems, icon: const Icon(Icons.refresh_rounded)),
           if (desktop) Padding(padding: const EdgeInsets.only(right: 20), child: FilledButton.icon(
             onPressed: () => _showAddOptionsDialog(context), icon: const Icon(Icons.add), label: const Text('添加视频')))],
       ),
@@ -1421,6 +1422,11 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     }
   }
 
+  Future<void> _openHistory() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryPage(
+      getOpenFile: widget.getopenfile, startPlayerPage: widget.startPlayerPage)));
+  }
+
   Future<void> _showAddOptionsDialog(BuildContext context) async {
     final destination = _currentPath.replaceFirst('/storage/Users/currentUser/Download/', 'Downloads/');
     final action = await showLocalImportSheet(context, destination: destination);
@@ -1435,9 +1441,6 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         case LocalImportAction.webdav: _openWebDavFileManager(context);
         case LocalImportAction.playFile: await _openFile();
         case LocalImportAction.playUrl: _showUrlDialog(context);
-        case LocalImportAction.history:
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryPage(
-            getOpenFile: widget.getopenfile, startPlayerPage: widget.startPlayerPage)));
       }
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('未能完成添加，请检查文件权限和剩余空间后重试')));

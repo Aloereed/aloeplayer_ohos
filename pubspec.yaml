@@ -187,10 +187,7 @@ dependency_overrides:
       ref: f609ef6244191d9ceaa6d7b547d76032f1f554af
       url: https://github.com/ErBWs/media-kit.git
   media_kit_video:
-    git:
-      path: media_kit_video
-      ref: f609ef6244191d9ceaa6d7b547d76032f1f554af
-      url: https://github.com/ErBWs/media-kit.git
+    path: third_party/media_kit_video
   # Pin transitive OHOS forks as well as direct dependencies.
   file_selector_ohos:
     git:
@@ -263,4 +260,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 4.0.0+198
+version: 4.0.0+199

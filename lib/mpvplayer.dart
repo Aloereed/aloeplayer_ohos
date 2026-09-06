@@ -256,11 +256,12 @@ class _BrightnessSliderState extends State<BrightnessSlider> {
 
 class MPVPlayer extends StatefulWidget {
   final String filePath;
+  final bool nativeHdr;
   final List<PlaybackMedia>? mediaQueue;
   final int? initialPositionMs;
   final Future<void> Function(PlaybackMedia media, int positionMs, bool stopped, bool playing)? onPlayback;
 
-  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue, this.onPlayback, this.initialPositionMs}) : super(key: key);
+  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue, this.onPlayback, this.initialPositionMs, this.nativeHdr = false}) : super(key: key);
 
   @override
   _MPVPlayerState createState() => _MPVPlayerState();
@@ -277,6 +278,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   final List<StreamSubscription> _subscriptions = [];
   bool _openingMedia = false;
   bool _disposing = false;
+  bool _switchingHdr = false;
   String _historyId = '';
   List<String> _openedPaths = [];
   bool _readyForRestore = false;
@@ -466,7 +468,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         // 启用 libass 渲染 ASS 字幕特效
         // 这些选项会传递给底层的 libmpv
         // vo: 'gpu',  // 使用 GPU 视频输出
-        libass: true,
+        libass: !(widget.nativeHdr && Platform.operatingSystem == 'ohos'),
         protocolWhitelist: const [
           'file',
           'http',
@@ -479,7 +481,10 @@ class _MPVPlayerState extends State<MPVPlayer>
         ],
       ),
     );
-    controller = VideoController(player);
+    controller = VideoController(player, configuration: VideoControllerConfiguration(
+      vo: widget.nativeHdr && Platform.operatingSystem == 'ohos' ? 'ohcodec' : null,
+      hwdec: widget.nativeHdr && Platform.operatingSystem == 'ohos' ? 'ohcodec' : null,
+    ));
     _imageEnhancer = MpvImageEnhancer(backend: PlayerImageBackend(player, controller));
     _subscriptions.add(player.stream.videoParams.listen((video) {
       final rotated = video.rotate == 90 || video.rotate == 270;
@@ -492,7 +497,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         _imageEnhancer.shaderFailed(detail: log.text);
       }
     }));
-    _imageEnhancer.initialize();
+    if (!widget.nativeHdr) _imageEnhancer.initialize();
     _initializeMedia();
 
     // 监听播放状态
@@ -625,6 +630,10 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   Future<void> _applyMpvHardwareDecoding() async {
     try {
+      if (widget.nativeHdr && Platform.operatingSystem == 'ohos') {
+        await (player.platform as NativePlayer).setProperty('hwdec', 'ohcodec');
+        return;
+      }
       _mpvHardwareDecoding =
           await _settingsService.getMpvHardwareDecoding();
       final hwdec = _mpvHardwareDecodingOption(_mpvHardwareDecoding);
@@ -2475,7 +2484,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         // height: 56, // remove fixed height
 
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          gradient: widget.nativeHdr ? null : LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
@@ -2743,7 +2752,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   Widget _buildTopBar() {
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: widget.nativeHdr ? null : LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
@@ -2754,6 +2763,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       ),
       child: ClipRRect(
         child: BackdropFilter(
+          enabled: !widget.nativeHdr,
           filter: ImageFilter.blur(
             sigmaX: _enableBlur ? 10 : 0,
             sigmaY: _enableBlur ? 10 : 0,
@@ -2805,7 +2815,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: widget.nativeHdr ? null : LinearGradient(
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
           colors: [
@@ -2816,6 +2826,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       ),
       child: ClipRRect(
         child: BackdropFilter(
+          enabled: !widget.nativeHdr,
           filter: ImageFilter.blur(
             sigmaX: _enableBlur ? 10 : 0,
             sigmaY: _enableBlur ? 10 : 0,
@@ -2965,6 +2976,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: BackdropFilter(
+            enabled: !widget.nativeHdr,
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Text(
               _formatDuration(_seekPosition!),
@@ -2980,6 +2992,22 @@ class _MPVPlayerState extends State<MPVPlayer>
     );
   }
 
+  Future<void> _switchNativeHdr(bool enabled) async {
+    if (_switchingHdr || _disposing) return;
+    setState(() => _switchingHdr = true);
+    final position = player.state.position.inMilliseconds;
+    await player.pause();
+    await _flushPosition();
+    if (!mounted || _disposing) return;
+    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(builder: (_) => MPVPlayer(
+      filePath: _currentFilePath,
+      mediaQueue: widget.mediaQueue,
+      initialPositionMs: position,
+      onPlayback: widget.onPlayback,
+      nativeHdr: enabled,
+    )));
+  }
+
   Widget _buildSettingsPanel() {
     return Positioned(
       right: 0,
@@ -2992,6 +3020,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         ),
         child: ClipRRect(
           child: BackdropFilter(
+            enabled: !widget.nativeHdr,
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: SafeArea(
               child: Column(
@@ -3023,6 +3052,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                     child: ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
+                        if (!widget.nativeHdr)
                         ListenableBuilder(listenable: _imageEnhancer, builder: (_, __) => Card(
                           color: const Color(0xFF183547), elevation: 0,
                           child: ListTile(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -3305,6 +3335,19 @@ class _MPVPlayerState extends State<MPVPlayer>
                             ],
                           ),
                         ),
+                        if (Platform.operatingSystem == 'ohos') ExpansionTile(
+                          title: const Text('实验功能', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                          iconColor: Colors.white54,
+                          collapsedIconColor: Colors.white54,
+                          children: [
+                            SwitchListTile(
+                              title: const Text('原生 HDR 输出', style: TextStyle(color: Colors.white)),
+                              subtitle: const Text('兼容性有限，需要设备硬解支持；不支持 ASS 特效和超分。切换后从当前进度重新打开。', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                              value: widget.nativeHdr,
+                              onChanged: _switchingHdr ? null : _switchNativeHdr,
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -3329,6 +3372,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         ),
         child: ClipRRect(
           child: BackdropFilter(
+            enabled: !widget.nativeHdr,
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: SafeArea(
               child: Column(
@@ -3664,6 +3708,7 @@ class _MPVPlayerState extends State<MPVPlayer>
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: BackdropFilter(
+                enabled: !widget.nativeHdr,
                 filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -3765,6 +3810,7 @@ class _MPVPlayerState extends State<MPVPlayer>
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
               child: BackdropFilter(
+                enabled: !widget.nativeHdr,
                 filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -3800,6 +3846,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       child: ClipRRect(
         borderRadius: BorderRadius.circular(15),
         child: BackdropFilter(
+          enabled: !widget.nativeHdr,
           filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
           child: Container(
             height: 200,
@@ -3882,6 +3929,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: BackdropFilter(
+            enabled: !widget.nativeHdr,
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Column(
               mainAxisSize: MainAxisSize.min,
