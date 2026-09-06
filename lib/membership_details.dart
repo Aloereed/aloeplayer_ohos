@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:aloeplayer/services/membership_service.dart';
 import 'package:aloeplayer/services/ohos_iap_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:aloeplayer/services/iap_price.dart';
 
 class MembershipDetailsDialog extends StatefulWidget {
   final MembershipService membershipService;
@@ -17,10 +18,14 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
     super.initState();
     _iap.load();
     _iap.addListener(_onIapChanged);
+    widget.membershipService.addListener(_onMembershipChanged);
     _refreshMembership();
   }
 
   bool _wasBusy = false;
+  void _onMembershipChanged() {
+    if (mounted) setState(() {});
+  }
   void _onIapChanged() {
     if (_wasBusy && !_iap.busy) _refreshMembership();
     _wasBusy = _iap.busy;
@@ -29,6 +34,7 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
   @override
   void dispose() {
     _iap.removeListener(_onIapChanged);
+    widget.membershipService.removeListener(_onMembershipChanged);
     super.dispose();
   }
 
@@ -45,6 +51,7 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
   Widget build(BuildContext context) => ListenableBuilder(listenable: _iap, builder: (context, _) {
     final colors = Theme.of(context).colorScheme;
     final product = _iap.product;
+    final price = product == null ? null : IapPrice.forProduct(product);
     final membership = widget.membershipService;
     return AlertDialog(
       title: const Text('会员服务'),
@@ -56,7 +63,7 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
           const SizedBox(height: 20),
           Wrap(spacing: 10, runSpacing: 8, children: [
             for (final plan in _iap.products)
-              ChoiceChip(label: Text('${_planName(plan.id)}  ${plan.price}'),
+              ChoiceChip(label: Text('${_planName(plan.id)}  ${IapPrice.forProduct(plan).displayPrice}'),
                 selected: product?.id == plan.id,
                 onSelected: _iap.busy ? null : (_) => _iap.selectProduct(plan.id)),
           ]),
@@ -64,7 +71,10 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
           Text(product?.title ?? '会员方案', style: Theme.of(context).textTheme.titleLarge),
           if (product != null) ...[
             const SizedBox(height: 8),
-            Text(product.price, style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: colors.primary)),
+            Text(price!.displayPrice, style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: colors.primary)),
+            if (price.originalPrice != null) Text(price.originalPrice!,
+              style: TextStyle(color: colors.onSurfaceVariant, decoration: TextDecoration.lineThrough)),
+            if (price.explanation != null) Text(price.explanation!, style: TextStyle(color: colors.primary)),
             if (product.description.isNotEmpty) Text(product.description),
           ],
           const SizedBox(height: 8),

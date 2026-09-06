@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_huawei/sign_in_with_huawei.dart';
@@ -12,7 +13,8 @@ enum MembershipStatus {
   expired, // 已过期
 }
 
-class MembershipService {
+class MembershipService extends ChangeNotifier {
+  int _membershipRevision = 0;
   static const String _membershipStatusKey = 'membership_status';
   static const String _expiryDateKey = 'membership_expiry_date';
   static const String _purchaseTokenKey = 'purchase_token';
@@ -126,6 +128,8 @@ class MembershipService {
 
   // 保存会员状态到本地存储
   Future<void> _saveMembershipStatus() async {
+    _membershipRevision++;
+    notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_membershipStatusKey, _currentStatus.index);
@@ -604,9 +608,8 @@ class MembershipService {
   }
 
   // 释放资源
-  void dispose() {
-    // 清理资源
-  }
+  @override
+  void dispose() { super.dispose(); }
 
   // 获取产品信息（用于UI显示）
   List<Map<String, dynamic>> getProductInfo() {
@@ -683,14 +686,17 @@ class MembershipService {
   // 获取我的订阅
   Future<Map<String, List<Subscription>>> fetchMySubscriptions() async {
     if (_apiToken == null) return {};
+    final token = _apiToken;
+    final revision = _membershipRevision;
     try {
       final dio = Dio();
       final response = await dio.get(
         '$_apiBaseUrl/orders/subscriptions/my',
         options: Options(
-          headers: {'Authorization': 'Bearer $_apiToken'},
+          headers: {'Authorization': 'Bearer $token'},
         ),
       );
+      if (_apiToken != token || _membershipRevision != revision) return {};
       if (response.statusCode == 200) {
         final data = response.data;
         final active = (data['active_subscriptions'] as List)

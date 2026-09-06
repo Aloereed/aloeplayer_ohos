@@ -943,10 +943,21 @@ class _SettingsTabState extends State<SettingsTab> {
   @override
   void initState() {
     super.initState();
+    _membershipService.addListener(_onMembershipChanged);
     _loadSubtitleFontSize();
     _backgroundPlayFuture = _settingsService.getBackgroundPlay();
     // _membershipService.initialize(); // Move to main.dart
     _refreshMembershipInfo();
+  }
+
+  void _onMembershipChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _membershipService.removeListener(_onMembershipChanged);
+    super.dispose();
   }
 
   Future<void> _refreshMembershipInfo() async {

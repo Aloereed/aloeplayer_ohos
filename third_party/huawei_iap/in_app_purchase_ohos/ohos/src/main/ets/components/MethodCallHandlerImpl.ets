@@ -148,7 +148,10 @@ export class MethodCallHandlerImpl implements MethodCallHandler {
         let resultTemp = result.map((value) => {
           validProductsList.push(value.id)
           this.productDetailsMap.set(value.id, value)
-          return ObjToMap(value)
+          const mapped = ObjToMap(value)
+          // Preserve nested subscription/offer fields through the Flutter codec.
+          mapped.set('jsonRepresentation', JSON.stringify(value))
+          return mapped
         })
         productList.push(...resultTemp)
       }).catch((err: BusinessError) => {
