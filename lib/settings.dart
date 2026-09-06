@@ -25,6 +25,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'services/membership_service.dart';
 import 'membership_details.dart';
+import 'feedback_page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 enum SortType { none, name, modifiedDate }
@@ -2359,6 +2360,18 @@ class _SettingsTabState extends State<SettingsTab> {
   Widget _buildAboutSection(BuildContext context) {
     return Column(
       children: [
+        Card(
+          elevation: 0,
+          child: ListTile(
+            leading: const Icon(Icons.feedback_outlined, color: Colors.lightBlue),
+            title: const Text('用户反馈'),
+            subtitle: const Text('反馈问题或建议，无需登录'),
+            trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const FeedbackPage()),
+            ),
+          ),
+        ),
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
