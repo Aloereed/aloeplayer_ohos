@@ -1,3 +1,4 @@
+import 'services/media_display_name.dart';
 import 'services/mpv_image_enhancement.dart';
 import 'services/player_image_backend.dart';
 import 'widgets/image_enhancement_sheet.dart';
@@ -284,7 +285,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   DateTime _lastUiUpdate = DateTime(1970);
   int? _resumePosition;
   PlaybackMedia? _mediaFor(String url) => widget.mediaQueue?.where((m) => m.url == url).firstOrNull;
-  String _mediaTitle(String url) => _mediaFor(url)?.title ?? path.basename(Uri.tryParse(url)?.path ?? url);
+  String _mediaTitle(String url) => _mediaFor(url)?.title ?? mediaDisplayName(url);
 
   Future<void> _initializeMedia() async {
     try {
