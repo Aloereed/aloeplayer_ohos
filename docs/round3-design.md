@@ -1,6 +1,6 @@
 # 中文标题与鸿蒙风格调整
 
-最新交付：`32-folder-card-alignment` / `3.1.1+180` / `9fb5d3e`，视频与音频文件夹卡片对齐，包含 31 的底栏修复。标题独立回退包：`29-readable-chinese-titles` / `dbee7d3`。预览见 [界面图库](../build/ui-review/index.html)。
+最新交付：`33-compact-library-toolbar` / `3.1.1+181` / `c27255e`，移动端库标题与搜索合并，包含 31 / 32 修复。标题独立回退包：`29-readable-chinese-titles` / `dbee7d3`。预览见 [界面图库](../build/ui-review/index.html)。
 
 ## 29 — 中文标题
 
