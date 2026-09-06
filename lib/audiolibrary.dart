@@ -1,3 +1,4 @@
+import 'widgets/library_toolbar_title.dart';
 import 'services/audio_scan_service.dart';
 import 'services/work_queue.dart';
 import 'services/thumbnail_cache.dart';
@@ -528,6 +529,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
       '/storage/Users/currentUser/Download/com.aloereed.aloeplayer/Audios';
   List<Directory> _directories = [];
   List _filteredItems = [];
+  bool _mobileSearch = false;
   String _searchQuery = '';
   final TextEditingController _searchTextController = TextEditingController();
   bool _isGridView = true;
@@ -1287,9 +1289,15 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final desktop = Provider.of<ThemeProvider>(context).pcMode && MediaQuery.sizeOf(context).width >= 840;
 
     return WillPopScope(
         onWillPop: () async {
+          if (!desktop && (_mobileSearch || _searchQuery.isNotEmpty)) {
+            setState(() => _mobileSearch = false);
+            _searchTextController.clear(); _filterItems('');
+            return false;
+          }
           if (_audioDirPath != _currentPath) {
             _navigateUp();
             return false;
@@ -1301,11 +1309,18 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
             backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             // floatingActionButton: _buildSpeedDial(),
             appBar: AppBar(
-              title: Text(_selectedAlbum ?? _selectedArtist ?? (_currentPath == _audioDirPath ? '音频库' : path.basename(_currentPath)), maxLines: 1, overflow: TextOverflow.ellipsis),
+              title: desktop ? Text(_selectedAlbum ?? _selectedArtist ?? (_currentPath == _audioDirPath ? '音频库' : path.basename(_currentPath)), maxLines: 1, overflow: TextOverflow.ellipsis)
+                : LibraryToolbarTitle(title: _selectedAlbum ?? _selectedArtist ?? (_currentPath == _audioDirPath ? '音频库' : path.basename(_currentPath)),
+                    hint: '搜索音频', searching: _mobileSearch || _searchQuery.isNotEmpty,
+                    controller: _searchTextController, onChanged: _filterItems,
+                    onSearchChanged: (value) => setState(() => _mobileSearch = value)),
               leading: (_selectedArtist != null || _selectedAlbum != null)
                 ? IconButton(tooltip: '返回分类', onPressed: _resetCategoryView, icon: const Icon(Icons.arrow_back))
                 : _currentPath != _audioDirPath ? IconButton(tooltip: '返回上一级', onPressed: _navigateUp, icon: const Icon(Icons.arrow_back)) : null,
-              actions: [IconButton(tooltip: '刷新音频库', onPressed: _loadItems, icon: const Icon(Icons.refresh_rounded)),
+              actions: [if (!desktop && !_mobileSearch && _searchQuery.isEmpty) IconButton(tooltip: _isGridView ? '切换列表视图' : '切换网格视图',
+                  onPressed: () => setState(() => _isGridView = !_isGridView),
+                  icon: Icon(_isGridView ? Icons.view_list_outlined : Icons.grid_view_rounded)),
+                if (desktop || (!_mobileSearch && _searchQuery.isEmpty)) IconButton(tooltip: '刷新音频库', onPressed: _loadItems, icon: const Icon(Icons.refresh_rounded)),
                 IconButton(tooltip: '添加音频', onPressed: _showImportOptions, icon: const Icon(Icons.add_rounded))],
               bottom: TabBar(controller: _tabController, isScrollable: false,
                 tabs: _tabTitles.map((title) => Tab(text: title)).toList()),
@@ -1313,7 +1328,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
             body: _isLoading
                 ? Center(child: CircularProgressIndicator())
                 : Column(children: [
-                    Padding(padding: const EdgeInsets.fromLTRB(16, 12, 12, 8), child: Row(children: [
+                    if (desktop) Padding(padding: const EdgeInsets.fromLTRB(16, 12, 12, 8), child: Row(children: [
                       Expanded(child: TextField(controller: _searchTextController, onChanged: _filterItems,
                         decoration: InputDecoration(hintText: '搜索音频、艺术家或专辑', prefixIcon: const Icon(Icons.search),
                           suffixIcon: _searchQuery.isEmpty ? null : IconButton(tooltip: '清除搜索', onPressed: () {

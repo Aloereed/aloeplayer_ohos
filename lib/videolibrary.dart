@@ -1,3 +1,4 @@
+import 'widgets/library_toolbar_title.dart';
 import 'widgets/video_library_tile.dart';
 import 'widgets/video_file_actions_sheet.dart';
 import 'widgets/local_import_sheet.dart';
@@ -329,6 +330,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   List<Directory> _directories = [];
   List<File> _filteredVideoFiles = []; // 用于存储过滤后的视频文件
   List _filteredItems = []; // 用于存储过滤后的文件和文件夹
+  bool _mobileSearch = false;
   String _searchQuery = ''; // 搜索框的内容
   bool _isGridView = true; // 默认显示Grid视图
   bool _isLoading = false;
@@ -1340,21 +1342,33 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     final desktop = Provider.of<ThemeProvider>(context).pcMode && MediaQuery.sizeOf(context).width >= 840;
     final theme = Theme.of(context);
     return CallbackShortcuts(bindings: {
-      const SingleActivator(LogicalKeyboardKey.keyF, control: true): () => _searchFocusNode.requestFocus(),
+      const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
+        if (!desktop) setState(() => _mobileSearch = true);
+        _searchFocusNode.requestFocus();
+      },
     }, child: WillPopScope(onWillPop: () async {
+      if (!desktop && (_mobileSearch || _searchQuery.isNotEmpty)) {
+        setState(() => _mobileSearch = false);
+        _searchTextController.clear(); _filterItems(''); _searchFocusNode.unfocus();
+        return false;
+      }
       if (_isMultiSelectMode) { setState(() { _isMultiSelectMode = false; _selectedItems.clear(); }); return false; }
       if (_videoDirPath != _currentPath) { _navigateUp(); return false; }
       return true;
     }, child: Scaffold(
       appBar: AppBar(
         leading: _currentPath != _videoDirPath ? IconButton(tooltip: '返回上一级', onPressed: _navigateUp, icon: const Icon(Icons.arrow_back)) : null,
-        title: Text(_currentPath == _videoDirPath ? '视频库' : path.basename(_currentPath), maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: desktop ? Text(_currentPath == _videoDirPath ? '视频库' : path.basename(_currentPath), maxLines: 1, overflow: TextOverflow.ellipsis)
+          : LibraryToolbarTitle(title: _currentPath == _videoDirPath ? '视频库' : path.basename(_currentPath),
+              hint: '搜索当前文件夹', searching: _mobileSearch || _searchQuery.isNotEmpty,
+              controller: _searchTextController, focusNode: _searchFocusNode, onChanged: _filterItems,
+              onSearchChanged: (value) => setState(() => _mobileSearch = value)),
         actions: [IconButton(tooltip: '刷新视频库', onPressed: _loadItems, icon: const Icon(Icons.refresh_rounded)),
           if (desktop) Padding(padding: const EdgeInsets.only(right: 20), child: FilledButton.icon(
             onPressed: () => _showAddOptionsDialog(context), icon: const Icon(Icons.add), label: const Text('添加视频')))],
       ),
       body: Column(children: [
-        Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 4), child: TextField(
+        if (desktop) Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 4), child: TextField(
           controller: _searchTextController, focusNode: _searchFocusNode, onChanged: _filterItems,
           decoration: InputDecoration(hintText: '搜索当前文件夹', prefixIcon: const Icon(Icons.search_rounded),
             suffixIcon: _searchQuery.isEmpty ? null : IconButton(tooltip: '清除搜索', onPressed: () {
