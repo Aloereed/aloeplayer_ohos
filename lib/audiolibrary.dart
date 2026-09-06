@@ -2484,16 +2484,18 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
             _navigateToDirectory(directory);
           },
           onLongPress: () => _showFolderOptions(directory),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           child: Card(
+            // Use the same inset as _buildAudioGridItem.
+            margin: EdgeInsets.all(6),
             elevation: 2,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Container(
               padding: EdgeInsets.all(8),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -2516,7 +2518,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
                       folderName,

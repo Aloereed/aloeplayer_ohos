@@ -1672,15 +1672,17 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
     Widget cardContent(bool isHovered) {
       return Card(
+        // Match the file tile bounds; grid spacing is provided by the grid.
+        margin: EdgeInsets.zero,
         elevation: isHovered ? 8 : 2,
         shadowColor: isHovered ? Colors.black45 : null,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(22),
         ),
         child: Container(
           padding: EdgeInsets.all(8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(22),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -1703,7 +1705,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(22),
                 ),
                 child: Text(
                   folderName,
@@ -1739,11 +1741,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
               onSecondaryTap: () {
                 _showFolderOptions(directory);
               },
-              borderRadius: BorderRadius.circular(12),
-              child: Transform.scale(
-                scale: isHovered ? 1.05 : 1.0,
-                child: cardContent(isHovered),
-              ),
+              borderRadius: BorderRadius.circular(22),
+              child: cardContent(isHovered),
             ),
           ),
         );
@@ -1761,7 +1760,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
           onLongPress: () {
             _showFolderOptions(directory);
           },
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(22),
           child: cardContent(false),
         ),
       ),
