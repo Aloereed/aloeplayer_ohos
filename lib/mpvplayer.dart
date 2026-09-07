@@ -1,3 +1,4 @@
+import 'widgets/audio_track_dialog.dart';
 import 'widgets/subtitle_track_dialog.dart';
 import 'services/media_url.dart';
 import 'services/media_display_name.dart';
@@ -1616,108 +1617,15 @@ class _MPVPlayerState extends State<MPVPlayer>
     }
   }
 
-  void _showAudioTrackDialog() async {
-    // 获取当前音轨列表
-    final tracks = player.state.tracks.audio;
-    final currentTrack = player.state.track.audio;
-
-    if (tracks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有可用的音轨')),
-      );
-      return;
-    }
-
-    await showDialog(
+  Future<void> _showAudioTrackDialog() async {
+    await showDialog<void>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.grey[900],
-          title: const Text(
-            '选择音轨',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: tracks.length,
-              itemBuilder: (context, index) {
-                final track = tracks[index];
-                final isSelected = currentTrack.id == track.id;
-
-                // 构建音轨显示标题
-                String trackTitle = '音轨 ${index + 1}';
-                if (track.title != null && track.title!.isNotEmpty) {
-                  trackTitle = track.title!;
-                } else if (track.language != null &&
-                    track.language!.isNotEmpty) {
-                  trackTitle = '音轨 ${index + 1} (${track.language})';
-                }
-
-                // 添加音轨信息（如果有）
-                List<String> trackInfo = [];
-                if (track.language != null && track.language!.isNotEmpty) {
-                  trackInfo.add(track.language!);
-                }
-                if (track.codec != null && track.codec!.isNotEmpty) {
-                  trackInfo.add(track.codec!);
-                }
-                if (track.channels != null) {
-                  trackInfo.add('${track.channels}ch');
-                }
-
-                final subtitle =
-                    trackInfo.isNotEmpty ? trackInfo.join(' • ') : null;
-
-                return ListTile(
-                  leading: Icon(
-                    isSelected
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    color: isSelected
-                        ? Theme.of(context).primaryColor
-                        : Colors.white70,
-                  ),
-                  title: Text(
-                    trackTitle,
-                    style: TextStyle(
-                      color: isSelected
-                          ? Theme.of(context).primaryColor
-                          : Colors.white,
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  ),
-                  subtitle: subtitle != null
-                      ? Text(
-                          subtitle,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 12,
-                          ),
-                        )
-                      : null,
-                  selected: isSelected,
-                  onTap: () {
-                    player.setAudioTrack(track);
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('已切换到: $trackTitle')),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-          ],
-        );
-      },
+      builder: (_) => AudioTrackDialog(
+        initialTracks: player.state.tracks.audio,
+        tracks: player.stream.tracks.map((tracks) => tracks.audio),
+        currentTrack: player.state.track.audio,
+        onSelect: player.setAudioTrack,
+      ),
     );
   }
 
