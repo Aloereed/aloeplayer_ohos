@@ -88,7 +88,7 @@ set_target_properties(taglib
 # 添加 fftool 的头文件目录
 # target_include_directories(fftool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_library(entry SHARED main.cpp library_media_probe.cpp napi_init.cpp asstest.c cmdutils.c
+add_library(entry SHARED mpv_ass_overlay.cpp main.cpp library_media_probe.cpp napi_init.cpp asstest.c cmdutils.c
 exception.c
 ffmpeg_filter.c
 ffmpeg_hw.c

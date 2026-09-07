@@ -70,6 +70,7 @@ abstract interface class MpvImageBackend {
 }
 
 class MpvImageEnhancer extends ChangeNotifier {
+  final Future<void> Function(ImageEnhancementSettings)? prepareOutput;
   final MpvImageBackend backend;
   final MemberAccess access;
   final void Function(String, Map<String, Object?>) diagnosticLog;
@@ -124,7 +125,7 @@ class MpvImageEnhancer extends ChangeNotifier {
   bool _hdr = false, _rgb = false;
   String status = '保持播放器默认渲染';
   String? error;
-  MpvImageEnhancer({required this.backend, Future<String> Function()? shaderPath, MemberAccess? access,
+  MpvImageEnhancer({required this.backend, this.prepareOutput, Future<String> Function()? shaderPath, MemberAccess? access,
       Future<List<String>> Function()? anime4kPaths,
       void Function(String, Map<String, Object?>)? diagnosticLog})
       : access = access ?? MemberAccess.instance, shaderPath = shaderPath ?? _installShader,
@@ -205,6 +206,7 @@ class MpvImageEnhancer extends ChangeNotifier {
     busy = true; error = null; notifyListeners();
     var failed = false;
     try {
+      await prepareOutput?.call(next);
       if (!next.isDefault || _original.isNotEmpty) {
         await _snapshot();
         final mode = next.mode.isShader && (_hdr || _rgb) ? UpscaleMode.highQuality : next.mode;

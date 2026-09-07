@@ -400,9 +400,10 @@ class VideoState extends State<Video> with WidgetsBindingObserver {
                           : ValueListenableBuilder<int?>(
                               valueListenable: notifier.id,
                               builder: (context, id, _) {
-                                return ValueListenableBuilder<Rect?>(
-                                  valueListenable: notifier.rect,
-                                  builder: (context, rect, _) {
+                                return AnimatedBuilder(
+                                  animation: notifier is OhosVideoController ? Listenable.merge([notifier.rect, notifier.nativeOutput]) : notifier.rect,
+                                  builder: (context, _) {
+                                    final rect = notifier.rect.value;
                                     if (notifier is OhosVideoController && notifier.usesNativeSurface) {
                                       final size = rect ?? const Rect.fromLTWH(0, 0, 1, 1);
                                       return SizedBox(

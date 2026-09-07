@@ -25,7 +25,46 @@ import 'package:media_kit_video/src/video_controller/platform_video_controller.d
 class OhosVideoController extends PlatformVideoController {
   /// OHCodec sends decoded buffers directly to an ArkUI Surface. A Flutter
   /// texture cannot preserve the system HDR presentation path.
-  bool get usesNativeSurface => configuration.vo == 'ohcodec';
+  bool get usesNativeSurface => nativeOutput.value;
+  final nativeOutput = ValueNotifier<bool>(false);
+  Completer<void>? _surfaceReady;
+
+  /// Change only the output; mpv retains the playlist, selected tracks and clock.
+  Future<void> setNativeOutput(bool enabled, {String hwdec = 'auto-safe'}) async {
+    await lock.synchronized(() async {
+      if (_disposed || platform.disposed || enabled == usesNativeSurface) return;
+      await setProperty('vo', 'null');
+      if (enabled) {
+        nativeSurfaceError.value = null;
+        _surfaceReady = Completer<void>();
+        nativeOutput.value = true;
+      } else {
+        nativeOutput.value = false;
+        final viewId = _nativeViewId;
+        _nativeViewId = null;
+        _nativeSurfaceId = null;
+        if (viewId != null) await _channel.invokeMethod('NativeSurface.Dispose', {
+          'handle': (await player.handle).toString(), 'viewId': viewId,
+        });
+        if (_sourceWidth > 0 && _sourceHeight > 0) {
+          final width = _requestedWidth ?? _sourceWidth;
+          final height = _requestedHeight ?? _sourceHeight;
+          await _channel.invokeMethod('VideoOutputManager.SetSurfaceSize', {
+            'handle': (await player.handle).toString(),
+            'width': width.toString(), 'height': height.toString(),
+          });
+          await setProperty('ohos-surface-size', '${width}x$height');
+        }
+        await setProperty('wid', wid.value?.toString() ?? '0');
+        await setProperty('hwdec', hwdec);
+        await setProperty('vo', 'gpu-next');
+        if (player.state.duration > Duration.zero) await player.seek(player.state.position);
+      }
+    });
+    if (enabled && usesNativeSurface) {
+      await _surfaceReady?.future.timeout(const Duration(seconds: 8));
+    }
+  }
   bool _disposed = false;
   int? _nativeViewId;
   String? _nativeSurfaceId;
@@ -72,6 +111,10 @@ class OhosVideoController extends PlatformVideoController {
         if (player.state.duration > Duration.zero) {
           await player.seek(player.state.position);
         }
+        if (await platform.getProperty('current-vo', waitForInitialization: false) != 'ohcodec') {
+          throw StateError('OHCodec direct output is unavailable for this video');
+        }
+        if (!(_surfaceReady?.isCompleted ?? true)) _surfaceReady!.complete();
       });
 
   Future<void> detachNativeSurface(int viewId) => lock.synchronized(() async {
@@ -108,6 +151,7 @@ class OhosVideoController extends PlatformVideoController {
   /// Listener for updating the --wid property.
   Future<void> widListener() {
     return lock.synchronized(() async {
+      if (_disposed || usesNativeSurface) return;
       final widValue = wid.value?.toString() ?? '0';
       await setProperties({'wid': widValue});
       // Instead of seeking to the start (Duration.zero), seek to the current playback position
@@ -224,8 +268,9 @@ class OhosVideoController extends PlatformVideoController {
 
     // Store the [VideoController] in the [_controllers].
     _controllers[handle] = controller;
+    controller.nativeOutput.value = configuration.vo == 'ohcodec';
 
-    if (!controller.usesNativeSurface) await _channel.invokeMethod(
+    await _channel.invokeMethod(
       'VideoOutputManager.Create',
       {
         'handle': handle.toString(),
@@ -293,7 +338,8 @@ class OhosVideoController extends PlatformVideoController {
       });
     }
     nativeSurfaceError.dispose();
-    if (!usesNativeSurface) await _channel.invokeMethod(
+    nativeOutput.dispose();
+    await _channel.invokeMethod(
       'VideoOutputManager.Dispose',
       {
         'handle': handle.toString(),

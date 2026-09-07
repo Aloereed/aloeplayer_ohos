@@ -654,33 +654,21 @@ class _HomeScreenState extends State<HomeScreen>
     // 检查是否使用MPV播放器
     final useFfmpegForPlay = await _settingsService.getUseFfmpegForPlay();
 
-    // 如果选择的是MPV（value=2），则使用MPVPlayer
-    if (useFfmpegForPlay == 2) {
-      Navigator.of(context).push(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              FadeTransition(
-            opacity: animation,
-            child: MPVPlayer(
-              filePath: _openfile,
-            ),
-          ),
-          transitionDuration: const Duration(milliseconds: 300),
-        ),
-      );
-      return;
-    }
-
+    // Existing HDR engine preference (4) now uses the unified MPV player.
     final hdrForHdr = await _settingsService.getHdrForHdr();
     bool isHdr = false;
-    try {
-      isHdr = await _getHdr(File(_openfile));
-    } catch (e) {
-      isHdr = false;
+    if (useFfmpegForPlay != 2 && useFfmpegForPlay != 4 && !forceHdr && hdrForHdr) {
+      try {
+        isHdr = await _getHdr(File(_openfile));
+      } catch (_) {}
     }
-    if (await _settingsService.getUseFfmpegForPlay() != 4 &&
-        !forceHdr &&
-        !(isHdr && hdrForHdr)) {
+    if (!context.mounted) return;
+    if (useFfmpegForPlay == 2 || useFfmpegForPlay == 4 || forceHdr || (isHdr && hdrForHdr)) {
+      Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => MPVPlayer(filePath: _openfile),
+      ));
+      return;
+    }
       // 使用 PageRouteBuilder 创建淡入淡出效果
       Navigator.of(context).push(
         PageRouteBuilder(
@@ -700,30 +688,6 @@ class _HomeScreenState extends State<HomeScreen>
           transitionDuration: const Duration(milliseconds: 300),
         ),
       );
-    } else {
-      if (_openfile.contains('http')) {
-        // 弹出通知，流心视频方式不支持播放网络视频
-        Fluttertoast.showToast(
-            msg: "流心视频方式不支持播放网络视频",
-            toastLength: Toast.LENGTH_SHORT,
-            gravity: ToastGravity.CENTER,
-            timeInSecForIosWeb: 1,
-            backgroundColor: Colors.red,
-            textColor: Colors.white,
-            fontSize: 16.0);
-        return;
-      }
-      final _platform = const MethodChannel('samples.flutter.dev/hdrplugin');
-      String waitToStart = _openfile;
-      // 调用原生方法
-      if (_openfile.endsWith('.lnk')) {
-        waitToStart = File(_openfile).readAsStringSync();
-      }
-      _platform.invokeMethod<String>('createNewWindow', {
-        'path': pathToUri(waitToStart),
-        'uris': await getPlaylist(waitToStart)
-      });
-    }
   }
 
   // 检查是否需要显示播放器选择弹窗
@@ -968,11 +932,11 @@ class _PlayerSelectionDialogState extends State<PlayerSelectionDialog>
                       _buildPlayerOption(
                         context,
                         value: 4,
-                        title: 'HDR视频',
+                        title: 'MPV（HDR）',
                         subtitle: '适用于HDR视频',
                         icon: Icons.hdr_strong,
                         isDarkMode: isDarkMode,
-                        description: '专门为HDR视频优化，提供最佳的高动态范围显示效果',
+                        description: '使用 MPV 播放，HDR 视频自动直出，支持 ASS 字幕',
                       ),
                     ],
                   ),

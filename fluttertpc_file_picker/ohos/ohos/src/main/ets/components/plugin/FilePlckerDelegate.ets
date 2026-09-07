@@ -190,7 +190,11 @@ export class FilePickerDelegate {
         let documentSelectOptions = new picker.DocumentSelectOptions();
         let documentPicker = new picker.DocumentViewPicker(commonContext);
         documentSelectOptions.maxSelectNumber = this.isMultipleSelection ? 99 : 1;
-        documentSelectOptions.fileSuffixFilters = this.allowedExtensions;
+        // Each array item is a selectable filter, not one part of an OR list.
+        // Put the combined filter first so all allowed formats appear initially.
+        documentSelectOptions.fileSuffixFilters = this.allowedExtensions.length > 1
+          ? [`支持的文件|${this.allowedExtensions.join(',')}`, ...this.allowedExtensions]
+          : this.allowedExtensions;
         documentPicker.select(documentSelectOptions).then((documentSelectResult: Array<string>) => {
           this.savaFilePath = documentSelectResult;
           let anySelectUris: Array<string> = documentSelectResult;

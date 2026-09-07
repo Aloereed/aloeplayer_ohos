@@ -1996,7 +1996,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     String label = '全新MPV(推荐)';
                     if (val == 0)
                       label = '系统硬解(高码率)';
-                    else if (val == 4) label = '流心视频(HDR)';
+                    else if (val == 4) label = 'MPV（HDR）';
                     return Text(label,
                         style: TextStyle(fontSize: 12, color: Colors.grey));
                   },
@@ -2022,8 +2022,8 @@ class _SettingsTabState extends State<SettingsTab> {
                           },
                           {
                             'value': 4,
-                            'label': '流心视频(HDR)',
-                            'icon': 'Assets/sweet_video.png'
+                            'label': 'MPV（HDR）',
+                            'icon': Icons.hdr_strong
                           }
                         ];
                         // Using existing _buildOptionTile helper but need to adapt it or just enhance here
@@ -2052,7 +2052,7 @@ class _SettingsTabState extends State<SettingsTab> {
               context: context,
               icon: Icons.hdr_auto_select_outlined,
               title: 'HDR引擎播放',
-              subtitle: '仅限从视频库进入',
+              subtitle: '从视频库打开 HDR 视频时使用 MPV，自动选择直出',
               trailing: _buildSwitchFuture(_settingsService.getHdrForHdr(),
                   (v) => _settingsService.saveHdrForHdr(v)),
             ),

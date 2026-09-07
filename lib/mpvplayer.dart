@@ -1,3 +1,7 @@
+import 'widgets/native_ass_overlay.dart';
+import 'services/mpv_output_policy.dart';
+import 'services/serial_executor.dart';
+import 'package:media_kit_video/src/video_controller/ohos_video_controller/real.dart';
 import 'widgets/audio_track_dialog.dart';
 import 'widgets/subtitle_track_dialog.dart';
 import 'services/media_url.dart';
@@ -259,12 +263,11 @@ class _BrightnessSliderState extends State<BrightnessSlider> {
 
 class MPVPlayer extends StatefulWidget {
   final String filePath;
-  final bool nativeHdr;
   final List<PlaybackMedia>? mediaQueue;
   final int? initialPositionMs;
   final Future<void> Function(PlaybackMedia media, int positionMs, bool stopped, bool playing)? onPlayback;
 
-  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue, this.onPlayback, this.initialPositionMs, this.nativeHdr = false}) : super(key: key);
+  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue, this.onPlayback, this.initialPositionMs}) : super(key: key);
 
   @override
   _MPVPlayerState createState() => _MPVPlayerState();
@@ -282,6 +285,14 @@ class _MPVPlayerState extends State<MPVPlayer>
   bool _openingMedia = false;
   bool _disposing = false;
   bool _switchingHdr = false;
+  bool _nativeHdr = false, _outputHdr = false;
+  MpvOutputMode _outputMode = MpvOutputMode.automatic;
+  bool _requiresTexture = false, _nativeFailed = false;
+  bool _fallbackNotified = false;
+  bool _capturingFrame = false, _rotatedVideo = false;
+  final _outputSerial = SerialExecutor();
+  late final Future<void> _enhancementReady;
+
   String _historyId = '';
   List<String> _openedPaths = [];
   bool _readyForRestore = false;
@@ -400,10 +411,6 @@ class _MPVPlayerState extends State<MPVPlayer>
   bool _isInBackground = false;
   AppLifecycleState? _lastLifecycleState;
 
-  // HDR相关
-  bool _isHDRVideo = false;
-  double? _savedBrightness; // 保存进入播放器前的亮度
-
   // 缓冲相关
   bool _isBuffering = false;
   // removed _isPcModeEnabled per user request to fetch fresh every time
@@ -471,7 +478,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         // 启用 libass 渲染 ASS 字幕特效
         // 这些选项会传递给底层的 libmpv
         // vo: 'gpu',  // 使用 GPU 视频输出
-        libass: !(widget.nativeHdr && Platform.operatingSystem == 'ohos'),
+        libass: true,
         protocolWhitelist: const [
           'file',
           'http',
@@ -484,18 +491,29 @@ class _MPVPlayerState extends State<MPVPlayer>
         ],
       ),
     );
-    controller = VideoController(player, configuration: VideoControllerConfiguration(
-      vo: widget.nativeHdr && Platform.operatingSystem == 'ohos' ? 'ohcodec' : null,
-      hwdec: widget.nativeHdr && Platform.operatingSystem == 'ohos' ? 'ohcodec' : null,
-    ));
-    _imageEnhancer = MpvImageEnhancer(backend: PlayerImageBackend(player, controller));
+    controller = VideoController(player);
+    _imageEnhancer = MpvImageEnhancer(backend: PlayerImageBackend(player, controller),
+      prepareOutput: (next) async {
+        _requiresTexture = !next.isDefault;
+        await _updateOutput();
+      });
     _subscriptions.add(player.stream.error.listen((error) {
+      if (_nativeHdr && !_switchingHdr && !_nativeFailed) {
+        _nativeFailed = true;
+        _outputNotice('直出遇到兼容性问题，已自动切回纹理播放');
+        unawaited(_updateOutput());
+      }
       if (mounted && widget.filePath.startsWith('http')) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text(mediaUrlFailure), duration: Duration(seconds: 10)));
       }
     }));
     _subscriptions.add(player.stream.videoParams.listen((video) {
+      if ((video.dw ?? 0) > 0 && (video.dh ?? 0) > 0) {
+        if (video.gamma != null && video.gamma!.isNotEmpty) _outputHdr = isMpvHdrGamma(video.gamma);
+        unawaited(_enhancementReady.then((_) => _updateOutput()));
+      }
+      _rotatedVideo = video.rotate != null && video.rotate != 0;
       final rotated = video.rotate == 90 || video.rotate == 270;
       _imageEnhancer.videoChanged(width: (rotated ? video.dh : video.dw) ?? 0,
         height: (rotated ? video.dw : video.dh) ?? 0, gamma: video.gamma,
@@ -506,7 +524,13 @@ class _MPVPlayerState extends State<MPVPlayer>
         _imageEnhancer.shaderFailed(detail: log.text);
       }
     }));
-    if (!widget.nativeHdr) _imageEnhancer.initialize();
+    _imageEnhancer.addListener(() {
+      if (!_imageEnhancer.busy && !_disposing) {
+        _requiresTexture = !_imageEnhancer.settings.isDefault;
+        unawaited(_updateOutput());
+      }
+    });
+    _enhancementReady = _imageEnhancer.initialize();
     _initializeMedia();
 
     // 监听播放状态
@@ -598,9 +622,6 @@ class _MPVPlayerState extends State<MPVPlayer>
     // 初始化 Audio Service
     _initializeAudioService();
 
-    // 保存当前亮度
-    _saveBrightness();
-
     // 添加应用生命周期监听器
     WidgetsBinding.instance.addObserver(this);
   }
@@ -639,7 +660,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   Future<void> _applyMpvHardwareDecoding() async {
     try {
-      if (widget.nativeHdr && Platform.operatingSystem == 'ohos') {
+      if (_nativeHdr && Platform.operatingSystem == 'ohos') {
         await (player.platform as NativePlayer).setProperty('hwdec', 'ohcodec');
         return;
       }
@@ -895,124 +916,6 @@ class _MPVPlayerState extends State<MPVPlayer>
     return nextVolume;
   }
 
-  // 保存当前亮度
-  void _saveBrightness() async {
-    try {
-      final brightness = await Screen.brightness;
-      if (brightness != null) {
-        _savedBrightness = brightness;
-        print('已保存当前亮度: $_savedBrightness');
-      }
-    } catch (e) {
-      print('保存亮度时发生错误: $e');
-    }
-  }
-
-  // 检测 HDR 视频（使用 ffmpeg）
-  Future<bool> _getHdr(String filePath) async {
-    try {
-      // 如果是.lnk文件，读取实际路径
-      if (filePath.endsWith('.lnk')) {
-        final file = File(filePath);
-        filePath = await file.readAsString();
-      }
-
-      final _ffmpegplatform =
-          const MethodChannel('samples.flutter.dev/ffmpegplugin');
-      int getHdrMethod = await _settingsService.getHdrDetect();
-
-      if (getHdrMethod == 0) {
-        return false;
-      }
-
-      String hdrJson = '';
-      if (getHdrMethod == 1) {
-        hdrJson = await _ffmpegplatform
-                .invokeMethod<String>('getVideoHDRInfo', {'path': filePath}) ??
-            '';
-      } else if (getHdrMethod == 2) {
-        hdrJson = await _ffmpegplatform.invokeMethod<String>(
-                'getVideoHDRInfoFFmpeg', {'path': filePath}) ??
-            '';
-      }
-
-      // 如果返回的JSON字符串为空，默认为非HDR
-      if (hdrJson.isEmpty) {
-        print('获取HDR信息失败：返回空JSON');
-        return false;
-      }
-
-      // 解析JSON字符串
-      try {
-        final Map<String, dynamic> data = json.decode(hdrJson);
-        final bool isHdr = data['isHDR'] ?? false;
-        print('视频HDR状态: ${isHdr ? "是HDR" : "非HDR"}');
-        return isHdr;
-      } catch (e) {
-        print('解析HDR JSON出错: $e');
-        print('原始JSON: $hdrJson');
-        return false;
-      }
-    } catch (e) {
-      print('获取HDR信息时发生错误: $e');
-      return false;
-    }
-  }
-
-  // 检查并处理 HDR 视频
-  Future<void> _checkAndHandleHDR(String filePath) async {
-    try {
-      final isHDR = await _getHdr(filePath);
-
-      // 如果检测到HDR视频且之前不是HDR状态
-      if (isHDR && !_isHDRVideo) {
-        setState(() {
-          _isHDRVideo = true;
-        });
-        await _setMaxBrightness();
-        print('检测到 HDR 视频,已将亮度调至最大');
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('检测到 HDR 视频，已自动调整亮度至最大'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      } else if (!isHDR && _isHDRVideo) {
-        // 如果之前是HDR现在不是了,恢复亮度
-        setState(() {
-          _isHDRVideo = false;
-        });
-        await _restoreBrightness();
-      }
-    } catch (e) {
-      print('检测 HDR 视频时发生错误: $e');
-    }
-  }
-
-  // 设置最大亮度
-  Future<void> _setMaxBrightness() async {
-    try {
-      await Screen.setBrightness(0.99); // 设置为最大亮度
-    } catch (e) {
-      print('设置最大亮度时发生错误: $e');
-    }
-  }
-
-  // 恢复保存的亮度
-  Future<void> _restoreBrightness() async {
-    try {
-      if (_savedBrightness != null) {
-        await Screen.setBrightness(_savedBrightness!);
-        print('已恢复亮度到: $_savedBrightness');
-      }
-    } catch (e) {
-      print('恢复亮度时发生错误: $e');
-    }
-  }
-
   String convertUriToPath(String uri) {
     // 如果uri以"/Photos"开头，则在uri前面加上"file://media"
     if (uri.startsWith('file://media')) {
@@ -1236,6 +1139,9 @@ class _MPVPlayerState extends State<MPVPlayer>
     await _beginHistory(filePath);
     if (!mounted || _disposing) return;
 
+    _nativeFailed = false;
+    _fallbackNotified = false;
+    await _enhancementReady;
     await _applyMpvHardwareDecoding();
 
     // 打开播放列表
@@ -1256,10 +1162,6 @@ class _MPVPlayerState extends State<MPVPlayer>
       await _autoLoadSubtitle(resolvedPath);
     }
 
-    // 检测 HDR 视频并调节亮度（仅对本地文件）
-    if (!isHttpUrl && !isFileUrl) {
-      _checkAndHandleHDR(resolvedPath);
-    }
       } catch (e) {
       if (mounted && !_disposing) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('播放失败: $e')));
     } finally { _openingMedia = false; }
@@ -1288,6 +1190,9 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   Future<void> _onQueueItemChanged(String url) async {
+    _nativeFailed = false;
+    _fallbackNotified = false;
+    unawaited(_updateOutput());
     try {
       await _beginHistory(url);
       if (!mounted || _disposing) return;
@@ -1306,6 +1211,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   Future<void> _openSystemPip() async {
     if (Platform.operatingSystem != 'ohos' || _openingMedia || _openingPip || _pipController != null) return;
     _openingPip = true;
+    await _updateOutput();
     final wasPlaying = player.state.playing;
     PipPlaybackResult? resumed;
     try {
@@ -1333,6 +1239,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     } finally {
       _pipController = null;
       _openingPip = false;
+      unawaited(_updateOutput());
       if (mounted && !_disposing) {
         PlaybackSleepTimer.instance.attach(this, () => player.pause());
         if (resumed != null) { _lastPosition = Duration(milliseconds: resumed.positionMs); await player.seek(_lastPosition); }
@@ -1473,7 +1380,10 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   void _takeScreenshot() async {
+    if (_capturingFrame || _disposing) return;
+    _capturingFrame = true;
     try {
+      await _updateOutput();
       // 生成时间戳文件名
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final screenshotDir =
@@ -1514,6 +1424,9 @@ class _MPVPlayerState extends State<MPVPlayer>
           SnackBar(content: Text('截图失败: $e')),
         );
       }
+    } finally {
+      _capturingFrame = false;
+      if (mounted && !_disposing) await _updateOutput();
     }
   }
 
@@ -1871,11 +1784,6 @@ class _MPVPlayerState extends State<MPVPlayer>
     // 清理后台播放资源
     _cleanupBackgroundPlayback();
 
-    // 如果是HDR视频，恢复亮度
-    if (_isHDRVideo) {
-      _restoreBrightness();
-    }
-
     player.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     // 恢复所有方向,允许系统自动旋转
@@ -2109,12 +2017,18 @@ class _MPVPlayerState extends State<MPVPlayer>
                         alignment: Alignment.center,
                         transform: Matrix4.identity()
                           ..scale(_mirror ? -_zoom : _zoom, _zoom),
-                        child: Video(
+                        child: Stack(fit: StackFit.expand, children: [Video(
                           controller: controller,
                           controls: NoVideoControls,
                           pauseUponEnteringBackgroundMode:
                               !_backgroundPlayEnabled,
                         ),
+                        if (_nativeHdr) NativeAssOverlay(player: player, controller: controller, onUnavailable: () {
+                          _nativeFailed = true;
+                          _outputNotice('此字幕使用兼容渲染，已自动切回纹理播放');
+                          unawaited(_updateOutput());
+                        }),
+                        ]),
                       ),
                     ),
                     // 弹幕层
@@ -2252,7 +2166,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         // height: 56, // remove fixed height
 
         decoration: BoxDecoration(
-          gradient: widget.nativeHdr ? null : LinearGradient(
+          gradient: _nativeHdr ? null : LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
@@ -2411,6 +2325,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => _mirror = !_mirror);
+                      unawaited(_updateOutput());
                     },
                   ),
                 ),
@@ -2520,7 +2435,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   Widget _buildTopBar() {
     return Container(
       decoration: BoxDecoration(
-        gradient: widget.nativeHdr ? null : LinearGradient(
+        gradient: _nativeHdr ? null : LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
@@ -2531,7 +2446,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       ),
       child: ClipRRect(
         child: BackdropFilter(
-          enabled: !widget.nativeHdr,
+          enabled: !_nativeHdr,
           filter: ImageFilter.blur(
             sigmaX: _enableBlur ? 10 : 0,
             sigmaY: _enableBlur ? 10 : 0,
@@ -2583,7 +2498,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
     return Container(
       decoration: BoxDecoration(
-        gradient: widget.nativeHdr ? null : LinearGradient(
+        gradient: _nativeHdr ? null : LinearGradient(
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
           colors: [
@@ -2594,7 +2509,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       ),
       child: ClipRRect(
         child: BackdropFilter(
-          enabled: !widget.nativeHdr,
+          enabled: !_nativeHdr,
           filter: ImageFilter.blur(
             sigmaX: _enableBlur ? 10 : 0,
             sigmaY: _enableBlur ? 10 : 0,
@@ -2744,7 +2659,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: BackdropFilter(
-            enabled: !widget.nativeHdr,
+            enabled: !_nativeHdr,
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Text(
               _formatDuration(_seekPosition!),
@@ -2760,20 +2675,42 @@ class _MPVPlayerState extends State<MPVPlayer>
     );
   }
 
-  Future<void> _switchNativeHdr(bool enabled) async {
-    if (_switchingHdr || _disposing) return;
-    setState(() => _switchingHdr = true);
-    final position = player.state.position.inMilliseconds;
-    await player.pause();
-    await _flushPosition();
+  Future<void> _updateOutput() => _outputSerial.run(() async {
+    if (!mounted || _disposing || Platform.operatingSystem != 'ohos') return;
+    final native = await controller.platform.future as OhosVideoController;
     if (!mounted || _disposing) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(builder: (_) => MPVPlayer(
-      filePath: _currentFilePath,
-      mediaQueue: widget.mediaQueue,
-      initialPositionMs: position,
-      onPlayback: widget.onPlayback,
-      nativeHdr: enabled,
-    )));
+    final textureFeature = _requiresTexture || _mirror || _zoom != 1 || _capturingFrame || _rotatedVideo || _openingPip;
+    final wanted = useMpvDirectOutput(ohos: true, hdr: _outputHdr,
+      mode: _outputMode, textureFeature: textureFeature, failed: _nativeFailed);
+    if ((_outputHdr || _outputMode == MpvOutputMode.direct) && textureFeature && !_fallbackNotified) {
+      _fallbackNotified = true;
+      _outputNotice('已使用纹理播放以应用画质或画面设置，直出暂时停用');
+    }
+    if (wanted == native.usesNativeSurface) return;
+    setState(() { _switchingHdr = true; _nativeHdr = wanted; });
+    try {
+      await native.setNativeOutput(wanted, hwdec: _mpvHardwareDecodingOption(_mpvHardwareDecoding));
+    } catch (_) {
+      _nativeFailed = true;
+      if (mounted && !_disposing) {
+        setState(() => _nativeHdr = false);
+        await native.setNativeOutput(false, hwdec: _mpvHardwareDecodingOption(_mpvHardwareDecoding));
+        _outputNotice('此视频暂时无法直出，已自动切回纹理播放');
+      }
+    } finally {
+      if (mounted && !_disposing) setState(() => _switchingHdr = false);
+    }
+  });
+
+  void _outputNotice(String message) {
+    if (!mounted || _disposing) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message), duration: const Duration(seconds: 3)));
+  }
+
+  Future<void> _switchOutputMode(MpvOutputMode mode) async {
+    setState(() { _outputMode = mode; _nativeFailed = false; _fallbackNotified = false; });
+    await _updateOutput();
   }
 
   Widget _buildSettingsPanel() {
@@ -2788,7 +2725,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         ),
         child: ClipRRect(
           child: BackdropFilter(
-            enabled: !widget.nativeHdr,
+            enabled: !_nativeHdr,
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: SafeArea(
               child: Column(
@@ -2820,7 +2757,6 @@ class _MPVPlayerState extends State<MPVPlayer>
                     child: ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        if (!widget.nativeHdr)
                         ListenableBuilder(listenable: _imageEnhancer, builder: (_, __) => Card(
                           color: const Color(0xFF183547), elevation: 0,
                           child: ListTile(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -2879,13 +2815,14 @@ class _MPVPlayerState extends State<MPVPlayer>
                             label: '${(_zoom * 100).toInt()}%',
                             onChanged: (value) {
                               setState(() => _zoom = value);
+                              unawaited(_updateOutput());
                             },
                           ),
                         ),
                         _buildSettingSwitch(
                           title: '镜像',
                           value: _mirror,
-                          onChanged: (value) => setState(() => _mirror = value),
+                          onChanged: (value) { setState(() => _mirror = value); unawaited(_updateOutput()); },
                         ),
                         _buildSettingSwitch(
                           title: '控制栏高斯模糊',
@@ -3104,15 +3041,42 @@ class _MPVPlayerState extends State<MPVPlayer>
                           ),
                         ),
                         if (Platform.operatingSystem == 'ohos') ExpansionTile(
-                          title: const Text('实验功能', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                          title: const Text('视频输出', style: TextStyle(color: Colors.white70, fontSize: 14)),
                           iconColor: Colors.white54,
                           collapsedIconColor: Colors.white54,
                           children: [
-                            SwitchListTile(
-                              title: const Text('原生 HDR 输出', style: TextStyle(color: Colors.white)),
-                              subtitle: const Text('兼容性有限，需要设备硬解支持；不支持 ASS 特效和超分。切换后从当前进度重新打开。', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                              value: widget.nativeHdr,
-                              onChanged: _switchingHdr ? null : _switchNativeHdr,
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              child: DropdownButtonFormField<MpvOutputMode>(
+                                value: _outputMode,
+                                dropdownColor: const Color(0xFF222222),
+                                iconEnabledColor: Colors.white70,
+                                iconDisabledColor: Colors.white38,
+                                style: const TextStyle(color: Colors.white),
+                                decoration: const InputDecoration(
+                                  labelText: '输出模式',
+                                  labelStyle: TextStyle(color: Colors.white70),
+                                  floatingLabelStyle: TextStyle(color: Color(0xFF8DD2F5)),
+                                  filled: true,
+                                  fillColor: Color(0xFF222222),
+                                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white38)),
+                                  disabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF8DD2F5), width: 2)),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(value: MpvOutputMode.automatic, child: Text('自动（HDR 直出）')),
+                                  DropdownMenuItem(value: MpvOutputMode.direct, child: Text('直出（含 SDR，调试）')),
+                                  DropdownMenuItem(value: MpvOutputMode.texture, child: Text('纹理')),
+                                ],
+                                onChanged: _switchingHdr ? null : (mode) {
+                                  if (mode != null) _switchOutputMode(mode);
+                                },
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                              child: Text(_nativeHdr ? '当前：直出' : '当前：纹理播放。超分、调色和画面变换优先使用纹理。',
+                                style: const TextStyle(color: Colors.white54, fontSize: 12)),
                             ),
                           ],
                         ),
@@ -3140,7 +3104,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         ),
         child: ClipRRect(
           child: BackdropFilter(
-            enabled: !widget.nativeHdr,
+            enabled: !_nativeHdr,
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: SafeArea(
               child: Column(
@@ -3476,7 +3440,7 @@ class _MPVPlayerState extends State<MPVPlayer>
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: BackdropFilter(
-                enabled: !widget.nativeHdr,
+                enabled: !_nativeHdr,
                 filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -3578,7 +3542,7 @@ class _MPVPlayerState extends State<MPVPlayer>
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
               child: BackdropFilter(
-                enabled: !widget.nativeHdr,
+                enabled: !_nativeHdr,
                 filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -3614,7 +3578,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       child: ClipRRect(
         borderRadius: BorderRadius.circular(15),
         child: BackdropFilter(
-          enabled: !widget.nativeHdr,
+          enabled: !_nativeHdr,
           filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
           child: Container(
             height: 200,
@@ -3697,7 +3661,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: BackdropFilter(
-            enabled: !widget.nativeHdr,
+            enabled: !_nativeHdr,
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Column(
               mainAxisSize: MainAxisSize.min,

@@ -13,6 +13,16 @@ import '../models/server_config.dart';
 import 'file_service.dart';
 import 'server_config_service.dart';
 
+String downloadBackgroundFailure(Object error) {
+  if (error is TimeoutException) return '后台下载服务响应超时，请保持应用在前台；中断后可继续';
+  if (error is PlatformException) {
+    if (error.details == 1600004) return '通知权限未开启，请在系统设置中允许通知后重试；目前可前台下载';
+    final code = error.details is num ? '${error.details}' : error.code;
+    return '后台下载申请失败（$code），请保持应用在前台；中断后可继续';
+  }
+  return '后台下载服务暂不可用，请保持应用在前台；中断后可继续';
+}
+
 class DownloadManager extends ChangeNotifier {
   static final instance = DownloadManager._();
   static const _device = MethodChannel('aloeplayer/device-tools');
@@ -30,6 +40,8 @@ class DownloadManager extends ChangeNotifier {
   final List<DownloadTask> tasks = [];
   Future<void>? _initializing;
   bool _running = false;
+  bool _updatingBackground = false;
+  DateTime _lastBackgroundProgress = DateTime.fromMillisecondsSinceEpoch(0);
   StreamIterator<Uint8List>? _iterator;
   String? _activeId;
   Future<void> _writes = Future.value();
@@ -143,9 +155,12 @@ class DownloadManager extends ChangeNotifier {
     try {
       if (Platform.operatingSystem == 'ohos') {
         try {
-          await _device.invokeMethod<bool>('startDownloadBackground').timeout(const Duration(seconds: 10));
+          // User interaction must not be cut off by the service startup timeout.
+          await _device.invokeMethod<void>('requestDownloadNotificationPermission');
+          final started = await _device.invokeMethod<bool>('startDownloadBackground').timeout(const Duration(seconds: 10));
+          if (started != true) throw StateError('Background task did not start');
           backgroundNotice = null;
-        } catch (_) { backgroundNotice = '系统未允许后台下载，请保持应用在前台；中断后可继续'; }
+        } catch (error) { backgroundNotice = downloadBackgroundFailure(error); }
         notifyListeners();
       }
       while (true) {
@@ -170,6 +185,22 @@ class DownloadManager extends ChangeNotifier {
       if (tasks.any((t) => t.status == DownloadStatus.queued)) unawaited(_pump());
     }
   }
+  Future<void> _updateBackgroundProgress(DownloadTask task) async {
+    if (Platform.operatingSystem != 'ohos' || _updatingBackground ||
+        DateTime.now().difference(_lastBackgroundProgress).inSeconds < 3) return;
+    _updatingBackground = true;
+    _lastBackgroundProgress = DateTime.now();
+    try {
+      await _device.invokeMethod<void>('updateDownloadBackground', {
+        'name': task.name, 'progress': task.size > 0 ? (task.received * 100 ~/ task.size) : 0,
+      }).timeout(const Duration(seconds: 5));
+    } catch (error) {
+      if (_activeId == task.id) {
+        backgroundNotice = '下载通知更新失败，请保持前台下载；系统可能暂停后台任务';
+        notifyListeners();
+      }
+    } finally { _updatingBackground = false; }
+  }
   Future<void> _download(DownloadTask task) async {
     FileService? files;
     RandomAccessFile? writer;
@@ -191,6 +222,8 @@ class DownloadManager extends ChangeNotifier {
         throw StateError('远端文件已变化，请取消任务后重新下载');
       }
       task.received = await part.exists() ? await part.length() : 0;
+      _lastBackgroundProgress = DateTime.fromMillisecondsSinceEpoch(0);
+      unawaited(_updateBackgroundProgress(task));
       if (task.received > task.size) throw StateError('临时文件大小不符');
       if (Platform.operatingSystem == 'ohos') {
         final free = await const MethodChannel('aloeplayer/device-tools').invokeMethod<int>('freeBytes');
@@ -212,6 +245,7 @@ class DownloadManager extends ChangeNotifier {
           if (DateTime.now().difference(lastNotification).inMilliseconds >= 500) {
             lastNotification = DateTime.now();
             notifyListeners();
+            unawaited(_updateBackgroundProgress(task));
             if (DateTime.now().difference(checkpoint).inSeconds >= 2) { await _persist(); checkpoint = DateTime.now(); }
           }
         }

@@ -1,5 +1,6 @@
 import 'package:aloeplayer/services/member_access.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aloeplayer/services/mpv_image_enhancement.dart';
@@ -21,6 +22,24 @@ class FakeImageBackend implements MpvImageBackend {
 }
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  test('waits for texture output before changing GPU properties', () async {
+    final backend = FakeImageBackend();
+    final ready = Completer<void>();
+    final entered = Completer<void>();
+    final engine = MpvImageEnhancer(backend: backend,
+      access: MemberAccess(paid: () => true), prepareOutput: (settings) async {
+        expect(settings.contrast, 12);
+        entered.complete();
+        await ready.future;
+      });
+    final apply = engine.apply(const ImageEnhancementSettings(contrast: 12));
+    await entered.future;
+    expect(backend.writes, 0);
+    ready.complete();
+    await apply;
+    expect(backend.values['contrast'], '12');
+    engine.dispose();
+  });
   test('output respects 2x, 1080p/4K budgets, portrait aspect and no downscale', () {
     expect(enhancedOutputSize(UpscaleMode.fsr1080, 1280, 720), (width: 1920, height: 1080));
     expect(enhancedOutputSize(UpscaleMode.fsr4k, 1920, 1080), (width: 3840, height: 2160));
