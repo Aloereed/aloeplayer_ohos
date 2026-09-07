@@ -1,3 +1,4 @@
+import 'widgets/media_url_dialog.dart';
 import 'services/sleep_timer.dart';
 import 'widgets/sleep_timer_button.dart';
 import 'dart:convert';
@@ -910,79 +911,9 @@ class _PlayerTabState extends State<PlayerTab>
   }
 
 // 添加 _showUrlDialog 方法
-  void _showUrlDialog(BuildContext context) {
-    final TextEditingController urlController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.transparent, // 设置对话框背景为透明
-          contentPadding: EdgeInsets.zero, // 去掉默认的内边距
-          content: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0), // 高斯模糊
-              child: Container(
-                color: Colors.black.withOpacity(0.8), // 半透明黑色背景
-                padding: EdgeInsets.all(16), // 添加内边距
-                child: Column(
-                  mainAxisSize: MainAxisSize.min, // 让 Column 包裹内容
-                  children: [
-                    Text(
-                      '输入 URL',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    SizedBox(height: 16), // 添加间距
-                    TextField(
-                      controller: urlController,
-                      decoration: InputDecoration(
-                        hintText: "请输入音视频 URL",
-                        hintStyle: TextStyle(color: Colors.grey),
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.white),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.white),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.lightBlue),
-                        ),
-                      ),
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    SizedBox(height: 16), // 添加间距
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end, // 按钮右对齐
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            _openUri(urlController.text);
-                          },
-                          child: Text(
-                            '确认',
-                            style: TextStyle(color: Colors.lightBlue),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                          },
-                          child: Text(
-                            '取消',
-                            style: TextStyle(color: Colors.lightBlue),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+  Future<void> _showUrlDialog(BuildContext context) async {
+    final url = await showMediaUrlDialog(context);
+    if (url != null && mounted) _openUri(url);
   }
 
   void _checkIfVideoFinished() {

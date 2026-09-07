@@ -1,3 +1,4 @@
+import 'widgets/customer_support.dart';
 import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'widgets/harmony_switch_tile.dart';
 /*
@@ -2360,6 +2361,7 @@ class _SettingsTabState extends State<SettingsTab> {
   Widget _buildAboutSection(BuildContext context) {
     return Column(
       children: [
+        const CustomerSupportButton(),
         Card(
           elevation: 0,
           child: ListTile(

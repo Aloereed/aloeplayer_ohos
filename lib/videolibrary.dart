@@ -1,3 +1,4 @@
+import 'widgets/media_url_dialog.dart';
 import 'widgets/library_toolbar_title.dart';
 import 'widgets/video_library_tile.dart';
 import 'widgets/video_file_actions_sheet.dart';
@@ -3030,139 +3031,10 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     onPressed: () => _showAddOptionsDialog(context),
     icon: const Icon(Icons.add_rounded), label: const Text('添加视频'),
   );
-  void _showUrlDialog(BuildContext context) {
-    final TextEditingController urlController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Color(0xFF2C2C2C)
-                  : Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 10,
-                  offset: Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.link,
-                    size: 30,
-                    color: Colors.lightBlue,
-                  ),
-                ),
-                SizedBox(height: 20),
-                Text(
-                  '打开网络媒体',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 20),
-                TextField(
-                  controller: urlController,
-                  decoration: InputDecoration(
-                    hintText: "请输入音视频URL",
-                    prefixIcon: Icon(Icons.link),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                        color: Colors.grey,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                        color: Theme.of(context).primaryColor,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  style: TextStyle(
-                    fontSize: 16,
-                  ),
-                  autofocus: true,
-                ),
-                SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      style: TextButton.styleFrom(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      ),
-                      child: Text(
-                        '取消',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (urlController.text.isNotEmpty) {
-                          Navigator.of(context).pop();
-                          widget.getopenfile(urlController.text);
-                          widget.startPlayerPage(context);
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).primaryColor,
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: Text(
-                        '确认',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  Future<void> _showUrlDialog(BuildContext context) async {
+    final url = await showMediaUrlDialog(context);
+    if (url == null || !context.mounted) return;
+    widget.getopenfile(url);
+    widget.startPlayerPage(context);
   }
 }

@@ -154,9 +154,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
 
-          // 底部控制区
-          Positioned(
-            bottom: 40,
+          // 隐私页使用自己的按钮，不叠加分页控制区。
+          if (_currentPage > 0) Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 24,
             left: 0,
             right: 0,
             child: Column(

@@ -26,7 +26,9 @@ foreach ($directory in Get-ChildItem -LiteralPath $root -Directory | Where-Objec
         $source = git -C $project show ($manifest.commit + ':pubspec.yaml')
         if ($LASTEXITCODE -ne 0) { throw "Source commit unavailable: $($manifest.commit)" }
         $sourceVersion = ($source | Select-String -Pattern '^version:').Line
-        if ($sourceVersion -ne $manifest.version -or $sourceVersion -notmatch ('^version:\s*' + [regex]::Escape($version) + '\s*$')) {
+        # Older manifests store the version without the pubspec "version:" prefix.
+        $manifestVersion = ($manifest.version -replace '^version:\s*', '').Trim()
+        if (($sourceVersion -replace '^version:\s*', '').Trim() -ne $manifestVersion -or $sourceVersion -notmatch ('^version:\s*' + [regex]::Escape($version) + '\s*$')) {
             throw "Source/HAP version mismatch: $($directory.Name)"
         }
     }

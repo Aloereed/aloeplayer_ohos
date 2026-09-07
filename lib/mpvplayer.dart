@@ -1,3 +1,4 @@
+import 'services/media_url.dart';
 import 'services/media_display_name.dart';
 import 'services/mpv_image_enhancement.dart';
 import 'services/player_image_backend.dart';
@@ -295,7 +296,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       await _loadPlaylist();
       if (mounted) await _openMedia(widget.filePath);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('打开媒体失败: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.filePath.startsWith('http') ? mediaUrlFailure : '打开媒体失败，请检查文件是否存在及格式是否支持。')));
     }
   }
 
@@ -486,6 +487,12 @@ class _MPVPlayerState extends State<MPVPlayer>
       hwdec: widget.nativeHdr && Platform.operatingSystem == 'ohos' ? 'ohcodec' : null,
     ));
     _imageEnhancer = MpvImageEnhancer(backend: PlayerImageBackend(player, controller));
+    _subscriptions.add(player.stream.error.listen((error) {
+      if (mounted && widget.filePath.startsWith('http')) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(mediaUrlFailure), duration: Duration(seconds: 10)));
+      }
+    }));
     _subscriptions.add(player.stream.videoParams.listen((video) {
       final rotated = video.rotate == 90 || video.rotate == 270;
       _imageEnhancer.videoChanged(width: (rotated ? video.dh : video.dw) ?? 0,

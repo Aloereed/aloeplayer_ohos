@@ -1,3 +1,5 @@
+import 'widgets/subscription_terms.dart';
+import 'widgets/customer_support.dart';
 import 'services/member_access.dart';
 import 'package:flutter/material.dart';
 import 'package:aloeplayer/services/membership_service.dart';
@@ -106,6 +108,8 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
             TextButton(onPressed: _iap.busy ? null : _iap.manage, child: const Text('管理订阅')),
             TextButton(onPressed: _iap.busy ? null : _iap.load, child: const Text('重新加载')),
           ]),
+          const SubscriptionTerms(),
+          const CustomerSupportButton(),
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
             childrenPadding: const EdgeInsets.only(bottom: 8),
@@ -141,10 +145,16 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
             if (price.explanation != null) Text(price.explanation!, style: theme.textTheme.bodySmall),
           ],
           const SizedBox(height: 6),
-          Text('${product?.id == 'premium_1year' ? '按年' : '按月'}自动续费，可在“管理订阅”取消。', style: theme.textTheme.bodySmall),
+          Text(product == null ? '价格加载后可购买' : '每${product.id == 'premium_1year' ? '年' : '月'}自动续费 ${product.price}，可在“管理订阅”取消。', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),
           FilledButton(
-            onPressed: _iap.busy || product == null || !_iap.serverReady || _iap.pendingVerification ? null : _iap.purchase,
+            onPressed: _iap.busy || product == null || !_iap.serverReady || _iap.pendingVerification ? null : () async {
+              final selected = product;
+              final summary = '${_planName(selected.id)}：开通时 ${price!.displayPrice}。${price.explanation ?? ''}\n后续每${selected.id == 'premium_1year' ? '年' : '月'}自动续费 ${selected.price}。';
+              if (!await confirmSubscription(context, summary) || !mounted) return;
+              if (_iap.product != selected || _iap.busy) return;
+              await _iap.purchase();
+            },
             child: Text(_iap.pendingVerification ? '订单待验证' : membership.isPremium ? '订购或切换方案' : '开通${_planName(product?.id)}')),
         ],
       ))],
