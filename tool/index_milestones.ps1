@@ -33,6 +33,10 @@ foreach ($directory in Get-ChildItem -LiteralPath $root -Directory | Where-Objec
         }
     }
     $signedLink = if ($signed) { "[签名 HAP]($($directory.Name)/$($signed.name))" } else { '无' }
+    $releaseApp = $manifest.artifacts | Where-Object { $_.name -eq 'ohos-default-signed.app' } | Select-Object -First 1
+    if ($releaseApp) {
+        $signedLink += " / [Release APP $($releaseApp.version)]($($directory.Name)/$($releaseApp.name))"
+    }
     $unsignedLink = if ($unsigned) { "[未签名 HAP]($($directory.Name)/$($unsigned.name))" } else { '无' }
     $commit = $manifest.commit.Substring(0, 7)
     $rows += "| $($directory.Name) | $version | $commit | $signedLink | $unsignedLink | [来源清单]($($directory.Name)/manifest.json) |"

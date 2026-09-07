@@ -1,3 +1,4 @@
+import 'widgets/subtitle_track_dialog.dart';
 import 'services/media_url.dart';
 import 'services/media_display_name.dart';
 import 'services/mpv_image_enhancement.dart';
@@ -1720,164 +1721,16 @@ class _MPVPlayerState extends State<MPVPlayer>
     );
   }
 
-  void _showSubtitleTrackDialog() async {
-    // 获取当前字幕轨道列表
-    final tracks = player.state.tracks.subtitle;
-    final currentTrack = player.state.track.subtitle;
-
-    // 字幕轨道可以为空，因为可能没有内置字幕
-    // 但我们仍然显示对话框，允许用户选择"无字幕"或加载外部字幕
-
-    await showDialog(
+  Future<void> _showSubtitleTrackDialog() async {
+    await showDialog<void>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.grey[900],
-          title: const Text(
-            '选择字幕轨道',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                // "无字幕"选项
-                ListTile(
-                  leading: Icon(
-                    currentTrack.id == 'no' || currentTrack.id == 'auto'
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    color: currentTrack.id == 'no' || currentTrack.id == 'auto'
-                        ? Theme.of(context).primaryColor
-                        : Colors.white70,
-                  ),
-                  title: Text(
-                    '无字幕',
-                    style: TextStyle(
-                      color:
-                          currentTrack.id == 'no' || currentTrack.id == 'auto'
-                              ? Theme.of(context).primaryColor
-                              : Colors.white,
-                      fontWeight:
-                          currentTrack.id == 'no' || currentTrack.id == 'auto'
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                    ),
-                  ),
-                  onTap: () {
-                    // 禁用字幕
-                    player.setSubtitleTrack(SubtitleTrack.no());
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('已关闭字幕')),
-                    );
-                  },
-                ),
-
-                if (tracks.isNotEmpty) const Divider(color: Colors.white24),
-
-                // 内置字幕轨道列表
-                ...tracks.map((track) {
-                  final index = tracks.indexOf(track);
-                  final isSelected = currentTrack.id == track.id;
-
-                  // 构建字幕轨道显示标题
-                  String trackTitle = '字幕 ${index + 1}';
-                  if (track.title != null && track.title!.isNotEmpty) {
-                    trackTitle = track.title!;
-                  } else if (track.language != null &&
-                      track.language!.isNotEmpty) {
-                    trackTitle = '字幕 ${index + 1} (${track.language})';
-                  }
-
-                  // 添加字幕轨道信息（如果有）
-                  List<String> trackInfo = [];
-                  if (track.language != null && track.language!.isNotEmpty) {
-                    trackInfo.add(track.language!);
-                  }
-                  if (track.codec != null && track.codec!.isNotEmpty) {
-                    trackInfo.add(track.codec!);
-                  }
-
-                  // 标记内置字幕
-                  trackInfo.add('内置');
-
-                  final subtitle =
-                      trackInfo.isNotEmpty ? trackInfo.join(' • ') : null;
-
-                  return ListTile(
-                    leading: Icon(
-                      isSelected
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                      color: isSelected
-                          ? Theme.of(context).primaryColor
-                          : Colors.white70,
-                    ),
-                    title: Text(
-                      trackTitle,
-                      style: TextStyle(
-                        color: isSelected
-                            ? Theme.of(context).primaryColor
-                            : Colors.white,
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                    subtitle: subtitle != null
-                        ? Text(
-                            subtitle,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.7),
-                              fontSize: 12,
-                            ),
-                          )
-                        : null,
-                    selected: isSelected,
-                    onTap: () {
-                      player.setSubtitleTrack(track);
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('已切换到: $trackTitle')),
-                      );
-                    },
-                  );
-                }).toList(),
-
-                // 分隔线
-                if (tracks.isNotEmpty) const Divider(color: Colors.white24),
-
-                // "加载外部字幕"选项
-                ListTile(
-                  leading: const Icon(Icons.file_open, color: Colors.white70),
-                  title: const Text(
-                    '加载外部字幕文件...',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  subtitle: Text(
-                    '支持 SRT, ASS, SSA, VTT',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _openSubtitleFile();
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-          ],
-        );
-      },
+      builder: (_) => SubtitleTrackDialog(
+        initialTracks: player.state.tracks.subtitle,
+        tracks: player.stream.tracks.map((tracks) => tracks.subtitle),
+        currentTrack: player.state.track.subtitle,
+        onSelect: player.setSubtitleTrack,
+        onOpenExternal: _openSubtitleFile,
+      ),
     );
   }
 
