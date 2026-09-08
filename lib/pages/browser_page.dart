@@ -687,6 +687,14 @@ class _BrowserPageState extends State<BrowserPage> {
                       child: const Text('重试')),
                   TextButton(onPressed: _openPath, child: const Text('打开路径')),
                   TextButton(
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: message));
+                        if (mounted)
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('错误详情已复制')));
+                      },
+                      child: const Text('复制错误详情')),
+                  TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: const Text('返回服务器列表')),
                 ]),

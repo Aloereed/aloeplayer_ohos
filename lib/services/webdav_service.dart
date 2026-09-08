@@ -9,6 +9,7 @@ import 'webdav_multistatus.dart';
 import 'webdav_path.dart';
 import 'webdav_xml_encoding.dart';
 import 'webdav_tls.dart';
+import 'webdav_retry.dart';
 export 'webdav_multistatus.dart' show WebDavFile;
 
 class WebDavService {
@@ -123,6 +124,7 @@ class WebDavService {
       throw StateError('WebDAV 连接已关闭');
     var current = uri;
     var authRetries = 0;
+    var transientRetries = 0;
     final visited = <String>{};
     for (var redirects = 0; redirects <= 5;) {
       if (cancel.isCancelled) throw StateError('WebDAV 请求已取消');
@@ -152,6 +154,21 @@ class WebDavService {
       if (generation != _generation || cancel.isCancelled) {
         await _discard(response);
         throw StateError('WebDAV 请求已取消');
+      }
+      if ({429, 502, 503, 504}.contains(response.statusCode) &&
+          transientRetries < 2) {
+        final delay = webDavRetryDelay(
+            response.headers.value('retry-after'), transientRetries);
+        if (delay != null) {
+          transientRetries++;
+          await _discard(response);
+          await Future.any<void>([
+            Future<void>.delayed(delay),
+            cancel.whenCancel.then<void>((_) {})
+          ]);
+          if (cancel.isCancelled) throw StateError('WebDAV 请求已取消');
+          continue;
+        }
       }
       if (response.statusCode == 401 && authenticated && authRetries < 2) {
         final challenges = response.headers['www-authenticate'] ?? [];

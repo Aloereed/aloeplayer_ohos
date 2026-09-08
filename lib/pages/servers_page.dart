@@ -7,6 +7,8 @@ import 'continue_watching_page.dart';
 // lib/pages/servers_page.dart
 import 'package:flutter/material.dart';
 import '../services/webdav_tls.dart';
+import '../services/network_connection_probe.dart';
+import '../services/file_service.dart';
 import '../models/server_config.dart';
 import '../services/server_config_service.dart';
 import 'browser_page.dart';
@@ -440,6 +442,9 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
   bool _smbAnonymousLogin = false;
   bool _smbEncryption = false;
   bool _showAdvancedOptions = false;
+  bool _testing = false;
+  String? _testMessage;
+  FileService? _probeSource;
 
   @override
   void initState() {
@@ -477,10 +482,11 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
     _domainController.dispose();
     _initialPathController.dispose();
     _certificateController.dispose();
+    _probeSource?.disconnect();
     super.dispose();
   }
 
-  void _save() {
+  ServerConfig? _readConfig() {
     if (_nameController.text.trim().isEmpty ||
         _hostController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -489,7 +495,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
           backgroundColor: Colors.red,
         ),
       );
-      return;
+      return null;
     }
 
     // 如果不是匿名登录，检查用户名
@@ -502,7 +508,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
           backgroundColor: Colors.red,
         ),
       );
-      return;
+      return null;
     }
 
     int? port;
@@ -515,7 +521,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
             backgroundColor: Colors.red,
           ),
         );
-        return;
+        return null;
       }
     }
 
@@ -527,7 +533,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
     } on FormatException catch (error) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message)));
-      return;
+      return null;
     }
     final config = ServerConfig(
       id: widget.existing?.id ?? const Uuid().v4(),
@@ -560,263 +566,307 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
       } on FormatException catch (error) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
-        return;
+        return null;
       }
     }
-    Navigator.pop(context, config);
+    return config;
+  }
+
+  void _save() {
+    final config = _readConfig();
+    if (config != null) Navigator.pop(context, config);
+  }
+
+  Future<void> _testConnection() async {
+    final config = _readConfig();
+    if (config == null || _testing) return;
+    setState(() {
+      _testing = true;
+      _testMessage = null;
+    });
+    final source = FileServiceFactory.createService(config.type);
+    _probeSource = source;
+    try {
+      final count = await probeNetworkConnection(config, source: source);
+      if (mounted) setState(() => _testMessage = '连接成功，当前目录有 $count 个项目');
+    } catch (error) {
+      if (mounted) setState(() => _testMessage = error.toString());
+    } finally {
+      if (identical(_probeSource, source)) _probeSource = null;
+      if (mounted) setState(() => _testing = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.existing == null ? '添加服务器' : '编辑服务器'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 服务器类型选择
-            if (widget.existing == null)
-              SegmentedButton<ServerType>(
-                segments: const [
-                  ButtonSegment(
-                    value: ServerType.smb,
-                    label: Text('SMB'),
-                    icon: Icon(Icons.folder_shared),
+      content: AbsorbPointer(
+          absorbing: _testing,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 服务器类型选择
+                if (widget.existing == null)
+                  SegmentedButton<ServerType>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ServerType.smb,
+                        label: Text('SMB'),
+                        icon: Icon(Icons.folder_shared),
+                      ),
+                      ButtonSegment(
+                        value: ServerType.webdav,
+                        label: Text('WebDAV'),
+                        icon: Icon(Icons.cloud),
+                      ),
+                    ],
+                    selected: {_serverType},
+                    onSelectionChanged: (Set<ServerType> newSelection) {
+                      setState(() => _serverType = newSelection.first);
+                    },
                   ),
-                  ButtonSegment(
-                    value: ServerType.webdav,
-                    label: Text('WebDAV'),
-                    icon: Icon(Icons.cloud),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    labelText: '服务器名称',
+                    hintText: '例如: 家庭NAS',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.label),
                   ),
-                ],
-                selected: {_serverType},
-                onSelectionChanged: (Set<ServerType> newSelection) {
-                  setState(() => _serverType = newSelection.first);
-                },
-              ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: '服务器名称',
-                hintText: '例如: 家庭NAS',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.label),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _hostController,
-              decoration: InputDecoration(
-                labelText: _serverType == ServerType.smb ? '主机地址' : '主机地址或URL',
-                hintText: _serverType == ServerType.smb
-                    ? '例如: 192.168.1.100'
-                    : '例如: nas.example.com 或 192.168.1.100',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.computer),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // WebDAV 特有字段
-            if (_serverType == ServerType.webdav) ...[
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                title: const Text('HTTPS 证书设置'),
-                initiallyExpanded: _certificateController.text.isNotEmpty,
-                children: [
-                  TextField(
-                      controller: _certificateController,
-                      autocorrect: false,
-                      decoration: const InputDecoration(
-                          labelText: '证书 SHA-256 指纹（可选）',
-                          helperText:
-                              '自签名 NAS 证书可填写从管理页面核实的指纹。留空使用系统信任；更换证书后需更新指纹。',
-                          helperMaxLines: 4,
-                          border: OutlineInputBorder())),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _hostController,
+                  decoration: InputDecoration(
+                    labelText:
+                        _serverType == ServerType.smb ? '主机地址' : '主机地址或URL',
+                    hintText: _serverType == ServerType.smb
+                        ? '例如: 192.168.1.100'
+                        : '例如: nas.example.com 或 192.168.1.100',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.computer),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // WebDAV 特有字段
+                if (_serverType == ServerType.webdav) ...[
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('HTTPS 证书设置'),
+                    initiallyExpanded: _certificateController.text.isNotEmpty,
+                    children: [
+                      TextField(
+                          controller: _certificateController,
+                          autocorrect: false,
+                          decoration: const InputDecoration(
+                              labelText: '证书 SHA-256 指纹（可选）',
+                              helperText:
+                                  '自签名 NAS 证书可填写从管理页面核实的指纹。留空使用系统信任；更换证书后需更新指纹。',
+                              helperMaxLines: 4,
+                              border: OutlineInputBorder())),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _portController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: '端口 (可选)',
+                            hintText: 'HTTP:80 / HTTPS:443',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.numbers),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SwitchListTile(
+                          title: const Text('HTTPS'),
+                          value: _useHttps,
+                          onChanged: (value) {
+                            setState(() => _useHttps = value);
+                          },
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
                 ],
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _portController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: '端口 (可选)',
-                        hintText: 'HTTP:80 / HTTPS:443',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.numbers),
-                      ),
-                    ),
+                TextField(
+                  controller: _usernameController,
+                  decoration: const InputDecoration(
+                    labelText: '用户名',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SwitchListTile(
-                      title: const Text('HTTPS'),
-                      value: _useHttps,
-                      onChanged: (value) {
-                        setState(() => _useHttps = value);
+                  enabled: _serverType != ServerType.smb || !_smbAnonymousLogin,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: '密码',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() => _obscurePassword = !_obscurePassword);
                       },
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-            ],
-            TextField(
-              controller: _usernameController,
-              decoration: const InputDecoration(
-                labelText: '用户名',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person),
-              ),
-              enabled: _serverType != ServerType.smb || !_smbAnonymousLogin,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              obscureText: _obscurePassword,
-              decoration: InputDecoration(
-                labelText: '密码',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.lock),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                  ),
-                  onPressed: () {
-                    setState(() => _obscurePassword = !_obscurePassword);
-                  },
+                  enabled: _serverType != ServerType.smb || !_smbAnonymousLogin,
                 ),
-              ),
-              enabled: _serverType != ServerType.smb || !_smbAnonymousLogin,
-            ),
-            const SizedBox(height: 12),
-            // SMB 特有字段
-            if (_serverType == ServerType.smb) ...[
-              TextField(
-                controller: _domainController,
-                decoration: const InputDecoration(
-                  labelText: '域 (可选)',
-                  hintText: 'WORKGROUP',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.domain),
-                ),
-              ),
-              const SizedBox(height: 12),
-              // SMB 高级选项折叠面板
-              Card(
-                elevation: 1,
-                child: ExpansionTile(
-                  leading:
-                      const Icon(Icons.settings_outlined, color: Colors.blue),
-                  title: const Text(
-                    'SMB 高级选项',
-                    style: TextStyle(fontWeight: FontWeight.w500),
+                const SizedBox(height: 12),
+                // SMB 特有字段
+                if (_serverType == ServerType.smb) ...[
+                  TextField(
+                    controller: _domainController,
+                    decoration: const InputDecoration(
+                      labelText: '域 (可选)',
+                      hintText: 'WORKGROUP',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.domain),
+                    ),
                   ),
-                  subtitle: Text(
-                    _showAdvancedOptions ? '点击收起' : '点击展开',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  initiallyExpanded: _showAdvancedOptions,
-                  onExpansionChanged: (expanded) {
-                    setState(() => _showAdvancedOptions = expanded);
-                  },
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: Column(
-                        children: [
-                          SwitchListTile(
-                            title: const Text('匿名登录'),
-                            subtitle: const Text('使用访客模式连接'),
-                            value: _smbAnonymousLogin,
-                            onChanged: (value) {
-                              setState(() => _smbAnonymousLogin = value);
-                            },
-                            activeColor: Colors.blue,
-                          ),
-                          const Divider(height: 1),
-                          SwitchListTile(
-                            title: const Text('要求签名'),
-                            subtitle: const Text('启用SMB签名验证（推荐）'),
-                            value: _smbSigningRequired,
-                            onChanged: (value) {
-                              setState(() => _smbSigningRequired = value);
-                            },
-                            activeColor: Colors.blue,
-                          ),
-                          const Divider(height: 1),
-                          SwitchListTile(
-                            title: const Text('启用加密'),
-                            subtitle: const Text('使用SMB3加密传输'),
-                            value: _smbEncryption,
-                            onChanged: (value) {
-                              setState(() => _smbEncryption = value);
-                            },
-                            activeColor: Colors.blue,
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.info_outline,
-                                    size: 18, color: Colors.blue),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    '提示：某些服务器可能需要特定配置才能连接',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.blue.shade700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                  const SizedBox(height: 12),
+                  // SMB 高级选项折叠面板
+                  Card(
+                    elevation: 1,
+                    child: ExpansionTile(
+                      leading: const Icon(Icons.settings_outlined,
+                          color: Colors.blue),
+                      title: const Text(
+                        'SMB 高级选项',
+                        style: TextStyle(fontWeight: FontWeight.w500),
                       ),
+                      subtitle: Text(
+                        _showAdvancedOptions ? '点击收起' : '点击展开',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      initiallyExpanded: _showAdvancedOptions,
+                      onExpansionChanged: (expanded) {
+                        setState(() => _showAdvancedOptions = expanded);
+                      },
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          child: Column(
+                            children: [
+                              SwitchListTile(
+                                title: const Text('匿名登录'),
+                                subtitle: const Text('使用访客模式连接'),
+                                value: _smbAnonymousLogin,
+                                onChanged: (value) {
+                                  setState(() => _smbAnonymousLogin = value);
+                                },
+                                activeColor: Colors.blue,
+                              ),
+                              const Divider(height: 1),
+                              SwitchListTile(
+                                title: const Text('要求签名'),
+                                subtitle: const Text('启用SMB签名验证（推荐）'),
+                                value: _smbSigningRequired,
+                                onChanged: (value) {
+                                  setState(() => _smbSigningRequired = value);
+                                },
+                                activeColor: Colors.blue,
+                              ),
+                              const Divider(height: 1),
+                              SwitchListTile(
+                                title: const Text('启用加密'),
+                                subtitle: const Text('使用SMB3加密传输'),
+                                value: _smbEncryption,
+                                onChanged: (value) {
+                                  setState(() => _smbEncryption = value);
+                                },
+                                activeColor: Colors.blue,
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.info_outline,
+                                        size: 18, color: Colors.blue),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '提示：某些服务器可能需要特定配置才能连接',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: _initialPathController,
+                  decoration: InputDecoration(
+                    labelText: '初始路径',
+                    hintText: _serverType == ServerType.smb
+                        ? '/（浏览共享）或 /共享名/文件夹'
+                        : '/ 或 /电影',
+                    helperText: _serverType == ServerType.smb
+                        ? '根目录自动列出共享；服务器禁止枚举时可直接填写共享名。'
+                        : '相对于服务器 URL；URL 已含 /dav 时，不要重复填写 /dav。',
+                    helperMaxLines: 3,
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.folder),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-            ],
-            TextField(
-              controller: _initialPathController,
-              decoration: InputDecoration(
-                labelText: '初始路径',
-                hintText: _serverType == ServerType.smb
-                    ? '/（浏览共享）或 /共享名/文件夹'
-                    : '/ 或 /dav/文件夹',
-                helperText: _serverType == ServerType.smb
-                    ? '根目录自动列出共享；服务器禁止枚举时可直接填写共享名。'
-                    : null,
-                helperMaxLines: 2,
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.folder),
-              ),
+                if (_testMessage != null)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: SelectableText(_testMessage!)),
+              ],
             ),
-          ],
-        ),
-      ),
+          )),
       actions: [
+        TextButton.icon(
+          onPressed: _testing ? null : _testConnection,
+          icon: _testing
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.network_check),
+          label: Text(_testing ? '测试中…' : '测试连接'),
+        ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
         ElevatedButton(
-          onPressed: _save,
+          onPressed: _testing ? null : _save,
           child: const Text('保存'),
         ),
       ],
