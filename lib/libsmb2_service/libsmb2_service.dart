@@ -1,5 +1,6 @@
 import 'smb_path.dart';
 import 'smb_operation_error.dart';
+import 'smb_identity.dart';
 import 'smb_stat_time.dart';
 import '../services/credential_store.dart';
 // Libsmb2 Service - 兼容 smb_service.dart 接口的实现
@@ -75,15 +76,19 @@ class Libsmb2Service {
     bool anonymousLogin = false,
     bool encryption = false,
   }) async {
+    var retryGuest = false;
     try {
       if (isConnected || _ipcService != null || _shares.isNotEmpty)
         await disconnect();
       final address = SmbAddress.parse(host);
+      final identity = smbIdentity(username, domain, anonymous: anonymousLogin);
+      if (!anonymousLogin && password.contains('\x00'))
+        throw const FormatException('SMB 密码包含无效字符');
       _serverRoot = address.share == null;
       _options = {
-        'username': username,
+        'username': identity.username,
         'password': password,
-        'domain': domain,
+        'domain': identity.domain,
         'signingRequired': signingRequired,
         'anonymousLogin': anonymousLogin,
         'encryption': encryption
@@ -107,19 +112,22 @@ class Libsmb2Service {
       print('[libsmb2] Context initialized: ${_context!.address}');
 
       // 设置认证信息
-      final userPtr = (anonymousLogin ? 'guest' : username).toNativeUtf8();
-      final passPtr = (anonymousLogin ? '' : password).toNativeUtf8();
-      final domainPtr = domain.toNativeUtf8();
+      final userPtr = identity.username.toNativeUtf8();
+      final passPtr =
+          anonymousLogin ? ffi.nullptr.cast<Utf8>() : password.toNativeUtf8();
+      final domainPtr = identity.domain.toNativeUtf8();
 
       try {
         // 设置认证信息
         print('[libsmb2] Setting credentials...');
         _bindings.smb2_set_user(_context!, userPtr);
-        _bindings.smb2_set_password(_context!, passPtr);
-        if (domain.isNotEmpty) {
+        if (identity.domain.isNotEmpty) {
           _bindings.smb2_set_domain(_context!, domainPtr);
-          print('[libsmb2] Domain set: $domain');
         }
+        // A null pointer requests NTLM anonymous authentication. An empty
+        // password authenticates a named account instead. Set this last so
+        // domain-based native credential lookup cannot override user input.
+        _bindings.smb2_set_password(_context!, passPtr);
 
         // 设置安全模式 - 根据配置启用或要求签名
         int securityMode;
@@ -161,6 +169,7 @@ class Libsmb2Service {
           print('[libsmb2] smb2_connect_share returned: $result');
 
           if (result != 0) {
+            retryGuest = anonymousLogin && result == -13;
             final errorPtr = _bindings.smb2_get_error(_context!);
             final errorMsg = errorPtr.toDartString();
             print('[libsmb2] Error details: $errorMsg');
@@ -180,7 +189,7 @@ class Libsmb2Service {
         }
       } finally {
         malloc.free(userPtr);
-        malloc.free(passPtr);
+        if (passPtr != ffi.nullptr) malloc.free(passPtr);
         malloc.free(domainPtr);
       }
     } catch (e) {
@@ -190,6 +199,17 @@ class Libsmb2Service {
         _context = null;
       }
       _options = null;
+      if (retryGuest) {
+        // Explicit anonymous mode also supports NAS boxes exposing a named
+        // guest account. Retry only access denial, retaining sign/encrypt flags.
+        return connect(
+            host: host,
+            username: 'guest',
+            password: '',
+            domain: '',
+            signingRequired: signingRequired,
+            encryption: encryption);
+      }
       rethrow;
     }
   }

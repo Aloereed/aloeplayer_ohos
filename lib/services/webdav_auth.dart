@@ -2,6 +2,25 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 
+bool canRetryBasicLatin1(
+    List<String> challenges, String username, String password) {
+  final characters = '$username:$password'.runes;
+  if (!characters.any((c) => c > 127) || characters.any((c) => c > 255))
+    return false;
+  return challenges.any((header) {
+    final basic =
+        RegExp(r'(?:^|,)\s*Basic\s+', caseSensitive: false).firstMatch(header);
+    if (basic == null) return false;
+    final tail = header.substring(basic.end);
+    final next = RegExp(r',\s*(?:Digest|Bearer|Negotiate|Basic)\s+',
+            caseSensitive: false)
+        .firstMatch(tail);
+    final parameters = next == null ? tail : tail.substring(0, next.start);
+    return !RegExp(r'''charset\s*=\s*["']?UTF-8''', caseSensitive: false)
+        .hasMatch(parameters);
+  });
+}
+
 /// RFC 7616 MD5/SHA-256/SHA-512-256, session variants and auth-int. The nonce
 /// counter is assigned synchronously so concurrent GETs never reuse a count.
 class WebDavDigest {

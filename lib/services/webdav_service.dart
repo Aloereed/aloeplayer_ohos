@@ -16,6 +16,7 @@ class WebDavService {
   Dio? _redirectDio;
   WebDavPaths? _paths;
   WebDavDigest? _digest;
+  bool _basicLatin1 = false;
   String _username = '', _password = '';
   bool _connected = false;
   int _generation = 0;
@@ -94,6 +95,7 @@ class WebDavService {
     _redirectDio = null;
     _paths = null;
     _digest = null;
+    _basicLatin1 = false;
     _username = '';
     _password = '';
   }
@@ -125,6 +127,7 @@ class WebDavService {
     for (var redirects = 0; redirects <= 5;) {
       if (cancel.isCancelled) throw StateError('WebDAV 请求已取消');
       final authenticated = paths.sameOrigin(current);
+      final usingLatin1 = _basicLatin1;
       final requestHeaders = <String, dynamic>{...headers};
       if (!authenticated) {
         // ETags belong to the DAV resource, not an unrelated CDN resource.
@@ -136,7 +139,7 @@ class WebDavService {
         requestHeaders['Authorization'] = _digest?.authorization(
                 _username, _password, method, current,
                 body: body ?? '') ??
-            'Basic ${base64Encode(utf8.encode('$_username:$_password'))}';
+            'Basic ${base64Encode((usingLatin1 ? latin1 : utf8).encode('$_username:$_password'))}';
       }
       final response = await (authenticated ? dio : redirectDio)
           .requestUri<ResponseBody>(current,
@@ -151,10 +154,18 @@ class WebDavService {
         throw StateError('WebDAV 请求已取消');
       }
       if (response.statusCode == 401 && authenticated && authRetries < 2) {
-        final digest = WebDavDigest.fromChallenges(
-            response.headers['www-authenticate'] ?? []);
+        final challenges = response.headers['www-authenticate'] ?? [];
+        final digest = WebDavDigest.fromChallenges(challenges);
         if (digest != null) {
           _digest = digest;
+          authRetries++;
+          await _discard(response);
+          continue;
+        }
+        if (!usingLatin1 &&
+            canRetryBasicLatin1(challenges, _username, _password)) {
+          _basicLatin1 = true;
+          _digest = null;
           authRetries++;
           await _discard(response);
           continue;

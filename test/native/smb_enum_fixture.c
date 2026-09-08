@@ -13,11 +13,13 @@
 static smb2_command_cb pending;
 static void *pending_data;
 static int mode, freed, aborted;
+static int connect_calls, password_null, security_flags;
+static char recorded_user[128], recorded_domain[128];
 static struct srvsvc_SHARE_INFO_1 entries[5];
 static struct srvsvc_SHARE_INFO_1_carray array;
 static struct srvsvc_NetrShareEnum_rep reply;
 
-void fixture_reset(int value) { mode = value; freed = 0; aborted = 0; pending = NULL; }
+void fixture_reset(int value) { mode = value; freed = 0; aborted = 0; pending = NULL; connect_calls = 0; }
 int fixture_freed(void) { return freed; }
 int fixture_aborted(void) { return aborted; }
 int fixture_reply_size(void) { return sizeof(reply); }
@@ -77,18 +79,26 @@ void fixture_read_mode(int value) {
 uint32_t smb2_get_max_read_size(struct smb2_context *ctx) { return read_limit; }
 const char *fixture_last_path(void) { return last_path; }
 struct smb2_context *smb2_init_context(void) {
+    recorded_user[0] = 0; recorded_domain[0] = 0; security_flags = 0;
     active_contexts++;
     return (struct smb2_context *)calloc(1, sizeof(struct fixture_context));
 }
 void smb2_destroy_context(struct smb2_context *ctx) { active_contexts--; free(ctx); }
-void smb2_set_user(struct smb2_context *ctx, const char *value) {}
-void smb2_set_password(struct smb2_context *ctx, const char *value) {}
-void smb2_set_domain(struct smb2_context *ctx, const char *value) {}
+void smb2_set_user(struct smb2_context *ctx, const char *value) { strncpy(recorded_user, value, 127); }
+void smb2_set_password(struct smb2_context *ctx, const char *value) { password_null = value == NULL; }
+void smb2_set_domain(struct smb2_context *ctx, const char *value) { strncpy(recorded_domain, value, 127); }
+const char *fixture_user(void) { return recorded_user; }
+const char *fixture_domain(void) { return recorded_domain; }
+int fixture_password_null(void) { return password_null; }
+int fixture_connect_calls(void) { return connect_calls; }
+int fixture_security_flags(void) { return security_flags; }
 void smb2_set_security_mode(struct smb2_context *ctx, uint16_t value) {}
-void smb2_set_sign(struct smb2_context *ctx, int value) {}
-void smb2_set_seal(struct smb2_context *ctx, int value) {}
+void smb2_set_sign(struct smb2_context *ctx, int value) { if (value) security_flags |= 1; }
+void smb2_set_seal(struct smb2_context *ctx, int value) { if (value) security_flags |= 2; }
 void smb2_set_timeout(struct smb2_context *ctx, int value) {}
 int smb2_connect_share(struct smb2_context *ctx, const char *server, const char *share, const char *user) {
+    connect_calls++;
+    if (mode == 7 && password_null) return -13;
     if (mode == 6 && !strcmp(share, "IPC$")) return -13;
     if (!strcmp(share, "Denied")) return -13;
     strncpy(((struct fixture_context *)ctx)->share, share, 127);

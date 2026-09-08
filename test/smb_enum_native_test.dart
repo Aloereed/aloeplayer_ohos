@@ -8,6 +8,62 @@ import 'package:aloeplayer/libsmb2_service/smb_share_enum.dart';
 import 'package:aloeplayer/libsmb2_service/libsmb2_service.dart';
 
 void main() {
+  test(
+      'SMB anonymous uses null password, domain accounts split, guest fallback keeps security flags',
+      () async {
+    final library = ffi.DynamicLibrary.open(
+        File('build/smb_enum_fixture.dll').absolute.path);
+    final reset = library.lookupFunction<ffi.Void Function(ffi.Int32),
+        void Function(int)>('fixture_reset');
+    final user = library.lookupFunction<ffi.Pointer<Utf8> Function(),
+        ffi.Pointer<Utf8> Function()>('fixture_user');
+    final domain = library.lookupFunction<ffi.Pointer<Utf8> Function(),
+        ffi.Pointer<Utf8> Function()>('fixture_domain');
+    final nullPassword =
+        library.lookupFunction<ffi.Int32 Function(), int Function()>(
+            'fixture_password_null');
+    final calls = library.lookupFunction<ffi.Int32 Function(), int Function()>(
+        'fixture_connect_calls');
+    final security =
+        library.lookupFunction<ffi.Int32 Function(), int Function()>(
+            'fixture_security_flags');
+    final service = Libsmb2Service(bindings: Libsmb2Bindings(library: library));
+    try {
+      reset(0);
+      await service.connect(
+          host: 'nas/Videos',
+          username: 'old',
+          password: 'old',
+          domain: 'old',
+          anonymousLogin: true);
+      expect(user().toDartString(), '');
+      expect(domain().toDartString(), '');
+      expect(nullPassword(), 1);
+      await service.connect(
+          host: 'nas/Videos', username: r'LAB\user', password: '', domain: '');
+      expect(user().toDartString(), 'user');
+      expect(domain().toDartString(), 'LAB');
+      expect(nullPassword(), 0);
+      reset(7);
+      await service.connect(
+          host: 'nas/Videos',
+          username: '',
+          password: '',
+          domain: '',
+          anonymousLogin: true,
+          signingRequired: true,
+          encryption: true);
+      expect(calls(), 2);
+      expect(user().toDartString(), 'guest');
+      expect(nullPassword(), 0);
+      expect(security(), 3);
+    } finally {
+      await service.disconnect();
+      reset(0);
+    }
+  },
+      skip: !Platform.isWindows ||
+          !File('build/smb_enum_fixture.dll').existsSync());
   test('denied IPC does not prevent authenticated access to a known share',
       () async {
     final library = ffi.DynamicLibrary.open(

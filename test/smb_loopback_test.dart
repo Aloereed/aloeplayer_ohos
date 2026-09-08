@@ -178,6 +178,30 @@ void main() {
       } finally {
         await strict.disconnect();
       }
+      final anonymous =
+          Libsmb2Service(bindings: Libsmb2Bindings(library: library));
+      try {
+        await anonymous.connect(
+            host: '${config['host']}/Videos',
+            username: 'ignored',
+            password: 'ignored',
+            domain: 'ignored',
+            anonymousLogin: true);
+        expect(
+            (await anonymous.listFiles('/')).any((f) => f.name == video.name),
+            isTrue);
+        await anonymous.disconnect();
+        await anonymous.connect(
+            host: '${config['host']}/Videos',
+            username: 'LAB\\${config['username']}',
+            password: config['password'],
+            domain: '');
+        expect(
+            (await anonymous.listFiles('/')).any((f) => f.name == video.name),
+            isTrue);
+      } finally {
+        await anonymous.disconnect();
+      }
       final invalid =
           Libsmb2Service(bindings: Libsmb2Bindings(library: library));
       await expectLater(
