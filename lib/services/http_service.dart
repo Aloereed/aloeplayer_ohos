@@ -194,7 +194,20 @@ class HttpService {
       final file = await _fileInfo(source, grant.path);
       if (file == null || file.isDirectory) return Response.notFound('文件不存在');
       final size = file.size;
-      final rangeHeader = request.headers['range'];
+      if (!hasKnownFileSize(file)) return Response(502, body: '无法确定远端文件大小');
+      var rangeHeader = request.headers['range'];
+      final etag = fileEtag(file);
+      final modified =
+          file.modified == null ? null : HttpDate.format(file.modified!);
+      final ifRange = request.headers['if-range'];
+      if (ifRange != null && rangeHeader != null) {
+        // A stale validator requests a full replacement representation, not
+        // bytes from a different revision appended to an old partial file.
+        final matches = ifRange.startsWith('"')
+            ? etag != null && !etag.startsWith('W/') && ifRange == etag
+            : modified != null && ifRange == modified;
+        if (!matches) rangeHeader = null;
+      }
       final range =
           rangeHeader == null ? null : ByteRange.parse(rangeHeader, size);
       if (rangeHeader != null && range == null)
@@ -205,6 +218,8 @@ class HttpService {
         'Content-Length': '${range?.length ?? size}',
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'no-store',
+        if (etag != null) 'ETag': etag,
+        if (modified != null) 'Last-Modified': modified,
         if (range != null)
           'Content-Range': 'bytes ${range.start}-${range.end}/$size',
       };

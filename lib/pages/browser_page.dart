@@ -1,4 +1,5 @@
 import '../services/network_directory_controller.dart';
+import '../services/network_sort.dart';
 import 'dart:async';
 import '../services/webdav_path.dart';
 import '../libsmb2_service/smb_path.dart';
@@ -199,7 +200,7 @@ class _BrowserPageState extends State<BrowserPage> {
           // 文件夹优先
           if (a.isDirectory && !b.isDirectory) return -1;
           if (!a.isDirectory && b.isDirectory) return 1;
-          comparison = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          comparison = compareNetworkNames(a.name, b.name);
           break;
         case SortType.size:
           if (a.isDirectory && !b.isDirectory) return -1;

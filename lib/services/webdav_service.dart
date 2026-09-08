@@ -336,8 +336,23 @@ class WebDavService {
       if (response.data == null) throw StateError('WebDAV 响应为空');
       int? length =
           int.tryParse(response.headers.value('content-length') ?? '');
+      if (length != null && length < 0) throw StateError('WebDAV 文件长度无效');
+      if (ranged && response.statusCode == 200 && (start ?? 0) == 0) {
+        if (!{'', 'identity'}
+            .contains(response.headers.value('content-encoding') ?? '')) {
+          throw StateError('WebDAV 服务器压缩了范围响应，无法安全定位');
+        }
+        // Range may be ignored. A bounded prefix at offset zero is safe;
+        // nonzero seeks must still fail rather than replaying the wrong bytes.
+        if (end != null) {
+          final prefix = length != null && length < end + 1 ? length : end + 1;
+          return _prefixStream(response.data!.stream, cancel, prefix);
+        }
+        return _checkedStream(response.data!.stream, cancel, length);
+      }
       if (ranged) {
-        if (response.statusCode != 206) throw StateError('WebDAV 服务器不支持范围读取');
+        if (response.statusCode != 206)
+          throw StateError('WebDAV 服务器不支持跳转或续传，可完整下载后本地播放');
         if (!{'', 'identity'}
             .contains(response.headers.value('content-encoding') ?? '')) {
           throw StateError('WebDAV 服务器压缩了范围响应，无法安全定位');
@@ -389,6 +404,23 @@ class WebDavService {
       }
       if (length != null && received != length)
         throw StateError('WebDAV 连接提前结束，文件未读取完整');
+    } finally {
+      _finish(cancel);
+    }
+  }
+
+  Stream<Uint8List> _prefixStream(
+      Stream<Uint8List> stream, CancelToken cancel, int length) async* {
+    var remaining = length;
+    try {
+      if (remaining == 0) return;
+      await for (final chunk in stream.timeout(const Duration(seconds: 60))) {
+        final count = chunk.length < remaining ? chunk.length : remaining;
+        if (count > 0) yield Uint8List.sublistView(chunk, 0, count);
+        remaining -= count;
+        if (remaining == 0) return;
+      }
+      throw StateError('WebDAV 连接提前结束，文件未读取完整');
     } finally {
       _finish(cancel);
     }

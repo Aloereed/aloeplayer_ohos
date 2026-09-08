@@ -6,6 +6,7 @@ import 'package:aloeplayer/services/http_service.dart';
 import 'package:aloeplayer/services/file_service.dart';
 import 'package:aloeplayer/models/server_config.dart';
 import 'package:aloeplayer/services/network_playback.dart';
+import 'package:aloeplayer/services/webdav_service.dart';
 
 class _File implements FileItem {
   @override
@@ -50,7 +51,48 @@ class _Source extends FileService {
   }
 }
 
+class _VersionedSource extends _Source {
+  @override
+  Future<FileItem?> getFile(String path) async => WebDavFileItem(WebDavFile(
+      name: _File().name,
+      path: path,
+      size: 10,
+      isDirectory: false,
+      etag: '"version-1"',
+      lastModified: DateTime.utc(2026, 1, 1)));
+}
+
 void main() {
+  test(
+      'If-Range returns full content for stale validators and ranges for exact revision',
+      () async {
+    final proxy = HttpService.forTesting(_VersionedSource());
+    final client = HttpClient();
+    try {
+      await proxy.startServer();
+      final url = Uri.parse(proxy.getFileUrlLocalhost(_File().path));
+      for (final validator in [
+        '"version-1"',
+        '"old"',
+        'W/"version-1"',
+        'Thu, 01 Jan 2026 00:00:00 GMT'
+      ]) {
+        final request = await client.getUrl(url);
+        request.headers.set('range', 'bytes=3-5');
+        request.headers.set('if-range', validator);
+        final response = await request.close();
+        final matches =
+            validator == '"version-1"' || validator.startsWith('Thu,');
+        expect(response.statusCode, matches ? 206 : 200);
+        expect(response.headers.value('etag'), '"version-1"');
+        expect(await utf8.decoder.bind(response).join(),
+            matches ? '345' : '0123456789');
+      }
+    } finally {
+      client.close(force: true);
+      await proxy.stopServer();
+    }
+  });
   test('proxy coalesces metadata and pins reused grants to the original source',
       () async {
     final first = _Source();
