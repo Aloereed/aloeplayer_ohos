@@ -2,6 +2,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:aloeplayer/libsmb2_service/smb_path.dart';
 
 void main() {
+  test('separate initial path is not decoded as part of an SMB URL', () {
+    final value =
+        smbConnectionAddress('smb://nas/Share%20Name', '/100% #中文/literal%20');
+    final address = SmbAddress.parse(value);
+    expect(address.share, 'Share Name');
+    expect(address.basePath, '100% #中文/literal%20');
+    expect(SmbAddress.parse(smbConnectionAddress('nas', '/Videos')).share,
+        'Videos');
+    expect(() => smbConnectionAddress('nas/Videos', '../escape'),
+        throwsFormatException);
+  });
   test('SMB accepts bare hosts, UNC, URLs, ports and nested roots', () {
     for (final value in ['nas', '//nas/', 'smb://nas/', r'\\nas\']) {
       final address = SmbAddress.parse(value);

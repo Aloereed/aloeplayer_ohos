@@ -8,6 +8,41 @@ import 'package:aloeplayer/libsmb2_service/smb_share_enum.dart';
 import 'package:aloeplayer/libsmb2_service/libsmb2_service.dart';
 
 void main() {
+  test('denied IPC does not prevent authenticated access to a known share',
+      () async {
+    final library = ffi.DynamicLibrary.open(
+        File('build/smb_enum_fixture.dll').absolute.path);
+    final reset = library.lookupFunction<ffi.Void Function(ffi.Int32),
+        void Function(int)>('fixture_reset');
+    final contexts =
+        library.lookupFunction<ffi.Int32 Function(), int Function()>(
+            'fixture_contexts');
+    final service = Libsmb2Service(bindings: Libsmb2Bindings(library: library));
+    reset(6);
+    try {
+      await service.connect(
+          host: 'nas', username: '', password: '', domain: '');
+      expect(contexts(), 0); // No IPC dependency for a virtual root.
+      await expectLater(service.listFiles('/'), throwsException);
+      expect(service.isConnected, isTrue);
+      expect((await service.listFiles('/Videos')).single.path,
+          '/Videos/clip #100%.mkv');
+      expect(
+          await (await service.getRangeStream('/Videos/clip', start: 0))
+              .expand((x) => x)
+              .toList(),
+          [0, 1, 2, 3, 4, 5]);
+      // Enumeration retry may acquire a new IPC context without replacing data shares.
+      reset(0);
+      expect((await service.listFiles('/')).length, 2);
+    } finally {
+      await service.disconnect();
+      reset(0);
+    }
+    expect(contexts(), 0);
+  },
+      skip: !Platform.isWindows ||
+          !File('build/smb_enum_fixture.dll').existsSync());
   test('SMB negotiation deadline aborts pending callback before releasing it',
       () {
     final library = ffi.DynamicLibrary.open(

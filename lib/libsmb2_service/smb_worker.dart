@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import '../services/serial_executor.dart';
 import 'libsmb2_file.dart';
 import 'libsmb2_service.dart';
+import 'smb_operation_error.dart';
 
 abstract class SmbWorkerBackend {
   Future<bool> connect(Map<String, dynamic> options);
@@ -95,7 +96,11 @@ void serveSmbWorker(SendPort output, SmbWorkerBackend backend) {
         }
         output.send({'id': id, 'value': value});
       } catch (error) {
-        output.send({'id': id, 'error': error.toString()});
+        output.send({
+          'id': id,
+          'error': error.toString(),
+          if (error is SmbOperationError) 'smbCode': error.code
+        });
       } finally {
         if (command == 'disconnect') inbox.close();
       }
@@ -144,7 +149,9 @@ class SmbWorker {
       } else if (message is Map) {
         final pending = _pending.remove(message['id']);
         if (message['error'] != null)
-          pending?.completeError(StateError(message['error']));
+          pending?.completeError(message['smbCode'] is int
+              ? SmbOperationError(message['smbCode'], message['error'])
+              : StateError(message['error']));
         else
           pending?.complete(message['value']);
       } else {

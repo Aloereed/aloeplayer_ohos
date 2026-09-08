@@ -1,4 +1,5 @@
 import 'smb_path.dart';
+import 'smb_operation_error.dart';
 import 'smb_stat_time.dart';
 import '../services/credential_store.dart';
 // Libsmb2 Service - 兼容 smb_service.dart 接口的实现
@@ -26,13 +27,16 @@ class Libsmb2Service {
   bool _serverRoot = false;
   Map<String, dynamic>? _options;
   final Map<String, Libsmb2Service> _shares = {};
+  Libsmb2Service? _ipcService;
   String? _basePath; // 连接时指定的基础路径（share之后的路径部分）
 
   // 文件句柄管理 - 用于支持多个并发流式读取
   final Map<String, Libsmb2StreamReader> _streamReaders = {};
   final Set<Libsmb2StreamReader> _rangeReaders = {};
 
-  bool get isConnected => _context != null && _context!.address != 0;
+  bool get isConnected =>
+      (_serverRoot && _options != null) ||
+      (_context != null && _context!.address != 0);
 
   // 保存登录信息
   Future<void> saveCredentials({
@@ -72,7 +76,8 @@ class Libsmb2Service {
     bool encryption = false,
   }) async {
     try {
-      if (_context != null || _shares.isNotEmpty) await disconnect();
+      if (isConnected || _ipcService != null || _shares.isNotEmpty)
+        await disconnect();
       final address = SmbAddress.parse(host);
       _serverRoot = address.share == null;
       _options = {
@@ -83,6 +88,16 @@ class Libsmb2Service {
         'anonymousLogin': anonymousLogin,
         'encryption': encryption
       };
+
+      if (_serverRoot) {
+        // The server root is a virtual namespace. Authenticate IPC$ only when
+        // enumerating it; a NAS may deny IPC$ while allowing a known share.
+        // Every data-share connection still performs its own authentication.
+        _currentHost = address.server;
+        _currentShare = null;
+        _basePath = '';
+        return true;
+      }
 
       // 初始化 SMB2 context
       _context = _bindings.smb2_init_context();
@@ -185,6 +200,8 @@ class Libsmb2Service {
       await service.disconnect();
     }
     _shares.clear();
+    await _ipcService?.disconnect();
+    _ipcService = null;
     _options = null;
     for (final reader in _rangeReaders.toList()) {
       await reader.close();
@@ -224,10 +241,11 @@ class Libsmb2Service {
 
   Future<Libsmb2Service> _shareService(String share) async {
     final existing = _shares.remove(share);
-    if (existing != null) {
+    if (existing != null && existing.isConnected) {
       _shares[share] = existing;
       return existing;
     }
+    if (existing != null) await existing.disconnect();
     // Evict only idle connections. Active playback/download streams keep their
     // own context even when the browser enters another share.
     if (_shares.length >= 8) {
@@ -279,9 +297,25 @@ class Libsmb2Service {
     if (_serverRoot) {
       final parts = smbPathSegments(path);
       if (parts.isEmpty) {
-        final names = _bindings.listShares(_context!, () {
-          _bindings.smb2_destroy_context(_context!);
-          _context = null;
+        var ipc = _ipcService;
+        if (ipc == null || !ipc.isConnected) {
+          if (ipc != null) await ipc.disconnect();
+          ipc = Libsmb2Service(bindings: _bindings);
+          _ipcService = ipc;
+          final options = _options!;
+          await ipc.connect(
+              host: '//$_currentHost/IPC\$',
+              username: options['username'],
+              password: options['password'],
+              domain: options['domain'],
+              signingRequired: options['signingRequired'],
+              anonymousLogin: options['anonymousLogin'],
+              encryption: options['encryption']);
+        }
+        final connection = ipc;
+        final names = _bindings.listShares(connection._context!, () {
+          _bindings.smb2_destroy_context(connection._context!);
+          connection._context = null;
         });
         return names
             .map((name) => Libsmb2File(
@@ -387,7 +421,7 @@ class Libsmb2Service {
   /// await reader.close();
   /// ```
   Future<Libsmb2StreamReader> createStreamReader(String filePath) async {
-    if (!isConnected || _context == null) {
+    if (!isConnected) {
       throw Exception('未连接到SMB服务器');
     }
 
@@ -427,7 +461,7 @@ class Libsmb2Service {
     int? end,
     int chunkSize = 1024 * 1024,
   }) async {
-    if (!isConnected || _context == null) {
+    if (!isConnected) {
       throw Exception('未连接到SMB服务器');
     }
 
@@ -504,7 +538,7 @@ class Libsmb2Service {
     try {
       final result = _bindings.smb2_stat(_context!, pathPtr, stat);
       if (result < 0)
-        throw StateError(
+        throw SmbOperationError(result,
             '无法读取 SMB 文件信息：${_bindings.smb2_get_error(_context!).toDartString()}（$result）');
       return Libsmb2File(
           name: smbPathSegments(path).lastOrNull ?? _currentShare!,

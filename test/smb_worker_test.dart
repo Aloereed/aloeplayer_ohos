@@ -8,6 +8,7 @@ import 'package:aloeplayer/services/smb_service.dart';
 import 'package:aloeplayer/services/file_service.dart';
 import 'package:aloeplayer/models/server_config.dart';
 import 'package:aloeplayer/libsmb2_service/libsmb2_file.dart';
+import 'package:aloeplayer/libsmb2_service/smb_operation_error.dart';
 
 class _Backend implements SmbWorkerBackend {
   bool closed = false;
@@ -23,6 +24,8 @@ class _Backend implements SmbWorkerBackend {
   Future<List<Libsmb2File>> list(String path) async => [await stat(path)];
   @override
   Future<Libsmb2File> stat(String path) async {
+    if (path == '/absent') throw SmbOperationError(-2, 'not found');
+    if (path == '/denied') throw SmbOperationError(-13, 'access denied');
     if (path == 'missing') throw StateError('missing');
     return Libsmb2File(
         name: path == 'closed' ? '$closed' : '片段.mp4',
@@ -125,6 +128,11 @@ void main() {
           createdAt: DateTime(2026));
       expect(await service.connect(config), isTrue);
       expect((await service.listFiles('/')).single.name, '片段.mp4');
+      expect(await service.getFile('/absent'), isNull);
+      await expectLater(
+          service.getFile('/denied'),
+          throwsA(
+              isA<SmbOperationError>().having((e) => e.code, 'errno', -13)));
       expect(
           await (await service.getFileStream('/video', start: 1, end: 3))
               .expand((chunk) => chunk)

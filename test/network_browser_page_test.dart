@@ -11,10 +11,13 @@ import 'package:aloeplayer/models/server_config.dart';
 class _Source implements FileService {
   bool connected = false;
   bool failConnect = false;
+  bool requireKnownProbe = false;
   @override
   bool get isConnected => connected;
   @override
   Future<bool> connect(ServerConfig config) async {
+    if (requireKnownProbe && config.initialPath != '/Known')
+      throw StateError('root forbidden');
     if (failConnect) throw StateError('authentication failed');
     return connected = true;
   }
@@ -57,6 +60,26 @@ void main() {
       createdAt: DateTime(2026));
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+  testWidgets(
+      'known DAV path reconnects when the initial root probe is forbidden',
+      (tester) async {
+    final source = _Source()..requireKnownProbe = true;
+    await tester.pumpWidget(MaterialApp(
+        home: BrowserPage(
+            serverConfig: config.copyWith(type: ServerType.webdav),
+            fileService: source,
+            httpService: _Proxy(source))));
+    await tester.pumpAndSettle();
+    expect(find.text('无法连接服务器'), findsOneWidget);
+    await tester.tap(find.text('打开路径'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), '/Known');
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+    expect(find.text('无法连接服务器'), findsNothing);
+    expect(find.text('测试影片'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
       'root enumeration failure stays visible and known shares can be opened directly',

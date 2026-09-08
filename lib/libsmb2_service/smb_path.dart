@@ -50,3 +50,16 @@ List<String> smbPathSegments(String path) {
 }
 
 String smbCanonicalPath(String path) => '/${smbPathSegments(path).join('/')}';
+
+/// Host URLs are encoded input, while a separately entered initial folder is
+/// a logical filename. Join only after decoding the host, then use UNC form
+/// so the native adapter never decodes a literal percent sign twice.
+String smbConnectionAddress(String host, String initialPath) {
+  final address = SmbAddress.parse(host);
+  final parts = [
+    if (address.share != null) address.share!,
+    ...smbPathSegments(address.basePath),
+    ...smbPathSegments(initialPath),
+  ];
+  return '//${address.server}/${parts.join('/')}';
+}

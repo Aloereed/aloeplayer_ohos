@@ -1,6 +1,8 @@
 // lib/services/file_service.dart
 import 'dart:typed_data';
 import '../libsmb2_service/smb_file.dart';
+import '../libsmb2_service/smb_path.dart';
+import '../libsmb2_service/smb_operation_error.dart';
 import 'smb_service.dart';
 import 'webdav_service.dart';
 import '../models/server_config.dart';
@@ -105,21 +107,7 @@ class SmbFileService implements FileService {
       throw Exception('配置类型不是SMB');
     }
 
-    // 将 initialPath 与 host 拼接
-    String fullHost = config.host;
-    if (config.initialPath.isNotEmpty && config.initialPath != '/') {
-      // 移除 host 结尾的斜杠（如果有）
-      if (fullHost.endsWith('/')) {
-        fullHost = fullHost.substring(0, fullHost.length - 1);
-      }
-      // 移除 initialPath 开头的斜杠（如果有）
-      String cleanPath = config.initialPath;
-      if (cleanPath.startsWith('/')) {
-        cleanPath = cleanPath.substring(1);
-      }
-      // 拼接
-      fullHost = '$fullHost/$cleanPath';
-    }
+    final fullHost = smbConnectionAddress(config.host, config.initialPath);
 
     return await _smbService.connect(
       host: fullHost,
@@ -155,8 +143,9 @@ class SmbFileService implements FileService {
     try {
       final file = await _smbService.getFile(path);
       return file.isExists ? SmbFileItem(file) : null;
-    } catch (e) {
-      return null;
+    } on SmbOperationError catch (error) {
+      if (error.isMissing) return null;
+      rethrow;
     }
   }
 

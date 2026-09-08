@@ -94,20 +94,25 @@ class _BrowserPageState extends State<BrowserPage> {
     _applyFilters();
   }
 
-  Future<void> _connectAndLoad({bool resume = false}) async {
+  Future<void> _connectAndLoad(
+      {bool resume = false, String? targetPath}) async {
     if (!mounted) return;
-    final target = resume
-        ? (_directory.failedPath ?? _currentPath)
-        : (widget.serverConfig.type == ServerType.smb
-            ? '/'
-            : widget.serverConfig.initialPath);
+    final target = targetPath ??
+        (resume
+            ? (_directory.failedPath ?? _currentPath)
+            : (widget.serverConfig.type == ServerType.smb
+                ? '/'
+                : widget.serverConfig.initialPath));
     setState(() {
       _isLoading = true;
       _connectionError = null;
     });
     try {
       if (!await _httpService.startServer()) throw StateError('无法启动本地播放服务');
-      if (!await _fileService.connect(widget.serverConfig))
+      final config = widget.serverConfig.type == ServerType.webdav
+          ? widget.serverConfig.copyWith(initialPath: target)
+          : widget.serverConfig;
+      if (!await _fileService.connect(config))
         throw StateError('连接失败，请检查服务器配置');
       if (!mounted) {
         await _fileService.disconnect();
@@ -165,7 +170,11 @@ class _BrowserPageState extends State<BrowserPage> {
       final normalized = widget.serverConfig.type == ServerType.smb
           ? smbCanonicalPath(chosen)
           : WebDavPaths.canonical(chosen);
-      await _loadFiles(normalized, remember: true);
+      if (!_fileService.isConnected || _connectionError != null) {
+        await _connectAndLoad(targetPath: normalized);
+      } else {
+        await _loadFiles(normalized, remember: true);
+      }
     } catch (error) {
       _showError(error.toString());
     }
@@ -665,8 +674,7 @@ class _BrowserPageState extends State<BrowserPage> {
                           ? _loadFiles(_directory.failedPath ?? _currentPath)
                           : _connectAndLoad(resume: true),
                       child: const Text('重试')),
-                  if (_fileService.isConnected)
-                    TextButton(onPressed: _openPath, child: const Text('打开路径')),
+                  TextButton(onPressed: _openPath, child: const Text('打开路径')),
                   TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: const Text('返回服务器列表')),

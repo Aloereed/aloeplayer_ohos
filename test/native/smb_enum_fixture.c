@@ -89,6 +89,7 @@ void smb2_set_sign(struct smb2_context *ctx, int value) {}
 void smb2_set_seal(struct smb2_context *ctx, int value) {}
 void smb2_set_timeout(struct smb2_context *ctx, int value) {}
 int smb2_connect_share(struct smb2_context *ctx, const char *server, const char *share, const char *user) {
+    if (mode == 6 && !strcmp(share, "IPC$")) return -13;
     if (!strcmp(share, "Denied")) return -13;
     strncpy(((struct fixture_context *)ctx)->share, share, 127);
     return 0;
