@@ -288,12 +288,14 @@ class DownloadManager extends ChangeNotifier {
     final done = _activeDone?.future;
     // Cancel the source even before a response stream exists (DNS/auth/GET
     // headers can still be pending). Do not wait for a 60-second HTTP timeout.
+    // Attach handlers to both futures immediately: a failing disconnect must
+    // not become an unhandled error while stream cancellation is still pending.
     final disconnect = _activeSource?.disconnect();
-    try {
-      await _iterator?.cancel();
-    } finally {
-      await disconnect;
-    }
+    final cancel = _iterator?.cancel();
+    await Future.wait<void>([
+      if (disconnect != null) disconnect,
+      if (cancel != null) cancel,
+    ]);
     await done;
   }
 

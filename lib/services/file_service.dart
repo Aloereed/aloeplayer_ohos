@@ -134,7 +134,7 @@ class SmbFileService implements FileService {
   @override
   Future<Stream<Uint8List>> getFileStream(String filePath,
       {int? start, int? end}) async {
-    return await _smbService.libsmb2Service.getRangeStream(filePath,
+    return await _smbService.getRangeStream(filePath,
         start: start ?? 0, end: end == null ? null : end + 1);
   }
 

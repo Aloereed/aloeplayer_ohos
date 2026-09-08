@@ -12,8 +12,10 @@ import 'package:aloeplayer/libsmb2_service/smb_operation_error.dart';
 
 class _Backend implements SmbWorkerBackend {
   bool closed = false;
+  Map<String, dynamic> options = {};
   @override
   Future<bool> connect(Map<String, dynamic> options) async {
+    this.options = options;
     sleep(const Duration(milliseconds: 150));
     return true;
   }
@@ -21,7 +23,11 @@ class _Backend implements SmbWorkerBackend {
   @override
   Future<void> disconnect() async {}
   @override
-  Future<List<Libsmb2File>> list(String path) async => [await stat(path)];
+  Future<List<Libsmb2File>> list(String path) async {
+    if (path == '/slow') sleep(const Duration(milliseconds: 750));
+    return [await stat(path)];
+  }
+
   @override
   Future<Libsmb2File> stat(String path) async {
     if (path == '/absent') throw SmbOperationError(-2, 'not found');
@@ -36,7 +42,13 @@ class _Backend implements SmbWorkerBackend {
 
   @override
   Future<Stream<Uint8List>> range(String path, int start, int? end) async =>
-      _read(start, end ?? 6);
+      path == '/flags'
+          ? Stream.value(Uint8List.fromList([
+              options['signingRequired'] == true ? 1 : 0,
+              options['anonymousLogin'] == true ? 1 : 0,
+              options['encryption'] == true ? 1 : 0
+            ]))
+          : _read(start, end ?? 6);
   Stream<Uint8List> _read(int start, int end) async* {
     try {
       for (var offset = start; offset < end; offset += 2) {
@@ -52,6 +64,75 @@ class _Backend implements SmbWorkerBackend {
 void _entry(SendPort output) => serveSmbWorker(output, _Backend());
 
 void main() {
+  test(
+      'SMB media reads remain independent of slow directory work and preserve security options',
+      () async {
+    var readers = 0;
+    final service =
+        SmbService.forTesting(SmbWorker.forTesting(_entry), readerFactory: () {
+      readers++;
+      return SmbWorker.forTesting(_entry);
+    });
+    try {
+      await service.connect(
+          host: 'nas',
+          username: '',
+          password: '',
+          domain: '',
+          signingRequired: true,
+          anonymousLogin: true,
+          encryption: true);
+      expect(readers, 0); // Directory-only browsing starts no reader worker.
+      expect(
+          await (await service.getFileStream('/flags'))
+              .expand((x) => x)
+              .toList(),
+          [1, 1, 1]);
+      var directoryFinished = false;
+      final directory = service.listFiles('/slow').then((value) {
+        directoryFinished = true;
+        return value;
+      });
+      final stream = await service.getRangeStream('/clip', start: 1, end: 4);
+      expect(await stream.expand((x) => x).toList(), [1, 2, 3]);
+      expect(directoryFinished, isFalse);
+      expect(readers, 1);
+      await directory;
+      final stale = await service.getFileStream('/old');
+      await service.disconnect();
+      await service.connect(
+          host: 'new', username: '', password: '', domain: '');
+      await expectLater(stale.drain<void>(), throwsStateError);
+      expect(
+          await (await service.getFileStream('/flags'))
+              .expand((x) => x)
+              .toList(),
+          [0, 0, 0]);
+      expect(readers, 2);
+    } finally {
+      await service.disconnect();
+    }
+  });
+
+  test(
+      'disconnect during lazy SMB reader startup closes it and rejects the pending read',
+      () async {
+    final service = SmbService.forTesting(SmbWorker.forTesting(_entry),
+        readerFactory: () => SmbWorker.forTesting(_entry));
+    await service.connect(host: 'nas', username: '', password: '', domain: '');
+    final pending =
+        expectLater(service.getFileStream('/clip'), throwsStateError);
+    await service.disconnect();
+    await pending;
+    expect(service.isConnected, isFalse);
+    await service.connect(host: 'nas', username: '', password: '', domain: '');
+    expect(
+        await (await service.getRangeStream('/clip', start: 2, end: 4))
+            .expand((x) => x)
+            .toList(),
+        [2, 3]);
+    await service.disconnect();
+  });
   test('old streams cannot read or close reused reader IDs after reconnect',
       () async {
     final worker = SmbWorker.forTesting(_entry);
@@ -116,7 +197,8 @@ void main() {
       'file-service adapter preserves inclusive range semantics through worker',
       () async {
     final service = SmbFileService(
-        service: SmbService.forTesting(SmbWorker.forTesting(_entry)));
+        service: SmbService.forTesting(SmbWorker.forTesting(_entry),
+            readerFactory: () => SmbWorker.forTesting(_entry)));
     try {
       final config = ServerConfig(
           id: 'server',
