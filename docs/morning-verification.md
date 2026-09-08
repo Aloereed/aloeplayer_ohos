@@ -1,8 +1,10 @@
 # 明早部署与验收
 
+**2026-09-09 最新：66-ipv6-network-compatibility / 4.0.0+219 / b64c1a8**。本轮 WebDAV / SMB 改进与验收请先读 [网络媒体库交付说明](network-library-handoff.md)。下方 IAP 等内容为历史专项记录。
+
 先打开 [安装包索引](../build/milestones/README.md)，从第一行的签名 HAP 开始。最新版本正常，就保留最新版本。所有版本都没有真机验证记录。
 
-**当前最新：34-premium-monthly-iap / 3.1.1+182 / 5ce195a**。恢复 CPF-Flutter 鸿蒙 IAP 插件，启用 premium_monthly 自动续期月会员，接入服务端验单、幂等发放与恢复购买。配套用户中心提交 aed8397，源码与前端 dist 已放入同一里程碑目录。先按 [IAP 联调说明](iap-monthly.md) 部署并配置后端，再试购买。Flutter 65 项、后端 8 项通过，前端与 HAP 构建通过；没有真机、实际付款或线上部署记录。
+**历史第 34 版：34-premium-monthly-iap / 3.1.1+182 / 5ce195a**。恢复 CPF-Flutter 鸿蒙 IAP 插件，启用 premium_monthly 自动续期月会员，接入服务端验单、幂等发放与恢复购买。配套用户中心提交 aed8397，源码与前端 dist 已放入同一里程碑目录。先按 [IAP 联调说明](iap-monthly.md) 部署并配置后端，再试购买。Flutter 65 项、后端 8 项通过，前端与 HAP 构建通过；没有真机、实际付款或线上部署记录。
 
 第二轮最新包：**28-pip-lifecycle-controls / 3.1.1+176 / 20825c8**。本轮新增 17–28 共 12 个可独立部署的里程碑，前一轮包全部保留。详细变化见 [第二轮记录](round2-milestones.md)，界面样式可先看 [7 张预览](../build/ui-review/index.html)。
 
