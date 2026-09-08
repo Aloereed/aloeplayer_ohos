@@ -24,9 +24,9 @@ void main() {
       final bytes = await (await service.getFileStream('/video', start: 3, end: 5)).expand((chunk) => chunk).toList();
       expect(bytes, [3, 4, 5]);
       mode = 'ignored';
-      await expectLater(service.getFileStream('/video', start: 3, end: 5), throwsException);
+      await expectLater(service.getFileStream('/video', start: 3, end: 5), throwsStateError);
       mode = 'wrong';
-      await expectLater(service.getFileStream('/video', start: 3, end: 5), throwsException);
+      await expectLater(service.getFileStream('/video', start: 3, end: 5), throwsStateError);
     } finally { await service.disconnect(); await server.close(force: true); }
   });
 }

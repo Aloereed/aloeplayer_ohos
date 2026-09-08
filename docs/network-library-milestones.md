@@ -34,4 +34,16 @@
 - 支持裸主机、SMB URL、UNC、端口、IPv6 和嵌套起始目录；URL 解码仅发生在地址边界，保留文件名中的百分号、空格、井号和问号。
 - stat 改用原生路径 stat，避免把目录当普通文件打开；连接错误保留具体原因；配置页说明服务器根目录与禁止枚举时的直连方法。
 - 6 项专项测试通过，其中 C 测试夹具使用项目自带头文件，检查 FFI 结构体大小、共享过滤、错误回调释放、跨共享读取不串连接、连接池淘汰与嵌套根目录。静态分析无 error / warning。
-- 原生测试夹具不连接 NAS；真实服务器认证策略、共享权限与设备播放仍待用户验收。构建与产物信息归档后补充。
+- 原生测试夹具不连接 NAS；真实服务器认证策略、共享权限与设备播放仍待用户验收。
+- 提交 `410fc62`；签名 HAP 构建成功。规范未签名 HAP 时间戳 `2026-09-09T01:41:39+08:00`，包和测试/分析/构建日志位于 `build/milestones/54-smb-server-root/`。
+
+### 55 — WebDAV 路径、认证与可靠读取（4.0.0+208）
+
+- 完整 HTTP/HTTPS URL、端口和 IPv6 不再被重复拼接协议头；保留 URL 路径。密码不再被自动 trim，允许公开 WebDAV 使用空凭据。
+- 统一编码边界，修复中文、空格、百分号、井号、问号等文件名；解析绝对/相对 href，目录只显示直接子项。
+- 以 DAV 命名空间解析 XML，只合并 2xx propstat，支持大文件大小、ISO/HTTP 时间及缺失长度时的 HEAD 补查。错误 HTML、损坏 XML 不再显示为空目录。
+- 支持 Basic 和 Digest MD5/SHA-256（包括 sess、auth/auth-int）、保留方法的同源重定向；媒体 GET 可跟随 CDN 地址，但不跨源发送凭据、不从 HTTPS 降级。
+- 使用配置子目录探查连接，支持根目录无权限的服务；HTTP 失败保留具体原因，失败连接关闭客户端。
+- 范围读取检查 Content-Range、Content-Length 和实际字节数；短读、错位、超长数据明确报错。断开取消所有活动请求，目录 XML 与小文件读取有内存上限，大目录 XML 在 isolate 解析。
+- 全套 146 项测试通过，另补充 4 项流/取消回归通过。Digest 对照 RFC 的 MD5 与 SHA-256 已知值；网络测试仅连接本机临时 HTTP 服务。
+- 依据：[WebDAV RFC 4918](https://www.rfc-editor.org/rfc/rfc4918.html)、[Digest RFC 7616](https://www.rfc-editor.org/rfc/rfc7616.html)、[HTTP RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html)。不声称所有 NAS 认证机制均已实测；Kerberos/NTLM WebDAV 认证尚未实现。

@@ -1,467 +1,344 @@
-// lib/services/webdav_service.dart
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
-import 'package:xml/xml.dart';
-
-class WebDavFile {
-  final String name;
-  final String path;
-  final int size;
-  final bool isDirectory;
-  final DateTime? lastModified;
-  final String? contentType;
-
-  WebDavFile({
-    required this.name,
-    required this.path,
-    required this.size,
-    required this.isDirectory,
-    this.lastModified,
-    this.contentType,
-  });
-
-  @override
-  String toString() => 'WebDavFile(name: $name, path: $path, isDir: $isDirectory)';
-}
+import 'webdav_auth.dart';
+import 'webdav_multistatus.dart';
+import 'webdav_path.dart';
+export 'webdav_multistatus.dart' show WebDavFile;
 
 class WebDavService {
   Dio? _dio;
-  String? _baseUrl;
-  bool get isConnected => _dio != null;
+  WebDavPaths? _paths;
+  WebDavDigest? _digest;
+  String _username = '', _password = '';
+  bool _connected = false;
+  int _generation = 0;
+  final Set<CancelToken> _requests = {};
+  bool get isConnected => _connected && _dio != null;
 
-  // 连接到WebDAV服务器
-  Future<bool> connect({
-    required String baseUrl,
-    required String username,
-    required String password,
-  }) async {
+  static const _propfind = '''<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:"><D:prop><D:displayname/><D:getcontentlength/>
+<D:getlastmodified/><D:resourcetype/><D:getcontenttype/><D:getetag/>
+</D:prop></D:propfind>''';
+
+  Future<bool> connect(
+      {required String baseUrl,
+      required String username,
+      required String password,
+      String probePath = '/'}) async {
+    await disconnect();
+    final generation = _generation;
+    _paths = WebDavPaths(baseUrl);
+    _username = username;
+    _password = password;
+    _dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 60),
+        sendTimeout: const Duration(seconds: 30),
+        followRedirects: false,
+        validateStatus: (_) => true,
+        headers: {'Accept-Encoding': 'identity'},
+        responseType: ResponseType.stream));
+    final cancel = _newRequest();
     try {
-      _baseUrl = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
-
-      print('WebDAV 连接到: $_baseUrl');
-      print('用户名: $username');
-
-      // 创建Dio实例with基础认证
-      _dio = Dio(
-        BaseOptions(
-          baseUrl: _baseUrl!,
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 60),
-          headers: {
-            'Authorization': 'Basic ${base64Encode(utf8.encode('$username:$password'))}',
-          },
-          validateStatus: (status) => status != null && status < 500,
-          responseType: ResponseType.plain, // 使用 plain 以确保能正确接收 XML
-        ),
-      );
-
-      // 测试连接
-      print('发送测试 PROPFIND 请求到 /');
-      final response = await _dio!.request(
-        '/',
-        options: Options(
-          method: 'PROPFIND',
+      final response = await _request(
+          'PROPFIND', _paths!.resolve(probePath, directory: true), cancel,
           headers: {
             'Depth': '0',
+            'Content-Type': 'application/xml; charset=utf-8'
           },
-        ),
-      );
-
-      print('测试连接响应状态码: ${response.statusCode}');
-      final success = response.statusCode == 207 || response.statusCode == 200;
-
-      if (!success) {
-        print('连接测试失败，响应数据: ${response.data}');
+          body: _propfind);
+      _requireStatus(response, {200, 207});
+      if (WebDavPaths.canonical(probePath) == '/' &&
+          response.requestOptions.uri !=
+              _paths!.resolve('/', directory: true)) {
+        _paths = WebDavPaths(response.requestOptions.uri.toString());
       }
-
-      return success;
-    } catch (e) {
-      print('WebDAV连接失败: $e');
-      _dio = null;
-      return false;
+      final xml = await _readXml(response);
+      // Parse to reject HTML login pages and HTTP 200 error documents.
+      await _parse(xml, response.requestOptions.uri);
+      if (generation != _generation) throw StateError('WebDAV 连接已取消');
+      _connected = true;
+      return true;
+    } catch (_) {
+      if (generation == _generation) await disconnect();
+      rethrow;
+    } finally {
+      _finish(cancel);
     }
   }
 
-  // 断开连接
   Future<void> disconnect() async {
-    _dio?.close();
-    _dio = null;
-    _baseUrl = null;
-  }
-
-  // 列出目录中的文件
-  Future<List<WebDavFile>> listFiles(String path) async {
-    if (_dio == null) throw Exception('未连接到WebDAV服务器');
-
-    try {
-      // 确保路径格式正确
-      final cleanPath = _cleanPath(path);
-
-      // 发送PROPFIND请求
-      final response = await _dio!.request(
-        cleanPath,
-        options: Options(
-          method: 'PROPFIND',
-          headers: {
-            'Depth': '1',
-            'Content-Type': 'application/xml; charset=utf-8',
-          },
-        ),
-        data: '''<?xml version="1.0" encoding="utf-8" ?>
-<D:propfind xmlns:D="DAV:">
-  <D:prop>
-    <D:displayname/>
-    <D:getcontentlength/>
-    <D:getlastmodified/>
-    <D:resourcetype/>
-    <D:getcontenttype/>
-  </D:prop>
-</D:propfind>''',
-      );
-
-      print('WebDAV PROPFIND 响应状态码: ${response.statusCode}');
-
-      if (response.statusCode != 207) {
-        print('WebDAV PROPFIND 错误响应: ${response.data}');
-        throw Exception('PROPFIND请求失败: ${response.statusCode}');
-      }
-
-      print('WebDAV PROPFIND 响应数据: ${response.data}');
-
-      // 解析XML响应
-      final files = _parseMultiStatusResponse(response.data, cleanPath);
-      print('WebDAV 解析到 ${files.length} 个文件');
-      return files;
-    } catch (e) {
-      throw Exception('获取文件列表失败: $e');
+    _generation++;
+    _connected = false;
+    for (final token in _requests) {
+      token.cancel('WebDAV 连接已关闭');
     }
+    _requests.clear();
+    _dio?.close(force: true);
+    _dio = null;
+    _paths = null;
+    _digest = null;
+    _username = '';
+    _password = '';
   }
 
-  // 解析WebDAV多状态响应
-  List<WebDavFile> _parseMultiStatusResponse(String xmlData, String currentPath) {
-    final files = <WebDavFile>[];
+  CancelToken _newRequest() {
+    if (_dio == null) throw StateError('未连接到 WebDAV 服务器');
+    final token = CancelToken();
+    _requests.add(token);
+    return token;
+  }
 
-    try {
-      print('开始解析 XML 响应...');
-      final document = XmlDocument.parse(xmlData);
+  void _finish(CancelToken token) {
+    _requests.remove(token);
+    token.cancel('请求结束');
+  }
 
-      // 尝试多种方式查找 response 元素
-      var responses = document.findAllElements('response');
-      if (responses.isEmpty) {
-        responses = document.findAllElements('D:response');
+  Future<Response<ResponseBody>> _request(
+      String method, Uri uri, CancelToken cancel,
+      {Map<String, dynamic> headers = const {}, String? body}) async {
+    final dio = _dio;
+    final paths = _paths;
+    final generation = _generation;
+    if (dio == null || paths == null) throw StateError('WebDAV 连接已关闭');
+    var current = uri;
+    var authRetries = 0;
+    final visited = <String>{};
+    for (var redirects = 0; redirects <= 5;) {
+      if (cancel.isCancelled) throw StateError('WebDAV 请求已取消');
+      final authenticated = paths.sameOrigin(current);
+      final requestHeaders = <String, dynamic>{...headers};
+      if (authenticated && (_username.isNotEmpty || _password.isNotEmpty)) {
+        requestHeaders['Authorization'] = _digest?.authorization(
+                _username, _password, method, current,
+                body: body ?? '') ??
+            'Basic ${base64Encode(utf8.encode('$_username:$_password'))}';
       }
-      if (responses.isEmpty) {
-        responses = document.findAllElements('d:response');
+      final response = await dio.requestUri<ResponseBody>(current,
+          data: body,
+          cancelToken: cancel,
+          options: Options(
+              method: method,
+              headers: requestHeaders,
+              responseType: ResponseType.stream));
+      if (generation != _generation || cancel.isCancelled) {
+        await _discard(response);
+        throw StateError('WebDAV 请求已取消');
       }
-
-      print('找到 ${responses.length} 个 response 元素');
-
-      for (final response in responses) {
-        try {
-          // 尝试多种方式查找 href
-          var hrefElements = response.findElements('href');
-          if (hrefElements.isEmpty) hrefElements = response.findElements('D:href');
-          if (hrefElements.isEmpty) hrefElements = response.findElements('d:href');
-
-          if (hrefElements.isEmpty) {
-            print('警告: 找不到 href 元素');
-            continue;
-          }
-
-          final href = hrefElements.first.innerText;
-          final decodedHref = Uri.decodeFull(href);
-          print('处理文件 href: $href -> $decodedHref');
-
-          // 解码路径
-          final filePath = _normalizeHref(decodedHref);
-          print('标准化路径: $filePath (当前路径: $currentPath)');
-
-          // 跳过当前目录本身
-          if (_isSameOrParentPath(filePath, currentPath)) {
-            print('跳过当前目录: $filePath');
-            continue;
-          }
-
-          // 尝试查找 propstat
-          var propstatElements = response.findElements('propstat');
-          if (propstatElements.isEmpty) propstatElements = response.findElements('D:propstat');
-          if (propstatElements.isEmpty) propstatElements = response.findElements('d:propstat');
-
-          if (propstatElements.isEmpty) {
-            print('警告: 找不到 propstat 元素');
-            continue;
-          }
-
-          final propstat = propstatElements.first;
-
-          // 尝试查找 prop
-          var propElements = propstat.findElements('prop');
-          if (propElements.isEmpty) propElements = propstat.findElements('D:prop');
-          if (propElements.isEmpty) propElements = propstat.findElements('d:prop');
-
-          if (propElements.isEmpty) {
-            print('警告: 找不到 prop 元素');
-            continue;
-          }
-
-          final prop = propElements.first;
-
-          // 获取文件名
-          var fileName = filePath.split('/').where((s) => s.isNotEmpty).last;
-
-          // 尝试从displayname获取文件名
-          var displayNameElements = prop.findElements('displayname');
-          if (displayNameElements.isEmpty) displayNameElements = prop.findElements('D:displayname');
-          if (displayNameElements.isEmpty) displayNameElements = prop.findElements('d:displayname');
-
-          if (displayNameElements.isNotEmpty) {
-            final displayName = displayNameElements.first.innerText.trim();
-            if (displayName.isNotEmpty) {
-              fileName = displayName;
-            }
-          }
-
-          // 检查是否为目录
-          var resourceTypeElements = prop.findElements('resourcetype');
-          if (resourceTypeElements.isEmpty) resourceTypeElements = prop.findElements('D:resourcetype');
-          if (resourceTypeElements.isEmpty) resourceTypeElements = prop.findElements('d:resourcetype');
-
-          bool isDir = false;
-          if (resourceTypeElements.isNotEmpty) {
-            final resourceType = resourceTypeElements.first;
-            var collectionElements = resourceType.findElements('collection');
-            if (collectionElements.isEmpty) collectionElements = resourceType.findElements('D:collection');
-            if (collectionElements.isEmpty) collectionElements = resourceType.findElements('d:collection');
-            isDir = collectionElements.isNotEmpty;
-          }
-
-          // 获取文件大小
-          int size = 0;
-          var contentLengthElements = prop.findElements('getcontentlength');
-          if (contentLengthElements.isEmpty) contentLengthElements = prop.findElements('D:getcontentlength');
-          if (contentLengthElements.isEmpty) contentLengthElements = prop.findElements('d:getcontentlength');
-
-          if (contentLengthElements.isNotEmpty) {
-            final sizeStr = contentLengthElements.first.innerText;
-            size = int.tryParse(sizeStr) ?? 0;
-          }
-
-          // 获取最后修改时间
-          DateTime? lastModified;
-          var lastModifiedElements = prop.findElements('getlastmodified');
-          if (lastModifiedElements.isEmpty) lastModifiedElements = prop.findElements('D:getlastmodified');
-          if (lastModifiedElements.isEmpty) lastModifiedElements = prop.findElements('d:getlastmodified');
-
-          if (lastModifiedElements.isNotEmpty) {
-            try {
-              lastModified = HttpDate.parse(lastModifiedElements.first.innerText);
-            } catch (e) {
-              print('解析修改时间失败: $e');
-            }
-          }
-
-          // 获取内容类型
-          String? contentType;
-          var contentTypeElements = prop.findElements('getcontenttype');
-          if (contentTypeElements.isEmpty) contentTypeElements = prop.findElements('D:getcontenttype');
-          if (contentTypeElements.isEmpty) contentTypeElements = prop.findElements('d:getcontenttype');
-
-          if (contentTypeElements.isNotEmpty) {
-            contentType = contentTypeElements.first.innerText;
-          }
-
-          final file = WebDavFile(
-            name: fileName,
-            path: filePath,
-            size: size,
-            isDirectory: isDir,
-            lastModified: lastModified,
-            contentType: contentType,
-          );
-
-          print('添加文件: $fileName (目录: $isDir, 大小: $size)');
-          files.add(file);
-        } catch (e) {
-          print('解析文件条目失败: $e');
+      if (response.statusCode == 401 && authenticated && authRetries < 2) {
+        final digest = WebDavDigest.fromChallenges(
+            response.headers['www-authenticate'] ?? []);
+        if (digest != null) {
+          _digest = digest;
+          authRetries++;
+          await _discard(response);
           continue;
         }
       }
-    } catch (e) {
-      print('解析XML响应失败: $e');
-      print('XML 数据: $xmlData');
-    }
-
-    print('最终解析到 ${files.length} 个文件');
-    return files;
-  }
-
-  // 获取文件流（用于播放和下载）
-  Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end}) async {
-    if (_dio == null) throw Exception('未连接到WebDAV服务器');
-
-    try {
-      final cleanPath = _cleanPath(filePath);
-
-      final headers = <String, dynamic>{};
-      if (start != null || end != null) {
-        final startStr = start?.toString() ?? '0';
-        final endStr = end?.toString() ?? '';
-        headers['Range'] = 'bytes=$startStr-$endStr';
-      }
-
-      final response = await _dio!.get<ResponseBody>(
-        cleanPath,
-        options: Options(
-          responseType: ResponseType.stream,
-          headers: headers,
-        ),
-      );
-
-      if (response.statusCode != 200 && response.statusCode != 206) {
-        await response.data?.stream.listen((_) {}).cancel();
-        throw Exception('文件请求失败: ${response.statusCode}');
-      }
-      if ((start != null || end != null) && response.statusCode != 206) {
-        await response.data?.stream.listen((_) {}).cancel();
-        throw Exception('服务器不支持范围读取');
-      }
-      if (start != null || end != null) {
-        final match = RegExp(r'^bytes (\d+)-(\d+)/(\d+|\*)$').firstMatch(response.headers.value('content-range') ?? '');
-        final actualStart = match == null ? null : int.tryParse(match.group(1)!);
-        final actualEnd = match == null ? null : int.tryParse(match.group(2)!);
-        final total = match == null ? null : int.tryParse(match.group(3)!);
-        final expectedEnd = end == null ? (total == null ? null : total - 1) : (total != null && end >= total ? total - 1 : end);
-        if (actualStart != (start ?? 0) || actualEnd == null || actualEnd < (start ?? 0) ||
-            (expectedEnd != null && actualEnd != expectedEnd)) {
-          await response.data?.stream.listen((_) {}).cancel();
-          throw Exception('服务器返回了错误的读取范围，已停止以避免文件损坏');
+      if ({301, 302, 303, 307, 308}.contains(response.statusCode)) {
+        final location = response.headers.value('location');
+        await _discard(response);
+        if (location == null || redirects++ == 5)
+          throw StateError('WebDAV 重定向次数过多或缺少目标地址');
+        final target = current.resolve(location);
+        if (!{'http', 'https'}.contains(target.scheme) ||
+            target.userInfo.isNotEmpty ||
+            (current.scheme == 'https' && target.scheme != 'https')) {
+          throw StateError('WebDAV 返回了不安全的重定向地址');
         }
+        if (method == 'PROPFIND' &&
+            (!paths.sameOrigin(target) || response.statusCode == 303)) {
+          throw StateError('WebDAV 目录重定向到其他服务，请将最终 WebDAV URL 填入服务器地址');
+        }
+        if (!visited.add(target.toString()))
+          throw StateError('WebDAV 服务器发生重定向循环');
+        current = target;
+        continue;
       }
-      if (response.data == null) throw Exception('响应数据为空');
-
-      return response.data!.stream;
-    } catch (e) {
-      throw Exception('获取文件流失败: $e');
+      return response;
     }
+    throw StateError('WebDAV 重定向失败');
   }
 
-  // 获取文件信息
-  Future<WebDavFile?> getFileInfo(String filePath) async {
-    if (_dio == null) throw Exception('未连接到WebDAV服务器');
+  Future<void> _discard(Response<ResponseBody> response) async {
+    await response.data?.stream.listen((_) {}).cancel();
+  }
 
+  void _requireStatus(Response<ResponseBody> response, Set<int> expected) {
+    if (expected.contains(response.statusCode)) return;
+    final code = response.statusCode;
+    final detail = switch (code) {
+      401 => '认证失败，请检查用户名、密码或应用专用密码',
+      403 => '没有访问权限',
+      404 => '路径不存在，请检查 WebDAV 服务路径',
+      405 || 501 => '此地址不支持 WebDAV PROPFIND，请检查服务端配置',
+      423 => '资源已锁定',
+      429 => '服务器请求过于频繁，请稍后重试',
+      _ => '服务器请求失败',
+    };
+    throw StateError('WebDAV $detail（HTTP $code）');
+  }
+
+  Future<String> _readXml(Response<ResponseBody> response) async {
+    final body = response.data;
+    if (body == null) throw StateError('WebDAV 响应为空');
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk
+        in body.stream.timeout(const Duration(seconds: 60))) {
+      if (builder.length + chunk.length > 32 * 1024 * 1024)
+        throw StateError('WebDAV 目录响应超过 32 MiB，请打开更小的目录');
+      builder.add(chunk);
+    }
+    return utf8.decode(builder.takeBytes());
+  }
+
+  Future<List<WebDavFile>> _parse(String xml, Uri request) {
+    final base = _paths!.base.toString();
+    final url = request.toString();
+    if (xml.length > 256 * 1024)
+      return Isolate.run(() => parseWebDavMultiStatus(xml, base, url));
+    return Future.value(parseWebDavMultiStatus(xml, base, url));
+  }
+
+  Future<List<WebDavFile>> _properties(String path, int depth) async {
+    if (!isConnected) throw StateError('未连接到 WebDAV 服务器');
+    final cancel = _newRequest();
     try {
-      final cleanPath = _cleanPath(filePath);
-
-      final response = await _dio!.request(
-        cleanPath,
-        options: Options(
-          method: 'PROPFIND',
+      final response = await _request(
+          'PROPFIND', _paths!.resolve(path, directory: depth == 1), cancel,
           headers: {
-            'Depth': '0',
-            'Content-Type': 'application/xml; charset=utf-8',
+            'Depth': '$depth',
+            'Content-Type': 'application/xml; charset=utf-8'
           },
-        ),
-        data: '''<?xml version="1.0" encoding="utf-8" ?>
-<D:propfind xmlns:D="DAV:">
-  <D:prop>
-    <D:displayname/>
-    <D:getcontentlength/>
-    <D:getlastmodified/>
-    <D:resourcetype/>
-    <D:getcontenttype/>
-  </D:prop>
-</D:propfind>''',
-      );
-
-      if (response.statusCode != 207) {
-        return null;
+          body: _propfind);
+      if (response.statusCode == 404 && depth == 0) {
+        await _discard(response);
+        return [];
       }
-
-      final files = _parseMultiStatusResponse(response.data, '');
-      return files.isNotEmpty ? files.first : null;
-    } catch (e) {
-      print('获取文件信息失败: $e');
-      return null;
+      _requireStatus(response, {200, 207});
+      return await _parse(
+          await _readXml(response), response.requestOptions.uri);
+    } finally {
+      _finish(cancel);
     }
   }
 
-  // 清理路径
-  String _cleanPath(String path) {
-    // 确保路径以/开头
-    if (!path.startsWith('/')) {
-      path = '/$path';
-    }
-    return path;
+  Future<List<WebDavFile>> listFiles(String path) async {
+    final files = await _properties(path, 1);
+    return files
+        .where((file) => WebDavPaths.isDirectChild(path, file.path))
+        .toList();
   }
 
-  // 规范化href
-  String _normalizeHref(String href) {
-    print('_normalizeHref 输入: $href, baseUrl: $_baseUrl');
-
-    // 移除基础URL部分（如果存在）
-    if (_baseUrl != null) {
-      final uri = Uri.parse(_baseUrl!);
-      print('baseUrl URI path: ${uri.path}');
-
-      // 如果 href 是完整 URL，解析它
-      if (href.startsWith('http://') || href.startsWith('https://')) {
-        final hrefUri = Uri.parse(href);
-        href = hrefUri.path;
-        print('从完整 URL 提取路径: $href');
-      }
-
-      // 如果 baseUrl 有路径部分，且 href 以该路径开始，则移除
-      if (uri.path.isNotEmpty && uri.path != '/' && href.startsWith(uri.path)) {
-        href = href.substring(uri.path.length);
-        print('移除 baseUrl 路径后: $href');
-      }
-    }
-
-    // 确保以/开头
-    if (!href.startsWith('/')) {
-      href = '/$href';
-    }
-
-    print('_normalizeHref 输出: $href');
-    return href;
-  }
-
-  // 检查是否为相同或父路径
-  bool _isSameOrParentPath(String path1, String path2) {
-    final p1 = path1.endsWith('/') ? path1.substring(0, path1.length - 1) : path1;
-    final p2 = path2.endsWith('/') ? path2.substring(0, path2.length - 1) : path2;
-    final result = p1 == p2;
-    if (result) {
-      print('路径相同，跳过: "$p1" == "$p2"');
-    }
-    return result;
-  }
-
-  // 直接下载文件字节（用于小文件）
-  Future<Uint8List> downloadFile(String filePath) async {
-    if (_dio == null) throw Exception('未连接到WebDAV服务器');
-
+  Future<WebDavFile?> getFileInfo(String path) async {
+    path = WebDavPaths.canonical(path);
+    final files = await _properties(path, 0);
+    final file = files.where((file) => file.path == path).firstOrNull;
+    if (file == null || file.sizeKnown) return file;
+    // Some servers omit getcontentlength from PROPFIND. Resolve length before
+    // the playback proxy commits HTTP headers; zero is not an unknown length.
+    final cancel = _newRequest();
     try {
-      final cleanPath = _cleanPath(filePath);
-
-      final response = await _dio!.get<List<int>>(
-        cleanPath,
-        options: Options(responseType: ResponseType.bytes),
-      );
-
-      return Uint8List.fromList(response.data!);
-    } catch (e) {
-      throw Exception('下载文件失败: $e');
+      final response = await _request('HEAD', _paths!.resolve(path), cancel);
+      _requireStatus(response, {200, 204});
+      final size = int.tryParse(response.headers.value('content-length') ?? '');
+      await _discard(response);
+      if (size == null || size < 0)
+        throw StateError('WebDAV 服务器未提供文件大小，无法安全定位播放');
+      return WebDavFile(
+          name: file.name,
+          path: path,
+          size: size,
+          isDirectory: file.isDirectory,
+          lastModified: file.lastModified ??
+              webDavDate(response.headers.value('last-modified')),
+          contentType: file.contentType,
+          etag: file.etag ?? response.headers.value('etag'));
+    } finally {
+      _finish(cancel);
     }
   }
 
-  // 获取WebDAV服务器的完整文件URL（用于生成HTTP代理URL）
-  String getFileUrl(String filePath) {
-    if (_baseUrl == null) return '';
-    final cleanPath = _cleanPath(filePath);
-    return '$_baseUrl$cleanPath';
+  Future<Stream<Uint8List>> getFileStream(String filePath,
+      {int? start, int? end}) async {
+    if (!isConnected) throw StateError('未连接到 WebDAV 服务器');
+    if ((start != null && start < 0) || (end != null && end < (start ?? 0)))
+      throw ArgumentError('无效的读取范围');
+    final cancel = _newRequest();
+    try {
+      final ranged = start != null || end != null;
+      final response = await _request('GET', _paths!.resolve(filePath), cancel,
+          headers: {if (ranged) 'Range': 'bytes=${start ?? 0}-${end ?? ''}'});
+      _requireStatus(response, {200, 206});
+      if (response.data == null) throw StateError('WebDAV 响应为空');
+      int? length =
+          int.tryParse(response.headers.value('content-length') ?? '');
+      if (ranged) {
+        if (response.statusCode != 206) throw StateError('WebDAV 服务器不支持范围读取');
+        if (!{'', 'identity'}
+            .contains(response.headers.value('content-encoding') ?? '')) {
+          throw StateError('WebDAV 服务器压缩了范围响应，无法安全定位');
+        }
+        final match = RegExp(r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$',
+                caseSensitive: false)
+            .firstMatch((response.headers.value('content-range') ?? '').trim());
+        final actualStart = int.tryParse(match?.group(1) ?? '');
+        final actualEnd = int.tryParse(match?.group(2) ?? '');
+        final total = int.tryParse(match?.group(3) ?? '');
+        final expectedEnd = end == null
+            ? (total == null ? null : total - 1)
+            : (total != null && end >= total ? total - 1 : end);
+        if (actualStart != (start ?? 0) ||
+            actualEnd == null ||
+            actualEnd < (start ?? 0) ||
+            (total != null && (total <= actualEnd || total <= 0)) ||
+            (expectedEnd != null && actualEnd != expectedEnd)) {
+          throw StateError('WebDAV 服务器返回了错误的读取范围，已停止以避免文件损坏');
+        }
+        final rangeLength = actualEnd - actualStart! + 1;
+        if (length != null && length != rangeLength)
+          throw StateError('WebDAV 响应长度与读取范围不一致');
+        length = rangeLength;
+      } else if (response.statusCode == 206) {
+        throw StateError('WebDAV 服务器意外返回部分文件');
+      }
+      return _checkedStream(response.data!.stream, cancel, length);
+    } catch (_) {
+      _finish(cancel);
+      rethrow;
+    }
   }
+
+  Stream<Uint8List> _checkedStream(
+      Stream<Uint8List> stream, CancelToken cancel, int? length) async* {
+    var received = 0;
+    try {
+      await for (final chunk in stream.timeout(const Duration(seconds: 60))) {
+        received += chunk.length;
+        if (length != null && received > length)
+          throw StateError('WebDAV 服务器返回的数据超出预期长度');
+        yield chunk;
+      }
+      if (length != null && received != length)
+        throw StateError('WebDAV 连接提前结束，文件未读取完整');
+    } finally {
+      _finish(cancel);
+    }
+  }
+
+  Future<Uint8List> downloadFile(String filePath) async {
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in await getFileStream(filePath)) {
+      if (builder.length + chunk.length > 64 * 1024 * 1024)
+        throw StateError('文件超过 64 MiB，请使用下载任务保存到本地');
+      builder.add(chunk);
+    }
+    return builder.takeBytes();
+  }
+
+  String getFileUrl(String filePath) =>
+      _paths?.resolve(filePath).toString() ?? '';
 }

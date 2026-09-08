@@ -1,5 +1,4 @@
 // lib/models/server_config.dart
-import 'dart:convert';
 
 enum ServerType {
   smb,
@@ -130,12 +129,23 @@ class ServerConfig {
   // 获取WebDAV的完整URL
   String get webdavUrl {
     if (type != ServerType.webdav) return '';
-    final scheme = useHttps ? 'https' : 'http';
-    final actualPort = port ?? (useHttps ? 443 : 80);
-    final portStr = (useHttps && actualPort == 443) || (!useHttps && actualPort == 80)
-        ? ''
-        : ':$actualPort';
-    return '$scheme://$host$portStr';
+    final value = host.trim();
+    final hasScheme = value.contains('://');
+    final uri = Uri.parse(
+        hasScheme ? value : '${useHttps ? 'https' : 'http'}://$value');
+    if (!{'http', 'https'}.contains(uri.scheme) ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        (port != null && (port! < 1 || port! > 65535)) ||
+        uri.port < 1 ||
+        uri.port > 65535) {
+      throw const FormatException('WebDAV 主机、URL 或端口无效');
+    }
+    // A full URL owns its scheme and path. An explicitly supplied port can
+    // override its port without corrupting an IPv6 host or URL prefix.
+    return (port == null ? uri : uri.replace(port: port)).toString();
   }
 
   @override

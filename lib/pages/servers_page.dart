@@ -452,7 +452,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
     }
 
     // 如果不是匿名登录，检查用户名
-    if (!_smbAnonymousLogin && _usernameController.text.trim().isEmpty) {
+    if (_serverType == ServerType.smb && !_smbAnonymousLogin && _usernameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('请填写用户名或启用匿名登录'),
@@ -465,7 +465,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
     int? port;
     if (_portController.text.trim().isNotEmpty) {
       port = int.tryParse(_portController.text.trim());
-      if (port == null) {
+      if (port == null || port < 1 || port > 65535) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('端口号格式不正确'),
@@ -481,8 +481,8 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
       name: _nameController.text.trim(),
       type: _serverType,
       host: _hostController.text.trim(),
-      username: _smbAnonymousLogin ? 'guest' : _usernameController.text.trim(),
-      password: _smbAnonymousLogin ? '' : _passwordController.text.trim(),
+      username: _serverType == ServerType.smb && _smbAnonymousLogin ? 'guest' : _usernameController.text.trim(),
+      password: _serverType == ServerType.smb && _smbAnonymousLogin ? '' : _passwordController.text,
       domain: _domainController.text.trim(),
       initialPath: _initialPathController.text.trim(),
       createdAt: widget.existing?.createdAt ?? DateTime.now(),
@@ -494,6 +494,12 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
       smbEncryption: _smbEncryption,
     );
 
+    if (_serverType == ServerType.webdav) {
+      try { config.webdavUrl; } on FormatException catch (error) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+        return;
+      }
+    }
     Navigator.pop(context, config);
   }
 
@@ -587,7 +593,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.person),
               ),
-              enabled: !_smbAnonymousLogin,
+              enabled: _serverType != ServerType.smb || !_smbAnonymousLogin,
             ),
             const SizedBox(height: 12),
             TextField(
@@ -606,7 +612,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
                   },
                 ),
               ),
-              enabled: !_smbAnonymousLogin,
+              enabled: _serverType != ServerType.smb || !_smbAnonymousLogin,
             ),
             const SizedBox(height: 12),
             // SMB 特有字段

@@ -159,6 +159,7 @@ class WebDavFileService implements FileService {
       baseUrl: config.webdavUrl,
       username: config.username,
       password: config.password,
+      probePath: config.initialPath,
     );
   }
 
