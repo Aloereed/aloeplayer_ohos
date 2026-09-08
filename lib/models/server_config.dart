@@ -18,6 +18,7 @@ class ServerConfig {
   final DateTime? lastConnected;
   final int? port; // WebDAV端口 (默认80/443)
   final bool useHttps; // WebDAV是否使用HTTPS
+  final String? webdavCertificateSha256;
 
   // SMB高级选项
   final bool smbSigningRequired; // SMB签名要求 (默认false)
@@ -37,6 +38,7 @@ class ServerConfig {
     this.lastConnected,
     this.port,
     this.useHttps = false,
+    this.webdavCertificateSha256,
     this.smbSigningRequired = false,
     this.smbAnonymousLogin = false,
     this.smbEncryption = false,
@@ -62,6 +64,7 @@ class ServerConfig {
           : null,
       port: json['port'] as int?,
       useHttps: json['useHttps'] as bool? ?? false,
+      webdavCertificateSha256: json['webdavCertificateSha256'] as String?,
       smbSigningRequired: json['smbSigningRequired'] as bool? ?? false,
       smbAnonymousLogin: json['smbAnonymousLogin'] as bool? ?? false,
       smbEncryption: json['smbEncryption'] as bool? ?? false,
@@ -83,6 +86,7 @@ class ServerConfig {
       'lastConnected': lastConnected?.toIso8601String(),
       'port': port,
       'useHttps': useHttps,
+      'webdavCertificateSha256': webdavCertificateSha256,
       'smbSigningRequired': smbSigningRequired,
       'smbAnonymousLogin': smbAnonymousLogin,
       'smbEncryption': smbEncryption,
@@ -103,6 +107,7 @@ class ServerConfig {
     DateTime? lastConnected,
     int? port,
     bool? useHttps,
+    String? webdavCertificateSha256,
     bool? smbSigningRequired,
     bool? smbAnonymousLogin,
     bool? smbEncryption,
@@ -120,6 +125,8 @@ class ServerConfig {
       lastConnected: lastConnected ?? this.lastConnected,
       port: port ?? this.port,
       useHttps: useHttps ?? this.useHttps,
+      webdavCertificateSha256:
+          webdavCertificateSha256 ?? this.webdavCertificateSha256,
       smbSigningRequired: smbSigningRequired ?? this.smbSigningRequired,
       smbAnonymousLogin: smbAnonymousLogin ?? this.smbAnonymousLogin,
       smbEncryption: smbEncryption ?? this.smbEncryption,

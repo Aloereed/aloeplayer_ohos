@@ -8,10 +8,12 @@ import 'webdav_auth.dart';
 import 'webdav_multistatus.dart';
 import 'webdav_path.dart';
 import 'webdav_xml_encoding.dart';
+import 'webdav_tls.dart';
 export 'webdav_multistatus.dart' show WebDavFile;
 
 class WebDavService {
   Dio? _dio;
+  Dio? _redirectDio;
   WebDavPaths? _paths;
   WebDavDigest? _digest;
   String _username = '', _password = '';
@@ -29,12 +31,16 @@ class WebDavService {
       {required String baseUrl,
       required String username,
       required String password,
-      String probePath = '/'}) async {
+      String probePath = '/',
+      String? certificateSha256}) async {
     await disconnect();
     final generation = _generation;
     _paths = WebDavPaths(baseUrl);
     _username = username;
     _password = password;
+    final origin = _paths!.base;
+    // Validate configuration before allocating a client.
+    final adapter = webDavHttpAdapter(origin, fingerprint: certificateSha256);
     _dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 60),
@@ -43,6 +49,9 @@ class WebDavService {
         validateStatus: (_) => true,
         headers: {'Accept-Encoding': 'identity'},
         responseType: ResponseType.stream));
+    _dio!.httpClientAdapter = adapter;
+    _redirectDio = Dio(_dio!.options.copyWith())
+      ..httpClientAdapter = webDavHttpAdapter(origin);
     final cancel = _newRequest();
     try {
       final response = await _request(
@@ -80,7 +89,9 @@ class WebDavService {
     }
     _requests.clear();
     _dio?.close(force: true);
+    _redirectDio?.close(force: true);
     _dio = null;
+    _redirectDio = null;
     _paths = null;
     _digest = null;
     _username = '';
@@ -103,9 +114,11 @@ class WebDavService {
       String method, Uri uri, CancelToken cancel,
       {Map<String, dynamic> headers = const {}, String? body}) async {
     final dio = _dio;
+    final redirectDio = _redirectDio;
     final paths = _paths;
     final generation = _generation;
-    if (dio == null || paths == null) throw StateError('WebDAV 连接已关闭');
+    if (dio == null || redirectDio == null || paths == null)
+      throw StateError('WebDAV 连接已关闭');
     var current = uri;
     var authRetries = 0;
     final visited = <String>{};
@@ -125,13 +138,14 @@ class WebDavService {
                 body: body ?? '') ??
             'Basic ${base64Encode(utf8.encode('$_username:$_password'))}';
       }
-      final response = await dio.requestUri<ResponseBody>(current,
-          data: body,
-          cancelToken: cancel,
-          options: Options(
-              method: method,
-              headers: requestHeaders,
-              responseType: ResponseType.stream));
+      final response = await (authenticated ? dio : redirectDio)
+          .requestUri<ResponseBody>(current,
+              data: body,
+              cancelToken: cancel,
+              options: Options(
+                  method: method,
+                  headers: requestHeaders,
+                  responseType: ResponseType.stream));
       if (generation != _generation || cancel.isCancelled) {
         await _discard(response);
         throw StateError('WebDAV 请求已取消');

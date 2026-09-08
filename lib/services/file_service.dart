@@ -173,6 +173,7 @@ class WebDavFileService implements FileService, RevisionAwareFileService {
       username: config.username,
       password: config.password,
       probePath: config.initialPath,
+      certificateSha256: config.webdavCertificateSha256,
     );
   }
 

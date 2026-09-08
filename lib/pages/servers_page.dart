@@ -6,6 +6,7 @@ import 'downloads_page.dart';
 import 'continue_watching_page.dart';
 // lib/pages/servers_page.dart
 import 'package:flutter/material.dart';
+import '../services/webdav_tls.dart';
 import '../models/server_config.dart';
 import '../services/server_config_service.dart';
 import 'browser_page.dart';
@@ -171,14 +172,28 @@ class _ServersPageState extends State<ServersPage> {
     ),
     (name: 'Emby', description: '连接个人影视媒体库', icon: Icons.movie_filter_outlined),
   ];
-  Widget _quickAction(IconData icon, String title, Widget page) => SizedBox(width: 90, child: TextButton(
-      style: TextButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest.withValues(alpha: .8),
-        foregroundColor: Theme.of(context).colorScheme.primary,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22))),
-      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 24), const SizedBox(height: 7),
-        Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))])));
+  Widget _quickAction(IconData icon, String title, Widget page) => SizedBox(
+      width: 90,
+      child: TextButton(
+          style: TextButton.styleFrom(
+              backgroundColor: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerLowest
+                  .withValues(alpha: .8),
+              foregroundColor: Theme.of(context).colorScheme.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(22))),
+          onPressed: () =>
+              Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 24),
+            const SizedBox(height: 7),
+            Text(title,
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))
+          ])));
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context), colors = Theme.of(context).colorScheme;
@@ -236,12 +251,34 @@ class _ServersPageState extends State<ServersPage> {
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(24),
                                     decoration: BoxDecoration(
-                                        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-                                          colors: theme.brightness == Brightness.dark
-                                            ? const [Color(0xFF123C71), Color(0xFF24254F), Color(0xFF163D49)]
-                                            : const [Color(0xFFD6EDFF), Color(0xFFEEE8FF), Color(0xFFDAF8F4)]),
-                                        border: Border.all(color: Colors.white.withValues(alpha: theme.brightness == Brightness.dark ? .12 : .9)),
-                                        boxShadow: [BoxShadow(color: colors.primary.withValues(alpha: .07), blurRadius: 28, offset: const Offset(0, 8))],
+                                        gradient: LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors: theme.brightness ==
+                                                    Brightness.dark
+                                                ? const [
+                                                    Color(0xFF123C71),
+                                                    Color(0xFF24254F),
+                                                    Color(0xFF163D49)
+                                                  ]
+                                                : const [
+                                                    Color(0xFFD6EDFF),
+                                                    Color(0xFFEEE8FF),
+                                                    Color(0xFFDAF8F4)
+                                                  ]),
+                                        border: Border.all(
+                                            color: Colors.white.withValues(
+                                                alpha: theme.brightness ==
+                                                        Brightness.dark
+                                                    ? .12
+                                                    : .9)),
+                                        boxShadow: [
+                                          BoxShadow(
+                                              color: colors.primary
+                                                  .withValues(alpha: .07),
+                                              blurRadius: 28,
+                                              offset: const Offset(0, 8))
+                                        ],
                                         borderRadius:
                                             BorderRadius.circular(30)),
                                     child: Column(
@@ -271,7 +308,7 @@ class _ServersPageState extends State<ServersPage> {
                                                     const ContinueWatchingPage()),
                                                 _quickAction(
                                                     Icons.movie_outlined,
-                              '海报库',
+                                                    '海报库',
                                                     const CatalogPage()),
                                                 _quickAction(
                                                     Icons.download_outlined,
@@ -394,6 +431,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
   late final TextEditingController _passwordController;
   late final TextEditingController _domainController;
   late final TextEditingController _initialPathController;
+  late final TextEditingController _certificateController;
   bool _obscurePassword = true;
   bool _useHttps = false;
 
@@ -420,6 +458,8 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
     _initialPathController =
         TextEditingController(text: widget.existing?.initialPath ?? '/');
     _useHttps = widget.existing?.useHttps ?? false;
+    _certificateController = TextEditingController(
+        text: widget.existing?.webdavCertificateSha256 ?? '');
 
     // 初始化SMB高级选项
     _smbSigningRequired = widget.existing?.smbSigningRequired ?? false;
@@ -436,6 +476,7 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
     _passwordController.dispose();
     _domainController.dispose();
     _initialPathController.dispose();
+    _certificateController.dispose();
     super.dispose();
   }
 
@@ -452,7 +493,9 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
     }
 
     // 如果不是匿名登录，检查用户名
-    if (_serverType == ServerType.smb && !_smbAnonymousLogin && _usernameController.text.trim().isEmpty) {
+    if (_serverType == ServerType.smb &&
+        !_smbAnonymousLogin &&
+        _usernameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('请填写用户名或启用匿名登录'),
@@ -476,27 +519,47 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
       }
     }
 
+    String? certificate;
+    try {
+      if (_serverType == ServerType.webdav)
+        certificate =
+            normalizeCertificateFingerprint(_certificateController.text);
+    } on FormatException catch (error) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
     final config = ServerConfig(
       id: widget.existing?.id ?? const Uuid().v4(),
       name: _nameController.text.trim(),
       type: _serverType,
       host: _hostController.text.trim(),
-      username: _serverType == ServerType.smb && _smbAnonymousLogin ? 'guest' : _usernameController.text.trim(),
-      password: _serverType == ServerType.smb && _smbAnonymousLogin ? '' : _passwordController.text,
+      username: _serverType == ServerType.smb && _smbAnonymousLogin
+          ? 'guest'
+          : _usernameController.text.trim(),
+      password: _serverType == ServerType.smb && _smbAnonymousLogin
+          ? ''
+          : _passwordController.text,
       domain: _domainController.text.trim(),
       initialPath: _initialPathController.text.trim(),
       createdAt: widget.existing?.createdAt ?? DateTime.now(),
       lastConnected: widget.existing?.lastConnected,
       port: port,
       useHttps: _useHttps,
+      webdavCertificateSha256: certificate,
       smbSigningRequired: _smbSigningRequired,
       smbAnonymousLogin: _smbAnonymousLogin,
       smbEncryption: _smbEncryption,
     );
 
     if (_serverType == ServerType.webdav) {
-      try { config.webdavUrl; } on FormatException catch (error) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      try {
+        final url = Uri.parse(config.webdavUrl);
+        if (certificate != null && url.scheme != 'https')
+          throw const FormatException('使用证书指纹时请填写 HTTPS 地址或启用 HTTPS');
+      } on FormatException catch (error) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
         return;
       }
     }
@@ -556,6 +619,23 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
             const SizedBox(height: 12),
             // WebDAV 特有字段
             if (_serverType == ServerType.webdav) ...[
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('HTTPS 证书设置'),
+                initiallyExpanded: _certificateController.text.isNotEmpty,
+                children: [
+                  TextField(
+                      controller: _certificateController,
+                      autocorrect: false,
+                      decoration: const InputDecoration(
+                          labelText: '证书 SHA-256 指纹（可选）',
+                          helperText:
+                              '自签名 NAS 证书可填写从管理页面核实的指纹。留空使用系统信任；更换证书后需更新指纹。',
+                          helperMaxLines: 4,
+                          border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                ],
+              ),
               Row(
                 children: [
                   Expanded(
@@ -716,8 +796,12 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
               controller: _initialPathController,
               decoration: InputDecoration(
                 labelText: '初始路径',
-                hintText: _serverType == ServerType.smb ? '/（浏览共享）或 /共享名/文件夹' : '/ 或 /dav/文件夹',
-                helperText: _serverType == ServerType.smb ? '根目录自动列出共享；服务器禁止枚举时可直接填写共享名。' : null,
+                hintText: _serverType == ServerType.smb
+                    ? '/（浏览共享）或 /共享名/文件夹'
+                    : '/ 或 /dav/文件夹',
+                helperText: _serverType == ServerType.smb
+                    ? '根目录自动列出共享；服务器禁止枚举时可直接填写共享名。'
+                    : null,
                 helperMaxLines: 2,
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.folder),
