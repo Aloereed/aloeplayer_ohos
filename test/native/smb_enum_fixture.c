@@ -67,6 +67,8 @@ struct fixture_context { char share[128]; int directory_index; };
 struct fixture_handle { struct fixture_context *owner; };
 static int active_contexts, active_handles, stat_failure, read_limit = 65536, short_read, read_calls;
 static uint64_t file_size = 6;
+static uint64_t last_read_offset;
+uint64_t fixture_last_offset(void) { return last_read_offset; }
 static char last_path[1024];
 int fixture_contexts(void) { return active_contexts; }
 int fixture_handles(void) { return active_handles; }
@@ -74,6 +76,7 @@ int fixture_reads(void) { return read_calls; }
 void fixture_read_mode(int value) {
     stat_failure = value == 1; short_read = value == 2; read_calls = 0;
     file_size = value >= 3 ? 8 * 1024 * 1024 : 6;
+    if (value == 5) file_size = UINT64_C(5) * 1024 * 1024 * 1024 + 4096;
     read_limit = value == 3 ? 1024 * 1024 : 65536;
 }
 uint32_t smb2_get_max_read_size(struct smb2_context *ctx) { return read_limit; }
@@ -141,11 +144,12 @@ int smb2_fstat(struct smb2_context *ctx, struct smb2fh *handle, struct smb2_stat
 int smb2_stat(struct smb2_context *ctx, const char *path, struct smb2_stat_64 *st) {
     strcpy(last_path, path);
     memset(st, 0, sizeof(*st));
-    st->smb2_size = 6;
+    st->smb2_size = file_size;
     st->smb2_type = *path ? SMB2_TYPE_FILE : SMB2_TYPE_DIRECTORY;
     return 0;
 }
 int smb2_pread(struct smb2_context *ctx, struct smb2fh *handle, uint8_t *buf, uint32_t count, uint64_t offset) {
+    last_read_offset = offset;
     read_calls++;
     if (short_read) return 0;
     if (count > read_limit) return -22;

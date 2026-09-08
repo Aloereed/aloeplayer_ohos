@@ -9,6 +9,27 @@ import 'package:aloeplayer/services/webdav_multistatus.dart';
 import 'webdav_compatibility_test.dart' show entry, multi, rootProps;
 
 void main() {
+  test('UTF-16 without BOM supports explicit endianness and leading whitespace',
+      () {
+    const xml = ' \n<name>中文🎬</name>';
+    for (final endian in [Endian.little, Endian.big]) {
+      final data = ByteData(xml.length * 2);
+      for (var i = 0; i < xml.length; i++) {
+        data.setUint16(i * 2, xml.codeUnitAt(i), endian);
+      }
+      expect(
+          decodeWebDavXml(data.buffer.asUint8List(),
+              contentType:
+                  'application/xml; charset=${endian == Endian.little ? 'utf-16le' : 'utf-16be'}'),
+          xml);
+    }
+    expect(
+        decodeWebDavXml(
+            Uint8List.fromList(
+                [0xef, 0xbb, 0xbf, ...utf8.encode('<name>中文</name>')]),
+            contentType: 'application/xml; charset=latin1'),
+        '<name>中文</name>');
+  });
   test('all failed properties on requested directory are not an empty success',
       () {
     expect(

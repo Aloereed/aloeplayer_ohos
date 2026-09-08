@@ -53,6 +53,10 @@ class _BrowserPageState extends State<BrowserPage> {
 
   List<FileItem> _allFiles = [];
   List<FileItem> _displayedFiles = [];
+  List<FileItem> _sortedFiles = [];
+  List<FileItem>? _sortedInput;
+  SortType? _cachedSortType;
+  SortOrder? _cachedSortOrder;
   String _currentPath = '/';
   List<String> get _pathHistory => _directory.history;
 
@@ -182,41 +186,47 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   void _applyFilters() {
-    List<FileItem> filtered = List.from(_allFiles);
-
-    // 搜索过滤
-    if (_searchController.text.isNotEmpty) {
-      final query = _searchController.text.toLowerCase();
-      filtered = filtered.where((file) {
-        return file.name.toLowerCase().contains(query);
-      }).toList();
+    // Sort once per directory snapshot / order change, not on each keystroke
+    // or loading notification. Filtering an already sorted list preserves order.
+    if (!identical(_sortedInput, _allFiles) ||
+        _cachedSortType != _sortType ||
+        _cachedSortOrder != _sortOrder) {
+      final sorted = List<FileItem>.of(_allFiles);
+      sorted.sort((a, b) {
+        int comparison;
+        switch (_sortType) {
+          case SortType.name:
+            // 文件夹优先
+            if (a.isDirectory && !b.isDirectory) return -1;
+            if (!a.isDirectory && b.isDirectory) return 1;
+            comparison = compareNetworkNames(a.name, b.name);
+            break;
+          case SortType.size:
+            if (a.isDirectory && !b.isDirectory) return -1;
+            if (!a.isDirectory && b.isDirectory) return 1;
+            comparison = a.size.compareTo(b.size);
+            break;
+          case SortType.modified:
+            if (a.isDirectory && !b.isDirectory) return -1;
+            if (!a.isDirectory && b.isDirectory) return 1;
+            comparison = (a.modified ?? DateTime(1970))
+                .compareTo(b.modified ?? DateTime(1970));
+            break;
+        }
+        if (comparison == 0) comparison = compareNetworkNames(a.path, b.path);
+        return _sortOrder == SortOrder.ascending ? comparison : -comparison;
+      });
+      _sortedFiles = sorted;
+      _sortedInput = _allFiles;
+      _cachedSortType = _sortType;
+      _cachedSortOrder = _sortOrder;
     }
-
-    // 排序
-    filtered.sort((a, b) {
-      int comparison;
-      switch (_sortType) {
-        case SortType.name:
-          // 文件夹优先
-          if (a.isDirectory && !b.isDirectory) return -1;
-          if (!a.isDirectory && b.isDirectory) return 1;
-          comparison = compareNetworkNames(a.name, b.name);
-          break;
-        case SortType.size:
-          if (a.isDirectory && !b.isDirectory) return -1;
-          if (!a.isDirectory && b.isDirectory) return 1;
-          comparison = a.size.compareTo(b.size);
-          break;
-        case SortType.modified:
-          if (a.isDirectory && !b.isDirectory) return -1;
-          if (!a.isDirectory && b.isDirectory) return 1;
-          comparison = (a.modified ?? DateTime(1970))
-              .compareTo(b.modified ?? DateTime(1970));
-          break;
-      }
-      return _sortOrder == SortOrder.ascending ? comparison : -comparison;
-    });
-
+    final query = _searchController.text.toLowerCase();
+    final filtered = query.isEmpty
+        ? _sortedFiles
+        : _sortedFiles
+            .where((file) => file.name.toLowerCase().contains(query))
+            .toList();
     setState(() => _displayedFiles = filtered);
   }
 

@@ -8,6 +8,36 @@ import 'package:aloeplayer/libsmb2_service/smb_share_enum.dart';
 import 'package:aloeplayer/libsmb2_service/libsmb2_service.dart';
 
 void main() {
+  test('SMB stat and native pread retain offsets above 4 GiB', () async {
+    final library = ffi.DynamicLibrary.open(
+        File('build/smb_enum_fixture.dll').absolute.path);
+    final mode = library.lookupFunction<ffi.Void Function(ffi.Int32),
+        void Function(int)>('fixture_read_mode');
+    final offset =
+        library.lookupFunction<ffi.Uint64 Function(), int Function()>(
+            'fixture_last_offset');
+    final service = Libsmb2Service(bindings: Libsmb2Bindings(library: library));
+    const start = 4 * 1024 * 1024 * 1024 + 123;
+    try {
+      mode(5);
+      await service.connect(
+          host: 'nas/Videos', username: '', password: '', domain: '');
+      expect((await service.getFile('/large.mkv')).size,
+          5 * 1024 * 1024 * 1024 + 4096);
+      expect(
+          await (await service.getRangeStream('/large.mkv',
+                  start: start, end: start + 17))
+              .expand((x) => x)
+              .toList(),
+          List.generate(17, (i) => (start + i) % 256));
+      expect(offset(), start);
+    } finally {
+      await service.disconnect();
+      mode(0);
+    }
+  },
+      skip: !Platform.isWindows ||
+          !File('build/smb_enum_fixture.dll').existsSync());
   test(
       'SMB anonymous uses null password, domain accounts split, guest fallback keeps security flags',
       () async {

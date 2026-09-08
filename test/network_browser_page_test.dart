@@ -49,6 +49,14 @@ class _Proxy extends HttpService {
   Future<bool> startServer({String? bindAddress}) async => true;
 }
 
+class _Episodes extends _Source {
+  @override
+  Future<List<FileItem>> listFiles(String path) async => ['EP10', 'EP2', 'EP1']
+      .map((name) => WebDavFileItem(WebDavFile(
+          name: name, path: '/$name.mkv', size: 6, isDirectory: false)))
+      .toList();
+}
+
 void main() {
   final config = ServerConfig(
       id: 'test',
@@ -60,6 +68,30 @@ void main() {
       createdAt: DateTime(2026));
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+  testWidgets(
+      'episode search preserves natural order and restores the complete list',
+      (tester) async {
+    final source = _Episodes();
+    await tester.pumpWidget(MaterialApp(
+        home: BrowserPage(
+            serverConfig: config,
+            fileService: source,
+            httpService: _Proxy(source))));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('EP2')).dy,
+        lessThan(tester.getTopLeft(find.text('EP10')).dy));
+    await tester.tap(find.byIcon(Icons.search));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'EP1');
+    await tester.pumpAndSettle();
+    expect(find.text('EP2'), findsNothing);
+    expect(find.text('EP10'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('EP2')).dy,
+        lessThan(tester.getTopLeft(find.text('EP10')).dy));
+    await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
       'known DAV path reconnects when the initial root probe is forbidden',
