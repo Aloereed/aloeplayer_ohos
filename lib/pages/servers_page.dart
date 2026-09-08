@@ -708,11 +708,13 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
             ],
             TextField(
               controller: _initialPathController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: '初始路径',
-                hintText: '/(根目录可能不受支持)',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.folder),
+                hintText: _serverType == ServerType.smb ? '/（浏览共享）或 /共享名/文件夹' : '/ 或 /dav/文件夹',
+                helperText: _serverType == ServerType.smb ? '根目录自动列出共享；服务器禁止枚举时可直接填写共享名。' : null,
+                helperMaxLines: 2,
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.folder),
               ),
             ),
           ],

@@ -2,6 +2,7 @@
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'package:ffi/ffi.dart';
+import 'smb_share_enum.dart';
 
 // libsmb2 核心函数类型定义
 typedef Smb2InitContextNative = ffi.Pointer<Smb2Context> Function();
@@ -108,6 +109,9 @@ typedef Smb2FstatDart = int Function(
   ffi.Pointer<Smb2Stat64>,
 );
 
+typedef Smb2StatNative = ffi.Int32 Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>, ffi.Pointer<Smb2Stat64>);
+typedef Smb2StatDart = int Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>, ffi.Pointer<Smb2Stat64>);
+
 typedef Smb2LseekNative = ffi.Int64 Function(
   ffi.Pointer<Smb2Context>,
   ffi.Pointer<Smb2Fh>,
@@ -186,6 +190,9 @@ typedef Smb2SetIntDart = void Function(ffi.Pointer<Smb2Context>, int);
 class Libsmb2Bindings {
   late final ffi.DynamicLibrary _lib;
 
+  List<String> listShares(ffi.Pointer<Smb2Context> context, void Function() abort) => enumerateSmbShares(_lib, context, abort);
+  late final Smb2StatDart smb2_stat = _lib.lookupFunction<Smb2StatNative, Smb2StatDart>('smb2_stat');
+
   // 函数指针
   late final Smb2InitContextDart smb2_init_context;
   late final Smb2DestroyContextDart smb2_destroy_context;
@@ -209,9 +216,11 @@ class Libsmb2Bindings {
   late final Smb2SetIntDart smb2_set_sign = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_sign');
   late final Smb2SetIntDart smb2_set_timeout = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_timeout');
 
-  Libsmb2Bindings() {
+  Libsmb2Bindings({ffi.DynamicLibrary? library}) {
     // 根据平台加载不同的库
-    if (Platform.isLinux || Platform.isAndroid) {
+    if (library != null) {
+      _lib = library;
+    } else if (Platform.isLinux || Platform.isAndroid) {
       _lib = ffi.DynamicLibrary.open('libsmb2.so');
     } else if (Platform.isMacOS) {
       _lib = ffi.DynamicLibrary.open('libsmb2.dylib');
