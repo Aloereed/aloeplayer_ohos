@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'webdav_auth.dart';
 import 'webdav_multistatus.dart';
 import 'webdav_path.dart';
+import 'webdav_xml_encoding.dart';
 export 'webdav_multistatus.dart' show WebDavFile;
 
 class WebDavService {
@@ -200,7 +201,8 @@ class WebDavService {
         throw StateError('WebDAV 目录响应超过 32 MiB，请打开更小的目录');
       builder.add(chunk);
     }
-    return utf8.decode(builder.takeBytes());
+    return decodeWebDavXml(builder.takeBytes(),
+        contentType: response.headers.value('content-type'));
   }
 
   Future<List<WebDavFile>> _parse(String xml, Uri request) {
@@ -250,10 +252,36 @@ class WebDavService {
     // the playback proxy commits HTTP headers; zero is not an unknown length.
     final cancel = _newRequest();
     try {
-      final response = await _request('HEAD', _paths!.resolve(path), cancel);
-      _requireStatus(response, {200, 204});
-      final size = int.tryParse(response.headers.value('content-length') ?? '');
+      var response = await _request('HEAD', _paths!.resolve(path), cancel);
+      _requireStatus(response, {200, 204, 405, 501});
+      var size = {200, 204}.contains(response.statusCode)
+          ? int.tryParse(response.headers.value('content-length') ?? '')
+          : null;
       await _discard(response);
+      if (size == null || size < 0) {
+        // A one-byte GET works on servers that implement DAV but reject HEAD.
+        // Cancel the body even when Range is ignored; never download the file
+        // merely to discover its length.
+        response = await _request('GET', _paths!.resolve(path), cancel,
+            headers: {'Range': 'bytes=0-0'});
+        try {
+          _requireStatus(response, {200, 206, 416});
+          final range = response.headers.value('content-range') ?? '';
+          if (response.statusCode == 206) {
+            final match = RegExp(r'^bytes\s+0-0/(\d+)$', caseSensitive: false)
+                .firstMatch(range.trim());
+            size = int.tryParse(match?.group(1) ?? '');
+            if (size == 0) size = null;
+          } else if (response.statusCode == 416) {
+            size = range.trim().toLowerCase() == 'bytes */0' ? 0 : null;
+          } else if ({'', 'identity'}
+              .contains(response.headers.value('content-encoding') ?? '')) {
+            size = int.tryParse(response.headers.value('content-length') ?? '');
+          }
+        } finally {
+          await _discard(response);
+        }
+      }
       if (size == null || size < 0)
         throw StateError('WebDAV 服务器未提供文件大小，无法安全定位播放');
       return WebDavFile(
@@ -322,6 +350,11 @@ class WebDavService {
         length = rangeLength;
       } else if (response.statusCode == 206) {
         throw StateError('WebDAV 服务器意外返回部分文件');
+      } else if (!{'', 'identity'}
+          .contains(response.headers.value('content-encoding') ?? '')) {
+        // Dio automatically decompresses full responses. Content-Length then
+        // describes wire bytes, not the decoded stream checked below.
+        length = null;
       }
       return _checkedStream(response.data!.stream, cancel, length);
     } catch (_) {

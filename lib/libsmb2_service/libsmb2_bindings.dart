@@ -11,14 +11,20 @@ typedef Smb2InitContextDart = ffi.Pointer<Smb2Context> Function();
 typedef Smb2DestroyContextNative = ffi.Void Function(ffi.Pointer<Smb2Context>);
 typedef Smb2DestroyContextDart = void Function(ffi.Pointer<Smb2Context>);
 
-typedef Smb2SetUserNative = ffi.Void Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
-typedef Smb2SetUserDart = void Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
+typedef Smb2SetUserNative = ffi.Void Function(
+    ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
+typedef Smb2SetUserDart = void Function(
+    ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
 
-typedef Smb2SetPasswordNative = ffi.Void Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
-typedef Smb2SetPasswordDart = void Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
+typedef Smb2SetPasswordNative = ffi.Void Function(
+    ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
+typedef Smb2SetPasswordDart = void Function(
+    ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
 
-typedef Smb2SetDomainNative = ffi.Void Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
-typedef Smb2SetDomainDart = void Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
+typedef Smb2SetDomainNative = ffi.Void Function(
+    ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
+typedef Smb2SetDomainDart = void Function(
+    ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>);
 
 typedef Smb2ConnectShareNative = ffi.Int32 Function(
   ffi.Pointer<Smb2Context>,
@@ -33,7 +39,8 @@ typedef Smb2ConnectShareDart = int Function(
   ffi.Pointer<Utf8>,
 );
 
-typedef Smb2DisconnectShareNative = ffi.Int32 Function(ffi.Pointer<Smb2Context>);
+typedef Smb2DisconnectShareNative = ffi.Int32 Function(
+    ffi.Pointer<Smb2Context>);
 typedef Smb2DisconnectShareDart = int Function(ffi.Pointer<Smb2Context>);
 
 typedef Smb2OpendirNative = ffi.Pointer<Smb2Dir> Function(
@@ -109,8 +116,10 @@ typedef Smb2FstatDart = int Function(
   ffi.Pointer<Smb2Stat64>,
 );
 
-typedef Smb2StatNative = ffi.Int32 Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>, ffi.Pointer<Smb2Stat64>);
-typedef Smb2StatDart = int Function(ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>, ffi.Pointer<Smb2Stat64>);
+typedef Smb2StatNative = ffi.Int32 Function(
+    ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>, ffi.Pointer<Smb2Stat64>);
+typedef Smb2StatDart = int Function(
+    ffi.Pointer<Smb2Context>, ffi.Pointer<Utf8>, ffi.Pointer<Smb2Stat64>);
 
 typedef Smb2LseekNative = ffi.Int64 Function(
   ffi.Pointer<Smb2Context>,
@@ -127,15 +136,19 @@ typedef Smb2LseekDart = int Function(
   ffi.Pointer<ffi.Uint64>,
 );
 
-typedef Smb2GetErrorNative = ffi.Pointer<Utf8> Function(ffi.Pointer<Smb2Context>);
+typedef Smb2GetErrorNative = ffi.Pointer<Utf8> Function(
+    ffi.Pointer<Smb2Context>);
 typedef Smb2GetErrorDart = ffi.Pointer<Utf8> Function(ffi.Pointer<Smb2Context>);
 
-typedef Smb2SetSecurityModeNative = ffi.Void Function(ffi.Pointer<Smb2Context>, ffi.Uint16);
+typedef Smb2SetSecurityModeNative = ffi.Void Function(
+    ffi.Pointer<Smb2Context>, ffi.Uint16);
 typedef Smb2SetSecurityModeDart = void Function(ffi.Pointer<Smb2Context>, int);
 
 // Opaque 类型定义
 final class Smb2Context extends ffi.Opaque {}
+
 final class Smb2Dir extends ffi.Opaque {}
+
 final class Smb2Fh extends ffi.Opaque {}
 
 // smb2_stat_64 结构体
@@ -183,7 +196,8 @@ final class Smb2Dirent extends ffi.Struct {
   external Smb2Stat64 st;
 }
 
-typedef Smb2SetIntNative = ffi.Void Function(ffi.Pointer<Smb2Context>, ffi.Int32);
+typedef Smb2SetIntNative = ffi.Void Function(
+    ffi.Pointer<Smb2Context>, ffi.Int32);
 typedef Smb2SetIntDart = void Function(ffi.Pointer<Smb2Context>, int);
 typedef Smb2ReadSizeNative = ffi.Uint32 Function(ffi.Pointer<Smb2Context>);
 typedef Smb2ReadSizeDart = int Function(ffi.Pointer<Smb2Context>);
@@ -192,8 +206,18 @@ typedef Smb2ReadSizeDart = int Function(ffi.Pointer<Smb2Context>);
 class Libsmb2Bindings {
   late final ffi.DynamicLibrary _lib;
 
-  List<String> listShares(ffi.Pointer<Smb2Context> context, void Function() abort) => enumerateSmbShares(_lib, context, abort);
-  late final Smb2StatDart smb2_stat = _lib.lookupFunction<Smb2StatNative, Smb2StatDart>('smb2_stat');
+  List<String> listShares(
+          ffi.Pointer<Smb2Context> context, void Function() abort) =>
+      enumerateSmbShares(_lib, context, abort);
+  int connectShare(
+          ffi.Pointer<Smb2Context> context,
+          ffi.Pointer<Utf8> server,
+          ffi.Pointer<Utf8> share,
+          ffi.Pointer<Utf8> user,
+          void Function() abort) =>
+      connectSmbShare(_lib, context, server, share, user, abort);
+  late final Smb2StatDart smb2_stat =
+      _lib.lookupFunction<Smb2StatNative, Smb2StatDart>('smb2_stat');
 
   // 函数指针
   late final Smb2InitContextDart smb2_init_context;
@@ -214,10 +238,15 @@ class Libsmb2Bindings {
   late final Smb2GetErrorDart smb2_get_error;
   late final Smb2SetSecurityModeDart smb2_set_security_mode;
 
-  late final Smb2SetIntDart smb2_set_seal = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_seal');
-  late final Smb2SetIntDart smb2_set_sign = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_sign');
-  late final Smb2SetIntDart smb2_set_timeout = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_timeout');
-  late final Smb2ReadSizeDart smb2_get_max_read_size = _lib.lookupFunction<Smb2ReadSizeNative, Smb2ReadSizeDart>('smb2_get_max_read_size');
+  late final Smb2SetIntDart smb2_set_seal =
+      _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_seal');
+  late final Smb2SetIntDart smb2_set_sign =
+      _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_sign');
+  late final Smb2SetIntDart smb2_set_timeout =
+      _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_timeout');
+  late final Smb2ReadSizeDart smb2_get_max_read_size =
+      _lib.lookupFunction<Smb2ReadSizeNative, Smb2ReadSizeDart>(
+          'smb2_get_max_read_size');
 
   Libsmb2Bindings({ffi.DynamicLibrary? library}) {
     // 根据平台加载不同的库
@@ -230,8 +259,9 @@ class Libsmb2Bindings {
     } else if (Platform.isWindows) {
       _lib = ffi.DynamicLibrary.open('libsmb2.dll');
     } else if (Platform.isOhos) {
-      _lib = ffi.DynamicLibrary.open('/data/storage/el1/bundle/libs/arm64/libsmb2.so');
-    }else {
+      _lib = ffi.DynamicLibrary.open(
+          '/data/storage/el1/bundle/libs/arm64/libsmb2.so');
+    } else {
       throw UnsupportedError('Unsupported platform');
     }
 
@@ -241,7 +271,8 @@ class Libsmb2Bindings {
         .asFunction();
 
     smb2_destroy_context = _lib
-        .lookup<ffi.NativeFunction<Smb2DestroyContextNative>>('smb2_destroy_context')
+        .lookup<ffi.NativeFunction<Smb2DestroyContextNative>>(
+            'smb2_destroy_context')
         .asFunction();
 
     smb2_set_user = _lib
@@ -257,11 +288,13 @@ class Libsmb2Bindings {
         .asFunction();
 
     smb2_connect_share = _lib
-        .lookup<ffi.NativeFunction<Smb2ConnectShareNative>>('smb2_connect_share')
+        .lookup<ffi.NativeFunction<Smb2ConnectShareNative>>(
+            'smb2_connect_share')
         .asFunction();
 
     smb2_disconnect_share = _lib
-        .lookup<ffi.NativeFunction<Smb2DisconnectShareNative>>('smb2_disconnect_share')
+        .lookup<ffi.NativeFunction<Smb2DisconnectShareNative>>(
+            'smb2_disconnect_share')
         .asFunction();
 
     smb2_opendir = _lib
@@ -301,7 +334,8 @@ class Libsmb2Bindings {
         .asFunction();
 
     smb2_set_security_mode = _lib
-        .lookup<ffi.NativeFunction<Smb2SetSecurityModeNative>>('smb2_set_security_mode')
+        .lookup<ffi.NativeFunction<Smb2SetSecurityModeNative>>(
+            'smb2_set_security_mode')
         .asFunction();
   }
 }

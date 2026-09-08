@@ -8,6 +8,35 @@ import 'package:aloeplayer/libsmb2_service/smb_share_enum.dart';
 import 'package:aloeplayer/libsmb2_service/libsmb2_service.dart';
 
 void main() {
+  test('SMB negotiation deadline aborts pending callback before releasing it',
+      () {
+    final library = ffi.DynamicLibrary.open(
+        File('build/smb_enum_fixture.dll').absolute.path);
+    final reset = library.lookupFunction<ffi.Void Function(ffi.Int32),
+        void Function(int)>('fixture_reset');
+    final abort = library.lookupFunction<
+        ffi.Void Function(ffi.Pointer<Smb2Context>),
+        void Function(ffi.Pointer<Smb2Context>)>('fixture_abort');
+    final aborted =
+        library.lookupFunction<ffi.Int32 Function(), int Function()>(
+            'fixture_aborted');
+    final text = 'test'.toNativeUtf8();
+    reset(5);
+    try {
+      final context = ffi.Pointer<Smb2Context>.fromAddress(1);
+      expect(
+          () => connectSmbShare(
+              library, context, text, text, text, () => abort(context),
+              timeout: const Duration(milliseconds: 20)),
+          throwsStateError);
+      expect(aborted(), 1);
+    } finally {
+      calloc.free(text);
+      reset(0);
+    }
+  },
+      skip: !Platform.isWindows ||
+          !File('build/smb_enum_fixture.dll').existsSync());
   final fixture = File('build/smb_enum_fixture.dll');
   final unavailable = !Platform.isWindows || !fixture.existsSync()
       ? 'Build test/native/smb_enum_fixture.c first'

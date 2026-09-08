@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 
-/// RFC 7616 MD5/SHA-256, including session variants and auth-int. The nonce
+/// RFC 7616 MD5/SHA-256/SHA-512-256, session variants and auth-int. The nonce
 /// counter is assigned synchronously so concurrent GETs never reuse a count.
 class WebDavDigest {
   final Map<String, String> parameters;
@@ -60,13 +60,24 @@ class WebDavDigest {
   bool get supported =>
       parameters.containsKey('realm') &&
       (parameters['nonce']?.isNotEmpty ?? false) &&
-      {'MD5', 'MD5-SESS', 'SHA-256', 'SHA-256-SESS'}.contains(algorithm) &&
+      {
+        'MD5',
+        'MD5-SESS',
+        'SHA-256',
+        'SHA-256-SESS',
+        'SHA-512-256',
+        'SHA-512-256-SESS'
+      }.contains(algorithm) &&
       qop != 'unsupported';
 
   String authorization(String username, String password, String method, Uri uri,
       {String body = ''}) {
     if (!supported) throw StateError('不支持服务器要求的 Digest 认证算法');
-    final hash = algorithm.startsWith('SHA-256') ? sha256 : md5;
+    final hash = algorithm.startsWith('SHA-512-256')
+        ? sha512256
+        : algorithm.startsWith('SHA-256')
+            ? sha256
+            : md5;
     final charsetUtf8 = parameters['charset']?.toUpperCase() == 'UTF-8';
     List<int> encode(String value) =>
         charsetUtf8 || value.runes.any((r) => r > 255)
@@ -91,8 +102,19 @@ class WebDavDigest {
     }
 
     final userhash = parameters['userhash']?.toLowerCase() == 'true';
+    final extendedUsername = !userhash &&
+        (charsetUtf8 || username.runes.any((r) => r > 255)) &&
+        username.runes.any((r) => r > 127);
+    final encodedUsername = utf8
+        .encode(username)
+        .map((byte) =>
+            '%${byte.toRadixString(16).padLeft(2, '0').toUpperCase()}')
+        .join();
     return 'Digest ${[
-      'username=${quote(userhash ? h('$username:$realm') : username)}',
+      if (extendedUsername)
+        "username*=UTF-8''$encodedUsername"
+      else
+        'username=${quote(userhash ? h('$username:$realm') : username)}',
       'realm=${quote(realm)}',
       'nonce=${quote(nonce)}',
       'uri=${quote(target)}',

@@ -35,6 +35,7 @@ int smb2_which_events(struct smb2_context *ctx) { return 1; }
 int poll(void *fds, unsigned long count, int timeout) { return 1; }
 void smb2_free_data(struct smb2_context *ctx, void *data) { if (data == &reply) freed++; }
 int smb2_service(struct smb2_context *ctx, int revents) {
+    if (mode == 5) return 0;
     if (mode == 4) return -1;
     if (!pending) return 0;
     entries[0].netname.utf8 = "Videos"; entries[0].type = SHARE_TYPE_DISKTREE;
@@ -93,6 +94,12 @@ int smb2_connect_share(struct smb2_context *ctx, const char *server, const char 
     return 0;
 }
 int smb2_disconnect_share(struct smb2_context *ctx) { return 0; }
+int smb2_connect_share_async(struct smb2_context *ctx, const char *server,
+    const char *share, const char *user, smb2_command_cb cb, void *data) {
+    if (mode == 5) { pending = cb; pending_data = data; return 0; }
+    cb(ctx, smb2_connect_share(ctx, server, share, user), NULL, data);
+    return 0;
+}
 const char *smb2_get_error(struct smb2_context *ctx) { return "fixture access denied"; }
 struct smb2dir *smb2_opendir(struct smb2_context *ctx, const char *path) {
     strcpy(last_path, path);

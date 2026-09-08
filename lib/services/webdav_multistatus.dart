@@ -75,16 +75,25 @@ List<WebDavFile> parseWebDavMultiStatus(
       continue;
     }
     final properties = <String, XmlElement>{};
+    int? propertyFailure;
     for (final propstat in _children(response, 'propstat')) {
       final code = _status(_text(propstat, 'status'));
-      if (code == null || code < 200 || code >= 300) continue;
+      if (code == null || code < 200 || code >= 300) {
+        propertyFailure ??= code;
+        continue;
+      }
       for (final prop in _children(propstat, 'prop')) {
         for (final item in prop.childElements) {
           if (_isDav(item, item.name.local)) properties[item.name.local] = item;
         }
       }
     }
-    if (properties.isEmpty) continue;
+    if (properties.isEmpty) {
+      if (path == requestedPath && propertyFailure != null) {
+        throw StateError('WebDAV 无法读取资源属性（HTTP $propertyFailure）');
+      }
+      continue;
+    }
     final resourceType = properties['resourcetype'];
     final directory = resourceType != null
         ? _children(resourceType, 'collection').isNotEmpty

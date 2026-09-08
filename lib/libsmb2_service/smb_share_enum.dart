@@ -97,6 +97,100 @@ typedef PollNative = ffi.Int32 Function(
     ffi.Pointer<SmbPollFd>, ffi.UnsignedLong, ffi.Int32);
 typedef PollDart = int Function(ffi.Pointer<SmbPollFd>, int, int);
 
+typedef ConnectAsyncNative = ffi.Int32 Function(
+    ffi.Pointer<Smb2Context>,
+    ffi.Pointer<Utf8>,
+    ffi.Pointer<Utf8>,
+    ffi.Pointer<Utf8>,
+    ffi.Pointer<ffi.NativeFunction<ShareCallback>>,
+    ffi.Pointer<ffi.Void>);
+typedef ConnectAsyncDart = int Function(
+    ffi.Pointer<Smb2Context>,
+    ffi.Pointer<Utf8>,
+    ffi.Pointer<Utf8>,
+    ffi.Pointer<Utf8>,
+    ffi.Pointer<ffi.NativeFunction<ShareCallback>>,
+    ffi.Pointer<ffi.Void>);
+
+/// A wall-clock deadline also covers negotiation/authentication stages where
+/// the library's per-PDU timeout alone is insufficient. Run only on the worker.
+int connectSmbShare(
+    ffi.DynamicLibrary library,
+    ffi.Pointer<Smb2Context> context,
+    ffi.Pointer<Utf8> server,
+    ffi.Pointer<Utf8> share,
+    ffi.Pointer<Utf8> user,
+    void Function() abort,
+    {Duration timeout = const Duration(seconds: 30)}) {
+  final connect = library.lookupFunction<ConnectAsyncNative, ConnectAsyncDart>(
+      'smb2_connect_share_async');
+  var finished = false;
+  var status = -1;
+  void onConnect(ffi.Pointer<Smb2Context> ctx, int result,
+      ffi.Pointer<ffi.Void> data, ffi.Pointer<ffi.Void> private) {
+    status = result;
+    finished = true;
+  }
+
+  final callback = ffi.NativeCallable<ShareCallback>.isolateLocal(onConnect);
+  var started = false;
+  try {
+    final result = connect(
+        context, server, share, user, callback.nativeFunction, ffi.nullptr);
+    if (result != 0) return result;
+    started = true;
+    final windows = Platform.isWindows && !library.providesSymbol('poll');
+    final getFd = windows
+        ? library.lookupFunction<WindowsFdNative, ContextIntDart>('smb2_get_fd')
+        : library
+            .lookupFunction<ContextIntNative, ContextIntDart>('smb2_get_fd');
+    final events = library
+        .lookupFunction<ContextIntNative, ContextIntDart>('smb2_which_events');
+    final service =
+        library.lookupFunction<ServiceNative, ServiceDart>('smb2_service');
+    final fd = calloc<SmbPollFd>();
+    final winFd = calloc<SmbWindowsPollFd>();
+    try {
+      final poll = windows
+          ? null
+          : (Platform.isWindows ? library : ffi.DynamicLibrary.process())
+              .lookupFunction<PollNative, PollDart>('poll');
+      final wsaPoll = windows
+          ? ffi.DynamicLibrary.open('ws2_32.dll')
+              .lookupFunction<WindowsPollNative, WindowsPollDart>('WSAPoll')
+          : null;
+      final clock = Stopwatch()..start();
+      while (!finished) {
+        if (clock.elapsed >= timeout)
+          throw StateError('SMB 连接超时，请检查地址、网络和认证设置');
+        int ready;
+        if (windows) {
+          winFd.ref.fd = getFd(context);
+          winFd.ref.events = events(context);
+          winFd.ref.revents = 0;
+          if (wsaPoll!(winFd, 1, 100) < 0) throw StateError('SMB 连接网络轮询失败');
+          ready = winFd.ref.revents;
+        } else {
+          fd.ref.fd = getFd(context);
+          fd.ref.events = events(context);
+          fd.ref.revents = 0;
+          if (poll!(fd, 1, 100) < 0) throw StateError('SMB 连接网络轮询失败');
+          ready = fd.ref.revents;
+        }
+        if (service(context, ready) < 0 && !finished)
+          throw StateError('SMB 连接中断');
+      }
+      return status;
+    } finally {
+      calloc.free(fd);
+      calloc.free(winFd);
+    }
+  } finally {
+    if (started && !finished) abort();
+    callback.close();
+  }
+}
+
 /// Must run on the SMB worker. The callback is invoked synchronously by
 /// smb2_service; abort must destroy the context before we release the callback.
 List<String> enumerateSmbShares(ffi.DynamicLibrary library,

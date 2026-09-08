@@ -132,16 +132,20 @@ class Libsmb2Service {
         try {
           // 连接到共享
           print('[libsmb2] Calling smb2_connect_share...');
-          final result = _bindings.smb2_connect_share(
+          final result = _bindings.connectShare(
             _context!,
             serverPtr,
             sharePtr,
             userPtr, // 传递用户名指针
+            () {
+              _bindings.smb2_destroy_context(_context!);
+              _context = null;
+            },
           );
 
           print('[libsmb2] smb2_connect_share returned: $result');
 
-          if (result < 0) {
+          if (result != 0) {
             final errorPtr = _bindings.smb2_get_error(_context!);
             final errorMsg = errorPtr.toDartString();
             print('[libsmb2] Error details: $errorMsg');

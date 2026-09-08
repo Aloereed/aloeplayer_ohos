@@ -72,6 +72,47 @@ void main() {
       expect(count, video.size);
       print(
           'LOOPBACK_READ bytes=$count chunks=$chunks elapsedMs=${clock.elapsedMilliseconds}');
+      final strict =
+          Libsmb2Service(bindings: Libsmb2Bindings(library: library));
+      try {
+        expect(
+            await strict.connect(
+                host: '${config['host']}/Videos',
+                username: config['username'],
+                password: config['password'],
+                domain: '',
+                signingRequired: true),
+            isTrue);
+        expect((await strict.listFiles('/')).any((f) => f.name == video.name),
+            isTrue);
+      } finally {
+        await strict.disconnect();
+      }
+      final invalid =
+          Libsmb2Service(bindings: Libsmb2Bindings(library: library));
+      await expectLater(
+          invalid.connect(
+              host: '${config['host']}/Videos',
+              username: config['username'],
+              password: 'wrong-test-password',
+              domain: ''),
+          throwsA(anyOf(isA<Exception>(), isA<StateError>())));
+      expect(invalid.isConnected, isFalse);
+      final sealed =
+          Libsmb2Service(bindings: Libsmb2Bindings(library: library));
+      try {
+        await expectLater(
+            sealed.connect(
+                host: '${config['host']}/Videos',
+                username: config['username'],
+                password: config['password'],
+                domain: '',
+                encryption: true),
+            throwsA(anyOf(isA<Exception>(), isA<StateError>())));
+        expect(sealed.isConnected, isFalse);
+      } finally {
+        await sealed.disconnect();
+      }
     } finally {
       await service.disconnect();
     }
