@@ -55,10 +55,12 @@ void _wireEntry(SendPort output) => serveSmbWorker(output, _WireBackend());
 
 void main() {
   const enabled = bool.fromEnvironment('SMB_LOOPBACK_TEST');
+  const configPath = String.fromEnvironment('SMB_LOOPBACK_CONFIG',
+      defaultValue: 'build/smb-loopback-data/server.json');
   test('real SMB worker reads stay byte-exact while a separate worker browses',
       () async {
-    final config = jsonDecode(
-        await File('build/smb-loopback-data/server.json').readAsString());
+    final config = jsonDecode(await File(configPath).readAsString());
+    expect(config['host'], matches(RegExp(r'^(127\.0\.0\.1|\[::1\]):\d+$')));
     final source = SmbService.forTesting(SmbWorker.forTesting(_wireEntry),
         readerFactory: () => SmbWorker.forTesting(_wireEntry));
     try {
@@ -102,9 +104,8 @@ void main() {
   test(
       'real SMB2 loopback enumerates shares, browses Unicode, reads ranges and crosses shares',
       () async {
-    final config = jsonDecode(
-        await File('build/smb-loopback-data/server.json').readAsString());
-    expect(config['host'], startsWith('127.0.0.1:'));
+    final config = jsonDecode(await File(configPath).readAsString());
+    expect(config['host'], matches(RegExp(r'^(127\.0\.0\.1|\[::1\]):\d+$')));
     final winsock = ffi.DynamicLibrary.open('ws2_32.dll');
     final startup = winsock.lookupFunction<
         ffi.Int32 Function(ffi.Uint16, ffi.Pointer<ffi.Void>),

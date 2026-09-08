@@ -34,6 +34,41 @@ class _HugeSource implements FileService {
 }
 
 void main() {
+  test('WebDAV lists and reads over IPv6 loopback', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv6, 0);
+    server.listen((request) async {
+      if (request.method == 'PROPFIND') {
+        request.response.statusCode = 207;
+        request.response.write(multi(entry('/', props: rootProps) +
+            entry('/clip.mkv',
+                props: '<z:getcontentlength>3</z:getcontentlength>')));
+      } else {
+        request.response.add([1, 2, 3]);
+      }
+      await request.response.close();
+    });
+    final service = WebDavService();
+    try {
+      await service.connect(
+          baseUrl: ServerConfig(
+                  id: 'ipv6',
+                  name: 'ipv6',
+                  type: ServerType.webdav,
+                  host: '::1',
+                  port: server.port,
+                  username: '',
+                  password: '',
+                  createdAt: DateTime(2026))
+              .webdavUrl,
+          username: '',
+          password: '');
+      expect((await service.listFiles('/')).single.path, '/clip.mkv');
+      expect(await service.downloadFile('/clip.mkv'), [1, 2, 3]);
+    } finally {
+      await service.disconnect();
+      await server.close(force: true);
+    }
+  });
   test('proxy preserves 64-bit lengths, seeks above 4 GiB and suffix ranges',
       () async {
     final proxy = HttpService.forTesting(_HugeSource());

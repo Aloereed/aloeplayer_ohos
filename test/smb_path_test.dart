@@ -14,6 +14,9 @@ void main() {
         throwsFormatException);
   });
   test('SMB accepts bare hosts, UNC, URLs, ports and nested roots', () {
+    expect(SmbAddress.parse('::1/Videos').server, '[::1]');
+    expect(SmbAddress.parse('smb://[fe80::1%25eth0]/Videos').server,
+        '[fe80::1%eth0]');
     for (final value in ['nas', '//nas/', 'smb://nas/', r'\\nas\']) {
       final address = SmbAddress.parse(value);
       expect(address.server, 'nas');

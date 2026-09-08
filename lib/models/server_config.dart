@@ -136,8 +136,15 @@ class ServerConfig {
   // 获取WebDAV的完整URL
   String get webdavUrl {
     if (type != ServerType.webdav) return '';
-    final value = host.trim();
+    var value = host.trim();
     final hasScheme = value.contains('://');
+    if (!hasScheme) {
+      final slash = value.indexOf('/');
+      final authority = slash < 0 ? value : value.substring(0, slash);
+      if (!authority.startsWith('[') && ':'.allMatches(authority).length > 1) {
+        value = '[$authority]${slash < 0 ? '' : value.substring(slash)}';
+      }
+    }
     final uri = Uri.parse(
         hasScheme ? value : '${useHttps ? 'https' : 'http'}://$value');
     if (!{'http', 'https'}.contains(uri.scheme) ||
