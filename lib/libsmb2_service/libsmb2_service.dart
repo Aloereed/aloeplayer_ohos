@@ -414,14 +414,14 @@ class Libsmb2Service {
   /// [filePath] - 文件路径
   /// [start] - 起始字节位置
   /// [end] - 结束字节位置（可选，null 表示读到文件末尾）
-  /// [chunkSize] - 每次读取的块大小，默认 64KB
+  /// [chunkSize] - 读取块上限，默认 1 MiB，实际不超过服务器协商值
   ///
   /// 返回一个数据流，可以直接传给视频播放器
   Future<Stream<Uint8List>> getRangeStream(
     String filePath, {
     required int start,
     int? end,
-    int chunkSize = 65536,
+    int chunkSize = 1024 * 1024,
   }) async {
     if (!isConnected || _context == null) {
       throw Exception('未连接到SMB服务器');

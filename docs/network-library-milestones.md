@@ -47,3 +47,14 @@
 - 范围读取检查 Content-Range、Content-Length 和实际字节数；短读、错位、超长数据明确报错。断开取消所有活动请求，目录 XML 与小文件读取有内存上限，大目录 XML 在 isolate 解析。
 - 全套 146 项测试通过，另补充 4 项流/取消回归通过。Digest 对照 RFC 的 MD5 与 SHA-256 已知值；网络测试仅连接本机临时 HTTP 服务。
 - 依据：[WebDAV RFC 4918](https://www.rfc-editor.org/rfc/rfc4918.html)、[Digest RFC 7616](https://www.rfc-editor.org/rfc/rfc7616.html)、[HTTP RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html)。不声称所有 NAS 认证机制均已实测；Kerberos/NTLM WebDAV 认证尚未实现。
+- 提交 `7f8c7ca`；签名 HAP 构建成功，规范未签名 HAP 时间戳 `2026-09-09T01:55:07+08:00`。归档 `build/milestones/55-webdav-compatibility/`。
+
+### 56 — 流读取、跨源隔离与大目录性能（4.0.0+209）
+
+- SMB 默认读取上限提升到 1 MiB，并受服务器协商值限制；每条流复用原生缓冲区。8 MiB 测试文件在 1 MiB 协商上限下从 128 次请求降为 8 次，64 KiB 服务器仍使用 128 次。
+- 修复 open 成功而 fstat 失败时的句柄泄漏；空文件和读到 EOF 返回空流，远端提前截断明确报错。
+- 为工作线程数据流增加连接代次校验，旧流无法读取或关闭重连后重复编号的新读取器；每个 worker 最多 32 条活动流。
+- 代理将 URL 绑定到生成时的来源，避免切换服务器串源；重复 URL 复用令牌，令牌表有上限。2 秒、256 项的元数据缓存和请求合并降低播放器探查负担，12 个并发 HEAD 只产生 1 次 stat。
+- 字幕匹配由逐媒体扫描整个目录改为一次索引；5000 媒体 + 5001 字幕本机生成约 111–116 ms，已验证链接复用和语言字幕前缀。
+- 11 项专项回归及真实 SMB2 回环测试通过；分析无 error / warning。回环使用只读生成数据与测试账户，根目录、中文文件、跨共享、范围及完整 8 MiB 字节校验通过。
+- 复现步骤、环境限制和本机性能边界见 `docs/network-library-tests.md`。没有访问用户设备。

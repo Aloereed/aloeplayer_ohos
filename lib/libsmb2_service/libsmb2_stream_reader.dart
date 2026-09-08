@@ -55,6 +55,10 @@ class Libsmb2StreamReader {
 
       _isOpen = true;
       _currentOffset = 0;
+    } catch (_) {
+      // open may succeed before fstat fails: that handle still needs closing.
+      await close();
+      rethrow;
     } finally {
       malloc.free(pathPtr);
     }
@@ -101,86 +105,52 @@ class Libsmb2StreamReader {
   /// 读取指定范围的数据流
   ///
   /// [start] - 起始位置（字节偏移）
-  /// [end] - 结束位置（字节偏移，可选，null 表示读到文件末尾）
-  /// [chunkSize] - 每次读取的块大小，默认 64KB
+  /// [end] - 不包含的结束偏移，可选，null 表示读到文件末尾
+  /// [chunkSize] - 块上限，默认 1 MiB，实际不超过服务器协商值
   Stream<Uint8List> readRange({
     required int start,
     int? end,
-    int chunkSize = 65536,
+    int chunkSize = 1024 * 1024,
   }) async* {
     if (!_isOpen || _fileHandle == null) {
       throw Exception('File not opened');
     }
 
-    final actualEnd = end ?? _fileSize;
-
-    if (start < 0 || start >= _fileSize) {
-      throw Exception('Invalid start offset: $start');
+    if (chunkSize <= 0 || chunkSize > 4 * 1024 * 1024)
+      throw ArgumentError('Invalid SMB chunk size');
+    if (start < 0 || start > _fileSize || (end != null && end < start)) {
+      throw RangeError('Invalid SMB byte range');
     }
-
-    if (actualEnd > _fileSize) {
-      throw Exception('End offset exceeds file size: $actualEnd > $_fileSize');
-    }
-
-    if (start >= actualEnd) {
-      print('[Libsmb2StreamReader] Start >= End, nothing to read');
-      return;
-    }
-
-    print('[Libsmb2StreamReader] Reading range: $start - $actualEnd (${actualEnd - start} bytes)');
-
-    int offset = start;
-    int totalBytesToRead = actualEnd - start;
-    int totalBytesRead = 0;
-
-    while (offset < actualEnd) {
-      if (!_isOpen || _fileHandle == null) throw StateError('SMB read canceled');
-      final readSize = (actualEnd - offset) < chunkSize
-          ? (actualEnd - offset).toInt()
-          : chunkSize;
-
-      final buffer = malloc<ffi.Uint8>(readSize);
-      try {
-        final bytesRead = _bindings.smb2_pread(
-          _context,
-          _fileHandle!,
-          buffer,
-          readSize,
-          offset,
-        );
-
-        if (bytesRead < 0) {
-          final errorPtr = _bindings.smb2_get_error(_context);
-          final errorMsg = errorPtr.toDartString();
-          throw Exception('Read failed at offset $offset: $errorMsg');
-        }
-
-        if (bytesRead == 0) {
-          print('[Libsmb2StreamReader] EOF reached at offset $offset');
-          break;
-        }
-
-        final data = Uint8List.fromList(buffer.asTypedList(bytesRead));
-        yield data;
-
+    final actualEnd = end == null || end > _fileSize ? _fileSize : end;
+    if (start == actualEnd) return;
+    final negotiated = _bindings.smb2_get_max_read_size(_context);
+    final capacity = chunkSize.clamp(1, negotiated > 0 ? negotiated : 65536);
+    // Reuse one native buffer per stream; yield only an owned Dart copy.
+    final buffer = malloc<ffi.Uint8>(capacity);
+    var offset = start;
+    try {
+      while (offset < actualEnd) {
+        if (!_isOpen || _fileHandle == null)
+          throw StateError('SMB read canceled');
+        final count = (actualEnd - offset).clamp(1, capacity);
+        final bytesRead =
+            _bindings.smb2_pread(_context, _fileHandle!, buffer, count, offset);
+        if (bytesRead < 0)
+          throw StateError(
+              'SMB 读取失败（偏移 $offset）：${_bindings.smb2_get_error(_context).toDartString()}');
+        if (bytesRead == 0) throw StateError('SMB 文件提前结束，可能已被修改或连接中断');
+        if (bytesRead > count) throw StateError('SMB 服务器返回了错误的数据长度');
         offset += bytesRead;
-        totalBytesRead += bytesRead;
         _currentOffset = offset;
-
-        // 每读取一定量数据后让出控制权，避免阻塞
-        if (totalBytesRead % (chunkSize * 5) == 0) {
-          await Future.delayed(Duration.zero);
-        }
-      } finally {
-        malloc.free(buffer);
+        yield Uint8List.fromList(buffer.asTypedList(bytesRead));
       }
+    } finally {
+      malloc.free(buffer);
     }
-
-    print('[Libsmb2StreamReader] Range read complete: $totalBytesRead / $totalBytesToRead bytes');
   }
 
   /// 读取整个文件的数据流
-  Stream<Uint8List> readAll({int chunkSize = 65536}) {
+  Stream<Uint8List> readAll({int chunkSize = 1024 * 1024}) {
     return readRange(start: 0, end: _fileSize, chunkSize: chunkSize);
   }
 
@@ -194,6 +164,9 @@ class Libsmb2StreamReader {
       return null; // EOF
     }
 
+    if (length <= 0) throw ArgumentError('Read length must be positive');
+    final maximum = _bindings.smb2_get_max_read_size(_context);
+    length = length.clamp(1, maximum > 0 ? maximum : 65536);
     final actualLength = (_currentOffset + length > _fileSize)
         ? (_fileSize - _currentOffset).toInt()
         : length;
@@ -227,7 +200,7 @@ class Libsmb2StreamReader {
 
   /// 关闭文件
   Future<void> close() async {
-    if (_isOpen && _fileHandle != null && _fileHandle!.address != 0) {
+    if (_fileHandle != null && _fileHandle!.address != 0) {
       try {
         _bindings.smb2_close(_context, _fileHandle!);
         print('[Libsmb2StreamReader] File closed');

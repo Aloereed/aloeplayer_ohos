@@ -13,6 +13,72 @@ void main() {
       ? 'Build test/native/smb_enum_fixture.c first'
       : false;
   test(
+      'SMB respects negotiated read limits and reduces native calls for capable servers',
+      () async {
+    final library = ffi.DynamicLibrary.open(fixture.absolute.path);
+    final mode = library.lookupFunction<ffi.Void Function(ffi.Int32),
+        void Function(int)>('fixture_read_mode');
+    final reads = library
+        .lookupFunction<ffi.Int32 Function(), int Function()>('fixture_reads');
+    final service = Libsmb2Service(bindings: Libsmb2Bindings(library: library));
+    try {
+      await service.connect(
+          host: 'nas/Videos', username: '', password: '', domain: '');
+      for (final value in [3, 4]) {
+        mode(value);
+        var bytes = 0;
+        await for (final chunk in await service.getFileStream('/large')) {
+          expect(chunk.first, bytes % 256);
+          expect(chunk.last, (bytes + chunk.length - 1) % 256);
+          bytes += chunk.length;
+        }
+        expect(bytes, 8 * 1024 * 1024);
+        expect(reads(), value == 3 ? 8 : 128);
+      }
+    } finally {
+      mode(0);
+      await service.disconnect();
+    }
+  }, skip: unavailable);
+  test('SMB closes handles after stat failure and reports early EOF', () async {
+    final library = ffi.DynamicLibrary.open(fixture.absolute.path);
+    final mode = library.lookupFunction<ffi.Void Function(ffi.Int32),
+        void Function(int)>('fixture_read_mode');
+    final handles =
+        library.lookupFunction<ffi.Int32 Function(), int Function()>(
+            'fixture_handles');
+    final service = Libsmb2Service(bindings: Libsmb2Bindings(library: library));
+    try {
+      await service.connect(
+          host: 'nas/Videos', username: '', password: '', domain: '');
+      mode(1);
+      await expectLater(
+          service.getRangeStream('/clip', start: 0), throwsException);
+      expect(handles(), 0);
+      mode(2);
+      await expectLater(
+          (await service.getRangeStream('/clip', start: 0)).drain<void>(),
+          throwsStateError);
+      expect(handles(), 0);
+      mode(0);
+      expect(await (await service.getRangeStream('/clip', start: 6)).toList(),
+          isEmpty);
+      expect(
+          await (await service.getRangeStream('/clip', start: 3, end: 100))
+              .expand((c) => c)
+              .toList(),
+          [3, 4, 5]);
+      await expectLater(
+          (await service.getRangeStream('/clip', start: 0, chunkSize: 0))
+              .drain<void>(),
+          throwsArgumentError);
+      expect(handles(), 0);
+    } finally {
+      mode(0);
+      await service.disconnect();
+    }
+  }, skip: unavailable);
+  test(
       'native SRVSVC ABI, filtering, failures and cancellation callback lifetime',
       () {
     final library = ffi.DynamicLibrary.open(fixture.absolute.path);

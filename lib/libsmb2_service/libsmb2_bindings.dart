@@ -185,6 +185,8 @@ final class Smb2Dirent extends ffi.Struct {
 
 typedef Smb2SetIntNative = ffi.Void Function(ffi.Pointer<Smb2Context>, ffi.Int32);
 typedef Smb2SetIntDart = void Function(ffi.Pointer<Smb2Context>, int);
+typedef Smb2ReadSizeNative = ffi.Uint32 Function(ffi.Pointer<Smb2Context>);
+typedef Smb2ReadSizeDart = int Function(ffi.Pointer<Smb2Context>);
 
 // Libsmb2 绑定类
 class Libsmb2Bindings {
@@ -215,6 +217,7 @@ class Libsmb2Bindings {
   late final Smb2SetIntDart smb2_set_seal = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_seal');
   late final Smb2SetIntDart smb2_set_sign = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_sign');
   late final Smb2SetIntDart smb2_set_timeout = _lib.lookupFunction<Smb2SetIntNative, Smb2SetIntDart>('smb2_set_timeout');
+  late final Smb2ReadSizeDart smb2_get_max_read_size = _lib.lookupFunction<Smb2ReadSizeNative, Smb2ReadSizeDart>('smb2_get_max_read_size');
 
   Libsmb2Bindings({ffi.DynamicLibrary? library}) {
     // 根据平台加载不同的库

@@ -65,6 +65,20 @@ final class SmbPollFd extends ffi.Struct {
   external int revents;
 }
 
+final class SmbWindowsPollFd extends ffi.Struct {
+  @ffi.UintPtr()
+  external int fd;
+  @ffi.Int16()
+  external int events;
+  @ffi.Int16()
+  external int revents;
+}
+
+typedef WindowsFdNative = ffi.UintPtr Function(ffi.Pointer<Smb2Context>);
+typedef WindowsPollNative = ffi.Int32 Function(
+    ffi.Pointer<SmbWindowsPollFd>, ffi.Uint32, ffi.Int32);
+typedef WindowsPollDart = int Function(ffi.Pointer<SmbWindowsPollFd>, int, int);
+
 typedef ShareCallback = ffi.Void Function(ffi.Pointer<Smb2Context>, ffi.Int32,
     ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>);
 typedef EnumNative = ffi.Int32 Function(ffi.Pointer<Smb2Context>, ffi.Int32,
@@ -89,8 +103,10 @@ List<String> enumerateSmbShares(ffi.DynamicLibrary library,
     ffi.Pointer<Smb2Context> context, void Function() abort) {
   final enumerate =
       library.lookupFunction<EnumNative, EnumDart>('smb2_share_enum_async');
-  final getFd =
-      library.lookupFunction<ContextIntNative, ContextIntDart>('smb2_get_fd');
+  final windowsPoll = Platform.isWindows && !library.providesSymbol('poll');
+  final getFd = windowsPoll
+      ? library.lookupFunction<WindowsFdNative, ContextIntDart>('smb2_get_fd')
+      : library.lookupFunction<ContextIntNative, ContextIntDart>('smb2_get_fd');
   final events = library
       .lookupFunction<ContextIntNative, ContextIntDart>('smb2_which_events');
   final service =
@@ -98,7 +114,12 @@ List<String> enumerateSmbShares(ffi.DynamicLibrary library,
   final free = library.lookupFunction<FreeNative, FreeDart>('smb2_free_data');
   // Windows native integration tests can export poll from their fixture DLL.
   final libc = Platform.isWindows ? library : ffi.DynamicLibrary.process();
-  final poll = libc.lookupFunction<PollNative, PollDart>('poll');
+  final poll =
+      windowsPoll ? null : libc.lookupFunction<PollNative, PollDart>('poll');
+  final wsaPoll = windowsPoll
+      ? ffi.DynamicLibrary.open('ws2_32.dll')
+          .lookupFunction<WindowsPollNative, WindowsPollDart>('WSAPoll')
+      : null;
   final names = <String>{};
   var finished = false;
   Object? failure;
@@ -145,6 +166,7 @@ List<String> enumerateSmbShares(ffi.DynamicLibrary library,
 
   final callback = ffi.NativeCallable<ShareCallback>.isolateLocal(onReply);
   final fd = calloc<SmbPollFd>();
+  final winFd = windowsPoll ? calloc<SmbWindowsPollFd>() : null;
   var started = false;
   try {
     final result = enumerate(context, 1, callback.nativeFunction, ffi.nullptr);
@@ -154,11 +176,21 @@ List<String> enumerateSmbShares(ffi.DynamicLibrary library,
     while (!finished) {
       if (clock.elapsed > const Duration(seconds: 30))
         throw StateError('SMB 共享枚举超时，请重连或直接填写共享名');
-      fd.ref.fd = getFd(context);
-      fd.ref.events = events(context);
-      fd.ref.revents = 0;
-      if (poll(fd, 1, 250) < 0) throw StateError('SMB 共享枚举网络轮询失败');
-      if (service(context, fd.ref.revents) < 0 && !finished)
+      int readyEvents;
+      if (winFd != null) {
+        winFd.ref.fd = getFd(context);
+        winFd.ref.events = events(context);
+        winFd.ref.revents = 0;
+        if (wsaPoll!(winFd, 1, 250) < 0) throw StateError('SMB 共享枚举网络轮询失败');
+        readyEvents = winFd.ref.revents;
+      } else {
+        fd.ref.fd = getFd(context);
+        fd.ref.events = events(context);
+        fd.ref.revents = 0;
+        if (poll!(fd, 1, 250) < 0) throw StateError('SMB 共享枚举网络轮询失败');
+        readyEvents = fd.ref.revents;
+      }
+      if (service(context, readyEvents) < 0 && !finished)
         throw StateError('SMB 共享枚举连接中断');
     }
     if (failure != null) throw failure!;
@@ -169,6 +201,7 @@ List<String> enumerateSmbShares(ffi.DynamicLibrary library,
     // timeout/network failure, including any cancellation callback it invokes.
     if (started && !finished) abort();
     calloc.free(fd);
+    if (winFd != null) calloc.free(winFd);
     callback.close();
   }
 }
