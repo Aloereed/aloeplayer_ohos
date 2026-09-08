@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'webdav_auth.dart';
@@ -111,6 +112,12 @@ class WebDavService {
       if (cancel.isCancelled) throw StateError('WebDAV 请求已取消');
       final authenticated = paths.sameOrigin(current);
       final requestHeaders = <String, dynamic>{...headers};
+      if (!authenticated) {
+        // ETags belong to the DAV resource, not an unrelated CDN resource.
+        // The condition was already sent to the origin that issued this URL.
+        requestHeaders.remove('If-Match');
+        requestHeaders.remove('If-Unmodified-Since');
+      }
       if (authenticated && (_username.isNotEmpty || _password.isNotEmpty)) {
         requestHeaders['Authorization'] = _digest?.authorization(
                 _username, _password, method, current,
@@ -176,6 +183,7 @@ class WebDavService {
       404 => '路径不存在，请检查 WebDAV 服务路径',
       405 || 501 => '此地址不支持 WebDAV PROPFIND，请检查服务端配置',
       423 => '资源已锁定',
+      412 => '远端文件已变化，请刷新目录或重新建立下载任务',
       429 => '服务器请求过于频繁，请稍后重试',
       _ => '服务器请求失败',
     };
@@ -263,15 +271,25 @@ class WebDavService {
   }
 
   Future<Stream<Uint8List>> getFileStream(String filePath,
-      {int? start, int? end}) async {
+      {int? start,
+      int? end,
+      String? expectedEtag,
+      DateTime? expectedModified}) async {
     if (!isConnected) throw StateError('未连接到 WebDAV 服务器');
     if ((start != null && start < 0) || (end != null && end < (start ?? 0)))
       throw ArgumentError('无效的读取范围');
     final cancel = _newRequest();
     try {
       final ranged = start != null || end != null;
-      final response = await _request('GET', _paths!.resolve(filePath), cancel,
-          headers: {if (ranged) 'Range': 'bytes=${start ?? 0}-${end ?? ''}'});
+      final response =
+          await _request('GET', _paths!.resolve(filePath), cancel, headers: {
+        if (ranged) 'Range': 'bytes=${start ?? 0}-${end ?? ''}',
+        if (expectedEtag != null && !expectedEtag.startsWith('W/'))
+          'If-Match': expectedEtag,
+        if ((expectedEtag == null || expectedEtag.startsWith('W/')) &&
+            expectedModified != null)
+          'If-Unmodified-Since': HttpDate.format(expectedModified),
+      });
       _requireStatus(response, {200, 206});
       if (response.data == null) throw StateError('WebDAV 响应为空');
       int? length =

@@ -1,3 +1,7 @@
+import '../services/network_directory_controller.dart';
+import 'dart:async';
+import '../services/webdav_path.dart';
+import '../libsmb2_service/smb_path.dart';
 import '../widgets/member_badge.dart';
 import '../services/member_access.dart';
 import '../widgets/member_feature_prompt.dart';
@@ -13,12 +17,7 @@ import '../models/server_config.dart';
 import '../services/file_service.dart';
 import '../services/http_service.dart';
 import '../services/server_config_service.dart';
-import '../services/stream_cache_service.dart';
 import '../mpvplayer.dart';
-import 'package:path/path.dart' as path;
-import 'package:file_picker_ohos/file_picker_ohos.dart';
-import 'package:dio/dio.dart';
-import 'dart:io';
 
 enum ViewMode { list, grid }
 
@@ -29,7 +28,14 @@ enum SortOrder { ascending, descending }
 class BrowserPage extends StatefulWidget {
   final ServerConfig serverConfig;
 
-  const BrowserPage({Key? key, required this.serverConfig}) : super(key: key);
+  final FileService? fileService;
+  final HttpService? httpService;
+  const BrowserPage(
+      {Key? key,
+      required this.serverConfig,
+      this.fileService,
+      this.httpService})
+      : super(key: key);
 
   @override
   State<BrowserPage> createState() => _BrowserPageState();
@@ -37,17 +43,17 @@ class BrowserPage extends StatefulWidget {
 
 class _BrowserPageState extends State<BrowserPage> {
   late final FileService _fileService;
-  final HttpService _httpService = HttpService.instance;
+  late final HttpService _httpService;
+  late final NetworkDirectoryController _directory;
+  String? _connectionError;
   final ServerConfigService _configService = ServerConfigService();
-  final StreamCacheService _cacheService = StreamCacheService.instance;
 
   bool _isLoading = false;
-  bool _isConnected = false;
 
   List<FileItem> _allFiles = [];
   List<FileItem> _displayedFiles = [];
   String _currentPath = '/';
-  final List<String> _pathHistory = [];
+  List<String> get _pathHistory => _directory.history;
 
   // UI设置
   ViewMode _viewMode = ViewMode.list;
@@ -58,103 +64,110 @@ class _BrowserPageState extends State<BrowserPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
 
-  // 媒体文件扩展名
-  final List<String> _videoExtensions = [
-    // 视频文件扩展名
-    '.mp4',
-    '.mkv',
-    '.avi',
-    '.mov',
-    '.flv',
-    '.wmv',
-    '.webm',
-    '.m4v',
-    '.ts',
-    '.mpg',
-    '.mpeg',
-    // 音频文件扩展名
-    '.mp3',
-    '.wav',
-    '.aac',
-    '.flac',
-    '.m4a',
-    '.ogg',
-  ];
-
   @override
   void initState() {
     super.initState();
-    _fileService = FileServiceFactory.createService(widget.serverConfig.type);
-    
+    _fileService = widget.fileService ??
+        FileServiceFactory.createService(widget.serverConfig.type);
+    _httpService = widget.httpService ?? HttpService.instance;
+    _directory = NetworkDirectoryController(_fileService)
+      ..addListener(_syncDirectory);
+
     _connectAndLoad();
   }
 
   @override
   void dispose() {
+    _directory.dispose();
     _fileService.disconnect();
     _searchController.dispose();
-    // TODO: 如果启用流式缓存，需要清理
-    // _cacheService.clearAllCache();
     super.dispose();
   }
 
-  Future<void> _connectAndLoad() async {
-    setState(() => _isLoading = true);
+  void _syncDirectory() {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = _directory.loading;
+      _currentPath = _directory.path;
+      _allFiles = _directory.files;
+    });
+    _applyFilters();
+  }
 
+  Future<void> _connectAndLoad({bool resume = false}) async {
+    if (!mounted) return;
+    final target = resume
+        ? (_directory.failedPath ?? _currentPath)
+        : (widget.serverConfig.type == ServerType.smb
+            ? '/'
+            : widget.serverConfig.initialPath);
+    setState(() {
+      _isLoading = true;
+      _connectionError = null;
+    });
     try {
       if (!await _httpService.startServer()) throw StateError('无法启动本地播放服务');
-      final success = await _fileService.connect(widget.serverConfig);
-
-      if (!mounted) { await _fileService.disconnect(); return; }
-      if (success) {
-        setState(() => _isConnected = true);
-
-        // 将文件服务实例传递给HTTP服务
-        if (_fileService is SmbFileService) {
-          _httpService.setSmbService((_fileService as SmbFileService).smbService);
-        } else if (_fileService is WebDavFileService) {
-          _httpService.setWebDavService((_fileService as WebDavFileService).webdavService);
-        }
-
-        // 更新最后连接时间
-        await _configService.updateLastConnected(widget.serverConfig.id);
-
-        // 加载初始路径
-        // 对于 SMB: 如果有 initialPath，连接时已经包含在 host 中，所以从 '/' 开始
-        // 对于 WebDAV: initialPath 需要在这里使用
-        final startPath = widget.serverConfig.type == ServerType.smb ? '/' : widget.serverConfig.initialPath;
-        await _loadFiles(startPath);
-
-        _showSuccess('连接成功');
-      } else {
-        _showError('连接失败，请检查服务器配置');
-        if (mounted) Navigator.pop(context);
+      if (!await _fileService.connect(widget.serverConfig))
+        throw StateError('连接失败，请检查服务器配置');
+      if (!mounted) {
+        await _fileService.disconnect();
+        return;
       }
-    } catch (e) {
-      _showError('连接失败: $e');
-      if (mounted) Navigator.pop(context);
+      _httpService.setFileService(_fileService);
+      // Remembering a timestamp must not turn a working NAS connection into a
+      // failure if the local preferences/keystore are busy or unavailable.
+      unawaited(_configService
+          .updateLastConnected(widget.serverConfig.id)
+          .catchError((Object _) {}));
+      if (mounted) await _loadFiles(target);
+    } catch (error) {
+      if (mounted) setState(() => _connectionError = error.toString());
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _loadFiles(String path) async {
-    if (!mounted || !_fileService.isConnected) return;
+  Future<bool> _loadFiles(String target, {bool remember = false}) async {
+    if (!mounted || !_fileService.isConnected) return false;
+    return _directory.open(target, remember: remember);
+  }
 
-    setState(() => _isLoading = true);
-
+  Future<void> _openPath() async {
+    var target = _directory.failedPath ?? _currentPath;
+    final chosen = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: const Text('打开路径'),
+              content: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextFormField(
+                    initialValue: target,
+                    autofocus: true,
+                    onChanged: (value) => target = value,
+                    onFieldSubmitted: (value) => Navigator.pop(ctx, value),
+                    decoration: const InputDecoration(
+                        labelText: '目录路径', hintText: '/共享名/文件夹')),
+                const SizedBox(height: 12),
+                Text(widget.serverConfig.type == ServerType.smb
+                    ? '服务器根目录下可直接填写 /共享名。若连接时已指定共享，则填写该共享内的路径。'
+                    : '填写相对于服务器 URL 的目录路径。'),
+              ]),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('取消')),
+                FilledButton(
+                    onPressed: () => Navigator.pop(ctx, target),
+                    child: const Text('打开'))
+              ],
+            ));
+    if (chosen == null || !mounted) return;
     try {
-      final files = await _fileService.listFiles(path);
-      if (!mounted) return;
-      setState(() {
-        _currentPath = path;
-        _allFiles = files;
-        _applyFilters();
-      });
-    } catch (e) {
-      _showError('加载文件失败: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      final normalized = widget.serverConfig.type == ServerType.smb
+          ? smbCanonicalPath(chosen)
+          : WebDavPaths.canonical(chosen);
+      await _loadFiles(normalized, remember: true);
+    } catch (error) {
+      _showError(error.toString());
     }
   }
 
@@ -187,7 +200,8 @@ class _BrowserPageState extends State<BrowserPage> {
         case SortType.modified:
           if (a.isDirectory && !b.isDirectory) return -1;
           if (!a.isDirectory && b.isDirectory) return 1;
-          comparison = (a.modified ?? DateTime(1970)).compareTo(b.modified ?? DateTime(1970));
+          comparison = (a.modified ?? DateTime(1970))
+              .compareTo(b.modified ?? DateTime(1970));
           break;
       }
       return _sortOrder == SortOrder.ascending ? comparison : -comparison;
@@ -198,11 +212,10 @@ class _BrowserPageState extends State<BrowserPage> {
 
   void _onFileSelected(FileItem file) async {
     if (file.isDirectory) {
-      _pathHistory.add(_currentPath);
-      _loadFiles(file.path);
+      _loadFiles(file.path, remember: true);
     } else {
       // 检查是否为视频文件
-      if (_isVideoFile(file.name)) {
+      if (isNetworkMedia(file)) {
         await _playVideo(file);
       } else {
         _showFileOptions(file);
@@ -210,76 +223,26 @@ class _BrowserPageState extends State<BrowserPage> {
     }
   }
 
-  bool _isVideoFile(String filename) {
-    final ext = path.extension(filename).toLowerCase();
-    return _videoExtensions.contains(ext);
-  }
-
   Future<void> _playVideo(FileItem file) async {
     try {
       // 生成HTTP链接
-      final queue = networkQueue(widget.serverConfig, _displayedFiles, _httpService);
-      final httpUrl = queue.firstWhere((m) => m.id == PlaybackMedia.remoteId(widget.serverConfig.id, file.path)).url;
+      final queue =
+          networkQueue(widget.serverConfig, _displayedFiles, _httpService);
+      final httpUrl = queue
+          .firstWhere((m) =>
+              m.id == PlaybackMedia.remoteId(widget.serverConfig.id, file.path))
+          .url;
 
       // 导航到播放器
       if (mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MPVPlayer(filePath: httpUrl, mediaQueue: queue),
+            builder: (context) =>
+                MPVPlayer(filePath: httpUrl, mediaQueue: queue),
           ),
         );
       }
-
-      // TODO: 流式缓存播放（暂时禁用）
-      // 如果需要启用直接流式播放，使用以下代码：
-      /*
-      // 显示加载对话框
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('准备播放...'),
-            ],
-          ),
-        ),
-      );
-
-      // 获取文件流
-      final stream = await _fileService.getFileStream(file.path);
-
-      // 开始流式缓存
-      final cachePath = await _cacheService.startStreamCache(
-        stream: stream,
-        fileName: file.name,
-        fileSize: file.size,
-      );
-
-      // 等待最小缓存量（5MB 或 文件大小的 10%，取较小值）
-      final minCache = (file.size * 0.1).toInt().clamp(2 * 1024 * 1024, 10 * 1024 * 1024);
-      await _cacheService.waitForMinimumCache(cachePath, minBytes: minCache);
-
-      // 关闭加载对话框
-      if (mounted) {
-        Navigator.of(context).pop();
-
-        // 导航到播放器，传递本地缓存文件路径
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => MPVPlayer(filePath: cachePath),
-          ),
-        ).then((_) {
-          // 播放器关闭后，清理缓存
-          _cacheService.stopCache(cachePath, deleteFile: true);
-        });
-      }
-      */
     } catch (e) {
       _showError('播放失败: $e');
     }
@@ -288,43 +251,85 @@ class _BrowserPageState extends State<BrowserPage> {
   bool _addingBatch = false;
   Future<void> _batchDownload() async {
     if (_addingBatch || _isLoading) return;
-    final files = _displayedFiles.where((f) => !f.isDirectory && f.size >= 0).toList();
+    final files =
+        _displayedFiles.where((f) => !f.isDirectory && f.size >= 0).toList();
     if (files.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('当前列表没有可下载的文件')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('当前列表没有可下载的文件')));
       return;
     }
     setState(() => _addingBatch = true);
     try {
       final selected = await selectBatchDownloads(context, files);
       if (selected == null || !mounted) return;
-      if (!await requestMemberFeature(context, MemberFeature.batchDownload) || !mounted) return;
-      final result = await DownloadManager.instance.addBatch(widget.serverConfig, selected);
+      if (!await requestMemberFeature(context, MemberFeature.batchDownload) ||
+          !mounted) return;
+      final resolved = <FileItem>[];
+      var metadataFailures = 0;
+      for (var i = 0; i < selected.length; i += 4) {
+        final batch =
+            await Future.wait(selected.skip(i).take(4).map((file) async {
+          try {
+            return await resolveFileSize(_fileService, file);
+          } catch (_) {
+            return null;
+          }
+        }));
+        for (final file in batch) {
+          if (file != null) {
+            resolved.add(file);
+          } else {
+            metadataFailures++;
+          }
+        }
+        if (!mounted) return;
+      }
+      if (resolved.isEmpty) {
+        _showError('无法取得文件大小，请刷新目录后重试');
+        return;
+      }
+      final result = await DownloadManager.instance
+          .addBatch(widget.serverConfig, resolved);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已加入 ${result.added} 个，跳过已有任务 ${result.skipped} 个，失败 ${result.failed} 个')));
-      if (result.added > 0) await Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage()));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              '已加入 ${result.added} 个，跳过已有任务 ${result.skipped} 个，失败 ${result.failed + metadataFailures} 个')));
+      if (result.added > 0)
+        await Navigator.push(
+            context, MaterialPageRoute(builder: (_) => const DownloadsPage()));
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('部分任务可能已加入，请在下载任务中查看后重试')));
-    } finally { if (mounted) setState(() => _addingBatch = false); }
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('部分任务可能已加入，请在下载任务中查看后重试')));
+    } finally {
+      if (mounted) setState(() => _addingBatch = false);
+    }
   }
 
   Future<void> _downloadFile(FileItem file) async {
     try {
-      await DownloadManager.instance.add(widget.serverConfig, file);
+      final resolved = await resolveFileSize(_fileService, file);
       if (!mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsPage()));
-    } catch (e) { if (mounted) _showError('添加下载失败: $e'); }
+      await DownloadManager.instance.add(widget.serverConfig, resolved);
+      if (!mounted) return;
+      Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const DownloadsPage()));
+    } catch (e) {
+      if (mounted) _showError('添加下载失败: $e');
+    }
   }
 
   void _showFileOptions(FileItem file) async {
     if (!mounted) return;
-    final httpUrl = _httpService.getFileUrl(file.path);
-    final accessUrls = _httpService.getAccessUrls();
+    final httpUrl =
+        file.isDirectory ? null : _httpService.getFileUrlLocalhost(file.path);
 
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
         padding: const EdgeInsets.all(16),
-        child: Column(
+        child: SingleChildScrollView(
+            child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -334,7 +339,7 @@ class _BrowserPageState extends State<BrowserPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              '大小: ${_formatFileSize(file.size)}',
+              '大小: ${hasKnownFileSize(file) ? _formatFileSize(file.size) : '待获取'}',
               style: TextStyle(color: Colors.grey[600]),
             ),
             const Divider(height: 32),
@@ -348,54 +353,58 @@ class _BrowserPageState extends State<BrowserPage> {
                   _downloadFile(file);
                 },
               ),
-            ListTile(leading: const Icon(Icons.share), title: const Text('生成局域网共享链接'), onTap: () async {
-              try {
-                await _httpService.enableLanSharing();
-                final url = _httpService.getFileUrl(file.path);
-                await Clipboard.setData(ClipboardData(text: url));
-                if (mounted) _showSuccess('共享链接已复制，24 小时有效');
-              } catch (e) { if (mounted) _showError('$e'); }
-            }),
-            ListTile(leading: const Icon(Icons.stop_circle_outlined), title: const Text('停止文件共享'), onTap: () async {
-              await _httpService.disableLanSharing();
-              if (context.mounted) Navigator.pop(context);
-            }),
+            if (!file.isDirectory)
+              ListTile(
+                  leading: const Icon(Icons.share),
+                  title: const Text('生成局域网共享链接'),
+                  onTap: () async {
+                    try {
+                      await _httpService.enableLanSharing();
+                      final url = _httpService.getFileUrl(file.path);
+                      await Clipboard.setData(ClipboardData(text: url));
+                      if (mounted) _showSuccess('共享链接已复制，24 小时有效');
+                    } catch (e) {
+                      if (mounted) _showError('$e');
+                    }
+                  }),
+            ListTile(
+                leading: const Icon(Icons.stop_circle_outlined),
+                title: const Text('停止文件共享'),
+                onTap: () async {
+                  await _httpService.disableLanSharing();
+                  if (context.mounted) Navigator.pop(context);
+                }),
             const Divider(height: 16),
-            const Text(
-              '本机播放链接:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            if (httpUrl != null)
+              const Text(
+                '本机播放链接:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             const SizedBox(height: 8),
-            ...accessUrls.map((baseUrl) {
-              final cleanPath =
-                  file.path.startsWith('/') ? file.path.substring(1) : file.path;
-              final fullUrl = '$baseUrl/file/$cleanPath';
-              return ListTile(
+            if (httpUrl != null)
+              ListTile(
                 leading: const Icon(Icons.link),
-                title: Text(
-                  fullUrl,
-                  style: const TextStyle(fontSize: 12),
-                ),
+                title: Text(httpUrl,
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis),
                 trailing: IconButton(
-                  icon: const Icon(Icons.copy),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: fullUrl));
-                    Navigator.pop(context);
-                    _showSuccess('链接已复制');
-                  },
-                ),
-              );
-            }).toList(),
+                    icon: const Icon(Icons.copy),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: httpUrl));
+                      Navigator.pop(context);
+                      _showSuccess('链接已复制');
+                    }),
+              ),
           ],
-        ),
+        )),
       ),
     );
   }
 
   void _goBack() {
     if (_pathHistory.isNotEmpty) {
-      final previousPath = _pathHistory.removeLast();
-      _loadFiles(previousPath);
+      _directory.back();
     } else {
       Navigator.pop(context);
     }
@@ -445,7 +454,8 @@ class _BrowserPageState extends State<BrowserPage> {
               value: _sortOrder == SortOrder.descending,
               onChanged: (value) {
                 setState(() {
-                  _sortOrder = value ? SortOrder.descending : SortOrder.ascending;
+                  _sortOrder =
+                      value ? SortOrder.descending : SortOrder.ascending;
                 });
                 _applyFilters();
               },
@@ -463,12 +473,14 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   void _showError(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
   void _showSuccess(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
@@ -506,9 +518,7 @@ class _BrowserPageState extends State<BrowserPage> {
                   decoration: const InputDecoration(
                     hintText: '搜索文件...',
                     border: InputBorder.none,
-                    hintStyle: TextStyle(color: Colors.white70),
                   ),
-                  style: const TextStyle(color: Colors.white),
                   onChanged: (value) => _applyFilters(),
                 )
               : Column(
@@ -574,28 +584,94 @@ class _BrowserPageState extends State<BrowserPage> {
                 icon: const Icon(Icons.sort),
                 onPressed: _showSortDialog,
               ),
-              PopupMenuButton<String>(tooltip: '更多操作',
-                onSelected: (value) {
-                  if (value == 'refresh') _loadFiles(_currentPath);
-                  if (value == 'batch') _batchDownload();
-                }, itemBuilder: (_) => [
-                  const PopupMenuItem(value: 'refresh', child: Text('刷新')),
-                  PopupMenuItem(value: 'batch', enabled: !_isLoading && !_addingBatch,
-                    child: _addingBatch ? const Text('正在添加下载…') : const MemberFeatureLabel('批量下载')),
-                ]),
+              PopupMenuButton<String>(
+                  tooltip: '更多操作',
+                  onSelected: (value) {
+                    if (value == 'refresh')
+                      _fileService.isConnected
+                          ? _loadFiles(_directory.failedPath ?? _currentPath)
+                          : _connectAndLoad(resume: true);
+                    if (value == 'path') _openPath();
+                    if (value == 'reconnect') _connectAndLoad(resume: true);
+                    if (value == 'batch') _batchDownload();
+                  },
+                  itemBuilder: (_) => [
+                        const PopupMenuItem(
+                            value: 'refresh', child: Text('刷新')),
+                        PopupMenuItem(
+                            value: 'path',
+                            enabled: _fileService.isConnected,
+                            child: const Text('打开路径')),
+                        const PopupMenuItem(
+                            value: 'reconnect', child: Text('重新连接')),
+                        PopupMenuItem(
+                            value: 'batch',
+                            enabled: !_isLoading && !_addingBatch,
+                            child: _addingBatch
+                                ? const Text('正在添加下载…')
+                                : const MemberFeatureLabel('批量下载')),
+                      ]),
             ],
           ],
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _displayedFiles.isEmpty
-                ? _buildEmptyState()
-                : _viewMode == ViewMode.list
-                    ? _buildListView()
-                    : _buildGridView(),
+            ? const Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('正在连接或读取目录…')
+              ]))
+            : _connectionError != null
+                ? Center(
+                    child: SingleChildScrollView(
+                        child: _buildFailure(_connectionError!)))
+                : Column(children: [
+                    if (_directory.error != null)
+                      _buildFailure(_directory.error!),
+                    Expanded(
+                        child: _displayedFiles.isEmpty
+                            ? (_directory.error == null
+                                ? _buildEmptyState()
+                                : const SizedBox.shrink())
+                            : RefreshIndicator(
+                                onRefresh: () async {
+                                  await _loadFiles(_currentPath);
+                                },
+                                child: _viewMode == ViewMode.list
+                                    ? _buildListView()
+                                    : _buildGridView())),
+                  ]),
       ),
     );
   }
+
+  Widget _buildFailure(String message) => Card(
+      margin: const EdgeInsets.all(16),
+      child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_connectionError != null ? '无法连接服务器' : '无法读取目录',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(message, maxLines: 4, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, children: [
+                  FilledButton.tonal(
+                      onPressed: () => _fileService.isConnected &&
+                              _connectionError == null
+                          ? _loadFiles(_directory.failedPath ?? _currentPath)
+                          : _connectAndLoad(resume: true),
+                      child: const Text('重试')),
+                  if (_fileService.isConnected)
+                    TextButton(onPressed: _openPath, child: const Text('打开路径')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('返回服务器列表')),
+                ]),
+              ])));
 
   Widget _buildEmptyState() {
     return Center(
@@ -621,10 +697,11 @@ class _BrowserPageState extends State<BrowserPage> {
 
   Widget _buildListView() {
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       itemCount: _displayedFiles.length,
       itemBuilder: (context, index) {
         final file = _displayedFiles[index];
-        final isVideo = !file.isDirectory && _isVideoFile(file.name);
+        final isVideo = !file.isDirectory && isNetworkMedia(file);
 
         return ListTile(
           leading: CircleAvatar(
@@ -653,7 +730,9 @@ class _BrowserPageState extends State<BrowserPage> {
           ),
           subtitle: file.isDirectory
               ? const Text('文件夹')
-              : Text(_formatFileSize(file.size)),
+              : Text(hasKnownFileSize(file)
+                  ? _formatFileSize(file.size)
+                  : '大小待获取'),
           trailing: isVideo
               ? IconButton(
                   icon: const Icon(Icons.play_arrow, color: Colors.red),
@@ -669,6 +748,7 @@ class _BrowserPageState extends State<BrowserPage> {
 
   Widget _buildGridView() {
     return GridView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
@@ -679,7 +759,7 @@ class _BrowserPageState extends State<BrowserPage> {
       itemCount: _displayedFiles.length,
       itemBuilder: (context, index) {
         final file = _displayedFiles[index];
-        final isVideo = !file.isDirectory && _isVideoFile(file.name);
+        final isVideo = !file.isDirectory && isNetworkMedia(file);
 
         return Card(
           elevation: 2,
@@ -716,7 +796,9 @@ class _BrowserPageState extends State<BrowserPage> {
                 if (!file.isDirectory) ...[
                   const SizedBox(height: 4),
                   Text(
-                    _formatFileSize(file.size),
+                    hasKnownFileSize(file)
+                        ? _formatFileSize(file.size)
+                        : '大小待获取',
                     style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                   ),
                 ],

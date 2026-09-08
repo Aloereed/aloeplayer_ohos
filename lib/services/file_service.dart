@@ -66,8 +66,29 @@ abstract class FileService {
   Future<bool> connect(ServerConfig config);
   Future<void> disconnect();
   Future<List<FileItem>> listFiles(String path);
-  Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end});
+  Future<Stream<Uint8List>> getFileStream(String filePath,
+      {int? start, int? end});
   Future<FileItem?> getFile(String path);
+}
+
+bool hasKnownFileSize(FileItem file) =>
+    file.size >= 0 && (file is! WebDavFileItem || file.webdavFile.sizeKnown);
+String? fileEtag(FileItem file) =>
+    file is WebDavFileItem ? file.webdavFile.etag : null;
+
+Future<FileItem> resolveFileSize(FileService service, FileItem file) async {
+  if (hasKnownFileSize(file)) return file;
+  final resolved = await service.getFile(file.path);
+  if (resolved == null || !hasKnownFileSize(resolved))
+    throw StateError('无法获取 ${file.name} 的文件大小');
+  return resolved;
+}
+
+/// Sources that can atomically condition the GET on previously observed
+/// metadata prevent replacing a file between the stat and the read.
+abstract class RevisionAwareFileService {
+  Future<Stream<Uint8List>> getFileStreamForRevision(FileItem file,
+      {int? start, int? end});
 }
 
 // SMB文件服务实现
@@ -123,8 +144,10 @@ class SmbFileService implements FileService {
   }
 
   @override
-  Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end}) async {
-    return await _smbService.libsmb2Service.getRangeStream(filePath, start: start ?? 0, end: end == null ? null : end + 1);
+  Future<Stream<Uint8List>> getFileStream(String filePath,
+      {int? start, int? end}) async {
+    return await _smbService.libsmb2Service.getRangeStream(filePath,
+        start: start ?? 0, end: end == null ? null : end + 1);
   }
 
   @override
@@ -142,9 +165,10 @@ class SmbFileService implements FileService {
 }
 
 // WebDAV文件服务实现
-class WebDavFileService implements FileService {
+class WebDavFileService implements FileService, RevisionAwareFileService {
   final WebDavService _webdavService;
-  WebDavFileService({WebDavService? service}) : _webdavService = service ?? WebDavService();
+  WebDavFileService({WebDavService? service})
+      : _webdavService = service ?? WebDavService();
 
   @override
   bool get isConnected => _webdavService.isConnected;
@@ -175,9 +199,19 @@ class WebDavFileService implements FileService {
   }
 
   @override
-  Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end}) async {
+  Future<Stream<Uint8List>> getFileStream(String filePath,
+      {int? start, int? end}) async {
     return await _webdavService.getFileStream(filePath, start: start, end: end);
   }
+
+  @override
+  Future<Stream<Uint8List>> getFileStreamForRevision(FileItem file,
+          {int? start, int? end}) =>
+      _webdavService.getFileStream(file.path,
+          start: start,
+          end: end,
+          expectedEtag: fileEtag(file),
+          expectedModified: file.modified);
 
   @override
   Future<FileItem?> getFile(String path) async {

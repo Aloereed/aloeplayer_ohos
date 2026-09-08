@@ -7,26 +7,41 @@ import 'package:aloeplayer/models/download_task.dart';
 import 'package:aloeplayer/models/server_config.dart';
 import 'package:aloeplayer/services/download_manager.dart';
 import 'package:aloeplayer/services/file_service.dart';
+import 'package:aloeplayer/services/webdav_service.dart';
 
 class TestFile implements FileItem {
-  @override String get name => 'movie.mp4';
-  @override String get path => '/movie.mp4';
-  @override int get size => 6;
-  @override bool get isDirectory => false;
-  @override DateTime? get modified => null;
+  @override
+  String get name => 'movie.mp4';
+  @override
+  String get path => '/movie.mp4';
+  @override
+  int get size => 6;
+  @override
+  bool get isDirectory => false;
+  @override
+  DateTime? get modified => null;
 }
+
 class TestSource extends FileService {
   final List<int> offsets;
   TestSource(this.offsets);
-  @override bool get isConnected => true;
-  @override Future<bool> connect(ServerConfig config) async => true;
-  @override Future<void> disconnect() async {}
-  @override Future<FileItem?> getFile(String path) async => TestFile();
-  @override Future<List<FileItem>> listFiles(String path) async => [TestFile()];
-  @override Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end}) async {
+  @override
+  bool get isConnected => true;
+  @override
+  Future<bool> connect(ServerConfig config) async => true;
+  @override
+  Future<void> disconnect() async {}
+  @override
+  Future<FileItem?> getFile(String path) async => TestFile();
+  @override
+  Future<List<FileItem>> listFiles(String path) async => [TestFile()];
+  @override
+  Future<Stream<Uint8List>> getFileStream(String filePath,
+      {int? start, int? end}) async {
     offsets.add(start ?? 0);
     return _stream(start ?? 0);
   }
+
   Stream<Uint8List> _stream(int start) async* {
     if (start == 0) {
       yield Uint8List.fromList([1, 2, 3]);
@@ -35,32 +50,155 @@ class TestSource extends FileService {
     yield Uint8List.fromList([4, 5, 6]);
   }
 }
+
 class SlowSource extends TestSource {
   bool canceled = false, disconnected = false;
   SlowSource() : super([]);
-  @override Future<Stream<Uint8List>> getFileStream(String filePath, {int? start, int? end}) async {
-    final controller = StreamController<Uint8List>(onCancel: () { canceled = true; });
+  @override
+  Future<Stream<Uint8List>> getFileStream(String filePath,
+      {int? start, int? end}) async {
+    final controller = StreamController<Uint8List>(onCancel: () {
+      canceled = true;
+    });
     controller.add(Uint8List.fromList([1, 2, 3]));
     return controller.stream;
   }
-  @override Future<void> disconnect() async { disconnected = true; }
+
+  @override
+  Future<void> disconnect() async {
+    disconnected = true;
+  }
 }
-Future<void> waitForStatus(DownloadManager manager, DownloadStatus status) async {
+
+class PendingHeadersSource extends TestSource {
+  final started = Completer<void>();
+  final response = Completer<Stream<Uint8List>>();
+  PendingHeadersSource() : super([]);
+  @override
+  Future<Stream<Uint8List>> getFileStream(String filePath,
+      {int? start, int? end}) {
+    started.complete();
+    return response.future;
+  }
+
+  @override
+  Future<void> disconnect() async {
+    if (!response.isCompleted) response.completeError(StateError('closed'));
+  }
+}
+
+class EtagSource extends TestSource {
+  final String etag;
+  EtagSource(super.offsets, this.etag);
+  @override
+  Future<FileItem?> getFile(String path) async => WebDavFileItem(WebDavFile(
+      name: 'movie.mp4',
+      path: '/movie.mp4',
+      size: 6,
+      isDirectory: false,
+      etag: etag));
+}
+
+Future<void> waitForStatus(
+    DownloadManager manager, DownloadStatus status) async {
   if (manager.tasks.single.status == status) return;
   final ready = Completer<void>();
-  void listener() { if (manager.tasks.single.status == status && !ready.isCompleted) ready.complete(); }
+  void listener() {
+    if (manager.tasks.single.status == status && !ready.isCompleted)
+      ready.complete();
+  }
+
   manager.addListener(listener);
-  try { await ready.future.timeout(const Duration(seconds: 5)); } finally { manager.removeListener(listener); }
+  try {
+    await ready.future.timeout(const Duration(seconds: 5));
+  } finally {
+    manager.removeListener(listener);
+  }
 }
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  test('interrupted download resumes exact byte offset and atomically enters library', () async {
+  test('resume rejects a same-size replacement when its ETag changed',
+      () async {
     SharedPreferences.setMockInitialValues({});
-    final directory = await Directory.systemTemp.createTemp('aloe-download-test-');
+    final directory =
+        await Directory.systemTemp.createTemp('aloe-download-etag-');
+    var revision = '"first"';
     final offsets = <int>[];
-    final manager = DownloadManager.forTesting(directory: directory.path, openSource: (_) async => TestSource(offsets));
+    final manager = DownloadManager.forTesting(
+        directory: directory.path,
+        openSource: (_) async => EtagSource(offsets, revision));
     try {
-      final config = ServerConfig(id: 'server', name: 'NAS', type: ServerType.webdav, host: 'localhost', username: '', password: '', createdAt: DateTime(2026));
+      final config = ServerConfig(
+          id: 'server',
+          name: 'NAS',
+          type: ServerType.webdav,
+          host: 'localhost',
+          username: '',
+          password: '',
+          createdAt: DateTime(2026));
+      await manager.add(
+          config, (await EtagSource(offsets, revision).getFile('/movie.mp4'))!);
+      await waitForStatus(manager, DownloadStatus.failed);
+      revision = '"replacement"';
+      await manager.resume(manager.tasks.single);
+      await waitForStatus(manager, DownloadStatus.failed);
+      expect(offsets, [0]);
+      expect(manager.tasks.single.error, contains('远端文件已变化'));
+      expect(await File(manager.tasks.single.partialPath).readAsBytes(),
+          [1, 2, 3]);
+    } finally {
+      manager.dispose();
+      await directory.delete(recursive: true);
+    }
+  });
+  test('pause aborts a GET still waiting for response headers', () async {
+    SharedPreferences.setMockInitialValues({});
+    final directory =
+        await Directory.systemTemp.createTemp('aloe-download-headers-');
+    final source = PendingHeadersSource();
+    final manager = DownloadManager.forTesting(
+        directory: directory.path, openSource: (_) async => source);
+    try {
+      final config = ServerConfig(
+          id: 'server',
+          name: 'NAS',
+          type: ServerType.webdav,
+          host: 'localhost',
+          username: '',
+          password: '',
+          createdAt: DateTime(2026));
+      await manager.add(config, TestFile());
+      await source.started.future;
+      await manager
+          .pause(manager.tasks.single)
+          .timeout(const Duration(seconds: 2));
+      expect(manager.tasks.single.status, DownloadStatus.paused);
+      expect(manager.tasks.single.received, 0);
+    } finally {
+      manager.dispose();
+      await directory.delete(recursive: true);
+    }
+  });
+  test(
+      'interrupted download resumes exact byte offset and atomically enters library',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final directory =
+        await Directory.systemTemp.createTemp('aloe-download-test-');
+    final offsets = <int>[];
+    final manager = DownloadManager.forTesting(
+        directory: directory.path,
+        openSource: (_) async => TestSource(offsets));
+    try {
+      final config = ServerConfig(
+          id: 'server',
+          name: 'NAS',
+          type: ServerType.webdav,
+          host: 'localhost',
+          username: '',
+          password: '',
+          createdAt: DateTime(2026));
       await manager.add(config, TestFile());
       await waitForStatus(manager, DownloadStatus.failed);
       final task = manager.tasks.single;
@@ -77,27 +215,48 @@ void main() {
     }
   });
   for (final cancel in [false, true]) {
-    test('${cancel ? "cancel" : "pause"} waits for stream cancellation and releases connection', () async {
+    test(
+        '${cancel ? "cancel" : "pause"} waits for stream cancellation and releases connection',
+        () async {
       SharedPreferences.setMockInitialValues({});
-      final directory = await Directory.systemTemp.createTemp('aloe-download-stop-');
+      final directory =
+          await Directory.systemTemp.createTemp('aloe-download-stop-');
       final source = SlowSource();
-      final manager = DownloadManager.forTesting(directory: directory.path, openSource: (_) async => source);
+      final manager = DownloadManager.forTesting(
+          directory: directory.path, openSource: (_) async => source);
       try {
-        final config = ServerConfig(id: 'server', name: 'NAS', type: ServerType.webdav, host: 'localhost', username: '', password: '', createdAt: DateTime(2026));
+        final config = ServerConfig(
+            id: 'server',
+            name: 'NAS',
+            type: ServerType.webdav,
+            host: 'localhost',
+            username: '',
+            password: '',
+            createdAt: DateTime(2026));
         await manager.add(config, TestFile());
         final task = manager.tasks.single;
         final deadline = DateTime.now().add(const Duration(seconds: 5));
-        while (task.received < 3 && DateTime.now().isBefore(deadline)) { await Future<void>.delayed(const Duration(milliseconds: 10)); }
+        while (task.received < 3 && DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
         expect(task.received, 3);
-        if (cancel) { await manager.cancel(task); } else { await manager.pause(task); }
+        if (cancel) {
+          await manager.cancel(task);
+        } else {
+          await manager.pause(task);
+        }
         expect(source.canceled, isTrue);
         expect(source.disconnected, isTrue);
-        expect(task.status, cancel ? DownloadStatus.canceled : DownloadStatus.paused);
+        expect(task.status,
+            cancel ? DownloadStatus.canceled : DownloadStatus.paused);
         expect(await File(task.destination).exists(), isFalse);
         expect(await File(task.partialPath).exists(), !cancel);
-        if (!cancel) expect(await File(task.partialPath).readAsBytes(), [1, 2, 3]);
-      } finally { manager.dispose(); await directory.delete(recursive: true); }
+        if (!cancel)
+          expect(await File(task.partialPath).readAsBytes(), [1, 2, 3]);
+      } finally {
+        manager.dispose();
+        await directory.delete(recursive: true);
+      }
     });
   }
-
 }

@@ -210,8 +210,13 @@ class HttpService {
       };
       if (request.method == 'HEAD' || size == 0)
         return Response(range == null ? 200 : 206, headers: headers);
-      final stream = await source.getFileStream(grant.path,
-          start: range?.start, end: range?.end);
+      final stream = source is RevisionAwareFileService
+          ? await (source as RevisionAwareFileService).getFileStreamForRevision(
+              file,
+              start: range?.start,
+              end: range?.end)
+          : await source.getFileStream(grant.path,
+              start: range?.start, end: range?.end);
       return Response(range == null ? 200 : 206,
           body: stream, headers: headers);
     } catch (_) {
