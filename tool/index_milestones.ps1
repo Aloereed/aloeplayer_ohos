@@ -35,6 +35,10 @@ foreach ($directory in $orderedMilestones) {
         }
     }
     $signedLink = if ($signed) { "[签名 HAP]($($directory.Name)/$($signed.name))" } else { '无' }
+    $debugHap = $manifest.artifacts | Where-Object { $_.name -eq 'entry-debug-signed.hap' } | Select-Object -First 1
+    if ($debugHap) {
+        $signedLink = "[Debug 签名 HAP]($($directory.Name)/$($debugHap.name)) / $signedLink"
+    }
     $releaseApp = $manifest.artifacts | Where-Object { $_.name -eq 'ohos-default-signed.app' } | Select-Object -First 1
     if ($releaseApp) {
         $signedLink += " / [Release APP $($releaseApp.version)]($($directory.Name)/$($releaseApp.name))"

@@ -33,3 +33,5 @@
 - 本阶段不承诺电视支持原视频编码，不进行转码；带鉴权的多级 HLS、系统投播生命周期及部分非 MPV 旧播放页入口在后续继续完善。
 
 安装包：`build/milestones/68-casting-first-release/`；release 签名 APP 和对应 HAP、源码 commit、哈希、构建时间见 manifest.json。
+
+补充：68 的首批 APP 构建只保留了 release 签名 HAP。10:07 从同一源码提交补建 `entry-debug-signed.hap` 和 `entry-debug-unsigned.hap`，保留所有原产物及其哈希。这里 debug 指项目调试签名配置，Flutter 编译仍为 release。部署脚本优先选择独立 debug 签名 HAP；已通过 `-DryRun` 核验，未连接设备。后续里程碑同样分别保留 debug 签名 HAP 和 release APP。

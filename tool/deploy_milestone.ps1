@@ -14,7 +14,10 @@ if ($Name -notmatch '^\d{2}-[a-zA-Z0-9_-]+$') { throw 'Invalid milestone name.' 
 if ($Target -and $Target -notmatch '^[a-zA-Z0-9_.:-]+$') { throw 'Invalid HDC target.' }
 $directory = Join-Path $root $Name
 $manifest = Get-Content -LiteralPath (Join-Path $directory 'manifest.json') -Raw | ConvertFrom-Json
-$signed = $manifest.artifacts | Where-Object { $_.name -eq 'entry-default-signed.hap' } | Select-Object -First 1
+$signed = $manifest.artifacts | Where-Object { $_.name -eq 'entry-debug-signed.hap' } | Select-Object -First 1
+if (-not $signed) {
+    $signed = $manifest.artifacts | Where-Object { $_.name -eq 'entry-default-signed.hap' } | Select-Object -First 1
+}
 if (-not $signed) { throw 'This milestone has no signed HAP. Sign the unsigned HAP for your device first.' }
 $hap = Join-Path $directory $signed.name
 if ((Get-FileHash -LiteralPath $hap -Algorithm SHA256).Hash -ne $signed.sha256) { throw 'HAP SHA-256 mismatch.' }
