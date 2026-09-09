@@ -10,6 +10,9 @@ import 'package:crypto/crypto.dart';
 import 'package:aloeplayer/services/media_server_query.dart';
 import 'package:aloeplayer/services/media_server_sequence.dart';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:aloeplayer/services/media_server_progress.dart';
+import 'package:aloeplayer/models/playback_media.dart';
 
 void main() {
   for (final kind in ['Jellyfin', 'Emby']) {
@@ -304,6 +307,45 @@ void main() {
                 .any((m) => m.id == episodes.items[1].id),
             isTrue);
         await client.setPlayed(episodes.items.first.id, false);
+        await client.setFavorite(movie.id, true);
+        final offlineDate = DateTime.now().toUtc();
+        expect(
+            await client.syncOfflineProgress(movie.id, 9000, offlineDate,
+                actionId: 'offline-${offlineDate.microsecondsSinceEpoch}'),
+            isTrue);
+        final afterOffline = await client.details(movie.id);
+        expect(afterOffline.resumeMs, 9000);
+        expect(afterOffline.favorite, isTrue);
+        expect(
+            await client.syncOfflineProgress(
+                movie.id, 2000, offlineDate.subtract(const Duration(hours: 1)),
+                actionId: 'old-offline'),
+            isFalse);
+        expect((await client.details(movie.id)).resumeMs, 9000);
+        SharedPreferences.setMockInitialValues({});
+        final offlineQueue = MediaServerProgressStore();
+        await offlineQueue.record(
+            client.connection,
+            PlaybackMedia(
+                id: Uri(
+                    scheme: 'aloe-server',
+                    host: client.connection.id,
+                    pathSegments: [movie.id]).toString(),
+                url: '/offline/movie.mkv',
+                title: movie.name),
+            10000);
+        final synced = await offlineQueue.sync(client);
+        expect(synced.sent, 1);
+        expect(synced.pending, 0);
+        expect((await client.details(movie.id)).resumeMs, 10000);
+        expect(
+            await client.syncOfflineProgress(
+                movie.id, movie.durationMs, DateTime.now().toUtc(),
+                actionId: 'complete-${offlineDate.microsecondsSinceEpoch}'),
+            isTrue);
+        expect((await client.details(movie.id)).played, isTrue);
+        await client.setPlayed(movie.id, false);
+        await client.setFavorite(movie.id, false);
         print(
             'REAL $kind PASS: ${auth['version']}; 2 versions, 2 audio tracks, authenticated Chinese subtitle, direct decode hash, HLS transcode seek/decode, resume/favorite, season pagination/next-up');
       } finally {

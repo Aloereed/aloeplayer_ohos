@@ -139,17 +139,38 @@ class DownloadManager extends ChangeNotifier {
       if (parts == null ||
           parts.length != 3 ||
           parts.first != uri.pathSegments.single) continue;
-      try {
-        final file = File(task.destination);
-        if (await file.exists() && await file.length() == task.size) {
-          return PlaybackMedia(
-              id: mediaId, url: task.destination, title: task.name);
-        }
-      } on FileSystemException {
-        continue;
-      }
+      final media = await downloadedMedia(task);
+      if (media != null) return media;
     }
     return null;
+  }
+
+  Future<PlaybackMedia?> downloadedMedia(DownloadTask task) async {
+    if (task.status != DownloadStatus.completed) return null;
+    try {
+      final file = File(task.destination);
+      if (!await file.exists() || await file.length() != task.size) return null;
+      var id = PlaybackMedia.localId(task.destination);
+      if (task.serverId.startsWith(MediaServerDownloadSource.serverPrefix)) {
+        final parts = Uri.tryParse(task.remotePath)?.pathSegments;
+        if (parts == null || parts.length != 3) return null;
+        id = Uri(
+            scheme: 'aloe-server',
+            host: task.serverId
+                .substring(MediaServerDownloadSource.serverPrefix.length),
+            pathSegments: [parts.first]).toString();
+      }
+      return PlaybackMedia(
+          id: id,
+          url: task.destination,
+          title: task.name,
+          mediaType: {'.mp3', '.flac', '.m4a', '.wav', '.ogg', '.aac', '.opus'}
+                  .contains(path.extension(task.destination).toLowerCase())
+              ? 'audio'
+              : 'video');
+    } on FileSystemException {
+      return null;
+    }
   }
 
   Future<void> _add(String serverId, FileItem file) async {

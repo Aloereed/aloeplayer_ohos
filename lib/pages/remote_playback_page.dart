@@ -2,6 +2,7 @@ import '../services/media_server_client.dart';
 import '../services/media_server_catalog.dart';
 import '../services/media_server_sequence.dart';
 import '../services/download_manager.dart';
+import '../services/media_server_progress.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
@@ -16,8 +17,12 @@ import '../services/server_config_service.dart';
 class RemotePlaybackPage extends StatefulWidget {
   final String mediaId;
   final int? initialPositionMs;
+  final PlaybackMedia? offlineMedia;
   const RemotePlaybackPage(
-      {super.key, required this.mediaId, this.initialPositionMs});
+      {super.key,
+      required this.mediaId,
+      this.initialPositionMs,
+      this.offlineMedia});
   @override
   State<RemotePlaybackPage> createState() => _RemotePlaybackPageState();
 }
@@ -26,6 +31,7 @@ class _RemotePlaybackPageState extends State<RemotePlaybackPage> {
   FileService? _files;
   MediaServerClient? _mediaClient;
   MediaServerSequence? _sequence;
+  MediaServerConnection? _offlineConnection;
   final _lifetime = CancelToken();
   List<PlaybackMedia>? _queue;
   String? _url;
@@ -40,11 +46,20 @@ class _RemotePlaybackPageState extends State<RemotePlaybackPage> {
     try {
       final uri = Uri.parse(widget.mediaId);
       if (uri.scheme == 'aloe-server') {
-        final offline = await DownloadManager.instance
-            .offlineMedia(widget.mediaId)
-            .catchError((_) => null);
+        final offline = widget.offlineMedia ??
+            await DownloadManager.instance
+                .offlineMedia(widget.mediaId)
+                .catchError((_) => null);
         if (!mounted) return;
         if (offline != null) {
+          try {
+            _offlineConnection = (await MediaServerStore.load())
+                .where((c) => c.id == uri.host)
+                .firstOrNull;
+          } catch (_) {
+            /* Offline files remain playable without account storage. */
+          }
+          if (!mounted) return;
           setState(() {
             _queue = [offline];
             _url = offline.url;
@@ -113,6 +128,16 @@ class _RemotePlaybackPageState extends State<RemotePlaybackPage> {
     super.dispose();
   }
 
+  Future<void> _reportOffline(
+      PlaybackMedia media, int position, bool stopped, bool playing) async {
+    final connection = _offlineConnection;
+    if (connection == null) return;
+    await MediaServerProgressStore.instance.record(connection, media, position);
+    if (stopped) {
+      await MediaServerProgressStore.instance.syncConnection(connection);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_url != null)
@@ -120,7 +145,7 @@ class _RemotePlaybackPageState extends State<RemotePlaybackPage> {
           filePath: _url!,
           mediaQueue: _queue,
           initialPositionMs: widget.initialPositionMs,
-          onPlayback: _mediaClient?.report,
+          onPlayback: _mediaClient?.report ?? _reportOffline,
           onAdjacentMedia:
               _sequence?.enabled == true ? _sequence!.adjacent : null,
           onDiscardMedia: _sequence?.discard);

@@ -11,10 +11,12 @@ extension MediaServerCatalog on MediaServerClient {
   /// Authentication, transport and server failures must never trigger retries.
   Future<Response<dynamic>> catalogRequest(String modern, String legacy,
       {String method = 'GET',
+      Object? data,
       Map<String, dynamic> query = const {},
       CancelToken? cancelToken}) async {
     Future<Response<dynamic>> send(String route) => dio.request<dynamic>(route,
         options: Options(method: method),
+        data: data,
         cancelToken: cancelToken,
         queryParameters: {'UserId': connection.userId, ...query});
     if (connection.kind != 'Jellyfin' || modern == legacy) return send(legacy);
@@ -231,5 +233,45 @@ extension MediaServerCatalog on MediaServerClient {
     // Stable on both implementations; current Jellyfin still supports this route.
     final route = 'Users/$_user/PlayedItems/${Uri.encodeComponent(id)}';
     await catalogRequest(route, route, method: value ? 'POST' : 'DELETE');
+  }
+
+  /// Returns false when another device has already recorded a newer play.
+  Future<bool> syncOfflineProgress(String id, int positionMs, DateTime observed,
+      {required String actionId, CancelToken? cancelToken}) async {
+    final item = await details(id, cancelToken: cancelToken);
+    final lastPlayed = DateTime.tryParse(
+        item.metadata['UserData']?['LastPlayedDate'] as String? ?? '');
+    if (lastPlayed != null && lastPlayed.isAfter(observed)) return false;
+    final ticks = positionMs.clamp(0, 900719925474) * 10000;
+    if (connection.kind == 'Emby') {
+      final info = await dio.get<Map<String, dynamic>>('System/Info/Public',
+          cancelToken: cancelToken);
+      await dio.post('Sync/OfflineActions', cancelToken: cancelToken, data: [
+        {
+          'Id': actionId,
+          'Date': observed.toUtc().toIso8601String(),
+          'ItemId': id,
+          'PositionTicks': ticks,
+          'ServerId': info.data?['Id'],
+          'Type': 'PlayedItem',
+          'UserId': connection.userId,
+        }
+      ]);
+    } else {
+      final duration = item.durationMs;
+      final completed = duration > 0 &&
+          positionMs >= duration - 1000 &&
+          positionMs >= duration * .99;
+      await catalogRequest('UserItems/${Uri.encodeComponent(id)}/UserData',
+          'Users/$_user/Items/${Uri.encodeComponent(id)}/UserData',
+          method: 'POST',
+          cancelToken: cancelToken,
+          data: {
+            'PlaybackPositionTicks': completed ? 0 : ticks,
+            'LastPlayedDate': observed.toUtc().toIso8601String(),
+            if (completed) 'Played': true
+          });
+    }
+    return true;
   }
 }

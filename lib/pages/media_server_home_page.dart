@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../services/media_server_client.dart';
 import '../services/media_server_catalog.dart';
+import '../services/media_server_progress.dart';
 import '../widgets/media_server_poster.dart';
 import 'media_server_detail_page.dart';
 import 'media_servers_page.dart';
@@ -41,6 +42,8 @@ class _MediaServerHomePageState extends State<MediaServerHomePage> {
   final _errors = <MediaServerShelf, String>{};
   final _requests = <MediaServerShelf, CancelToken>{};
   final _busy = <MediaServerShelf>{};
+  String? _syncNotice;
+  bool _syncing = false;
   @override
   void initState() {
     super.initState();
@@ -56,7 +59,33 @@ class _MediaServerHomePageState extends State<MediaServerHomePage> {
     super.dispose();
   }
 
-  Future<void> _refresh() => Future.wait(MediaServerShelf.values.map(_load));
+  Future<void> _refresh() async {
+    if (!mounted) return;
+    setState(() => _syncing = true);
+    final shelves = Future.wait(MediaServerShelf.values.map(_load));
+    var updated = false;
+    try {
+      final result = await MediaServerProgressStore.instance.sync(_client);
+      updated = result.sent > 0;
+      if (!mounted) return;
+      setState(() => _syncNotice = result.pending > 0
+          ? '有 ${result.pending} 条离线观看进度等待同步，恢复连接后可刷新重试'
+          : result.sent > 0
+              ? '离线观看进度已同步'
+              : result.superseded > 0
+                  ? '已保留服务器上较新的观看进度'
+                  : null);
+    } catch (_) {
+      if (mounted) setState(() => _syncNotice = '离线进度暂时无法同步，稍后刷新重试');
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+    await shelves;
+    if (mounted && updated)
+      await Future.wait(
+          [_load(MediaServerShelf.resume), _load(MediaServerShelf.nextUp)]);
+  }
+
   Future<void> _load(MediaServerShelf shelf) async {
     _requests[shelf]?.cancel();
     final token = _requests[shelf] = CancelToken();
@@ -86,8 +115,11 @@ class _MediaServerHomePageState extends State<MediaServerHomePage> {
         IconButton(
             tooltip: '下载与离线观看',
             icon: const Icon(Icons.download_for_offline_outlined),
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const DownloadsPage()))),
+            onPressed: () async {
+              await Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const DownloadsPage()));
+              if (mounted) _refresh();
+            }),
         IconButton(
             tooltip: '搜索与浏览全部媒体',
             icon: const Icon(Icons.search),
@@ -109,6 +141,11 @@ class _MediaServerHomePageState extends State<MediaServerHomePage> {
           child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
+                if (_syncing) const LinearProgressIndicator(),
+                if (_syncNotice != null)
+                  Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(_syncNotice!)),
                 for (final shelf in MediaServerShelf.values) ...[
                   ListTile(
                       title: Text(shelfTitle(shelf),

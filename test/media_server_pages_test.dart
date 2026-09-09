@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aloeplayer/services/media_server_client.dart';
 import 'package:aloeplayer/pages/media_server_home_page.dart';
 import 'package:aloeplayer/pages/media_server_detail_page.dart';
@@ -35,6 +36,7 @@ MediaServerClient fixture(FutureOr<Object> Function(RequestOptions) answer) {
 }
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   testWidgets(
       'home renders successful shelves while another fails and retries independently',
       (tester) async {

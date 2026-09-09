@@ -127,12 +127,16 @@ void main() {
       final offline = await manager.offlineMedia('aloe-server://device/item');
       expect(offline?.url, task.destination);
       expect(offline?.id, 'aloe-server://device/item');
+      final fromDownloads = await manager.downloadedMedia(task);
+      expect(fromDownloads?.id, offline?.id);
+      expect(fromDownloads?.url, task.destination);
       expect(await manager.offlineMedia('aloe-server://other-device/item'),
           isNull);
       expect(await manager.offlineMedia('aloe-server://device/other-item'),
           isNull);
       await File(task.destination).writeAsBytes([1, 2]);
       expect(await manager.offlineMedia('aloe-server://device/item'), isNull);
+      expect(await manager.downloadedMedia(task), isNull);
       final persisted = (await SharedPreferences.getInstance())
           .getString('download.tasks.v1')!;
       expect(persisted, isNot(contains('fixture-token')));
