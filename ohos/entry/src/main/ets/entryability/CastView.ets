@@ -24,20 +24,6 @@ interface CastStatus {
 @Component
 struct ButtonComponent {
   @Prop params: Params;
-  private castView: CastView = this.params.platformView as CastView;
-  @State ready: boolean = false;
-  @State sessionType: string = 'video';
-  private unsubscribe: (() => void) | undefined = undefined;
-  aboutToAppear(): void {
-    this.unsubscribe = this.castView.subscribePicker((ready: boolean, sessionType: string) => {
-      this.ready = ready;
-      this.sessionType = sessionType;
-    });
-  }
-  aboutToDisappear(): void {
-    this.unsubscribe?.();
-    this.unsubscribe = undefined;
-  }
   @Builder
   pickerContent() {
     Row({ space: 10 }) {
@@ -56,28 +42,9 @@ struct ButtonComponent {
     .borderRadius(12)
   }
   build() {
-    // AVCastPicker can retain its custom builder's first render. Mount it
-    // only after initialization; its custom content must not capture readiness.
-    Stack() {
-      if (this.ready) {
-        AVCastPicker({
-          sessionType: this.sessionType,
-          customPicker: () => this.pickerContent()
-        })
-          .width('100%')
-          .height('100%')
-      } else {
-        Row({ space: 10 }) {
-          LoadingProgress().width(24).height(24).color(Color.White)
-          Text('正在准备投播…').fontSize(16).fontColor(Color.White)
-        }
-          .width('100%')
-          .height(48)
-          .justifyContent(FlexAlign.Center)
-          .backgroundColor('#667085')
-          .borderRadius(12)
-      }
-    }
+    // Keep the system picker directly available, as in the original entry.
+    // Session preparation reports status through Flutter, never gates this UI.
+    AVCastPicker({ customPicker: () => this.pickerContent() })
       .width('100%')
       .height('100%')
   }
@@ -94,21 +61,6 @@ function ButtonBuilder(params: Params) {
 export class CastView extends PlatformView implements MethodCallHandler {
   // A closing view releases ownership before a new view borrows/creates a session.
   private static operations: Promise<void> = Promise.resolve();
-  ready: boolean = false;
-  sessionType: string = 'video';
-  private pickerListener: ((ready: boolean, sessionType: string) => void) | undefined = undefined;
-  subscribePicker(listener: (ready: boolean, sessionType: string) => void): () => void {
-    this.pickerListener = listener;
-    // Replay the snapshot: native initialization may finish before the view
-    // appears. Subsequent channel callbacks explicitly update primitive @State.
-    listener(this.ready, this.sessionType);
-    return () => {
-      if (this.pickerListener === listener) this.pickerListener = undefined;
-    };
-  }
-  private updatePicker(): void {
-    this.pickerListener?.(this.ready, this.sessionType);
-  }
   private readonly context: common.Context;
   private readonly channel: MethodChannel;
   private session: avSession.AVSession | undefined;
@@ -155,8 +107,6 @@ export class CastView extends PlatformView implements MethodCallHandler {
         await this.session?.activate();
         await this.session?.setExtras({ requireAbilityList: ['url-cast'] });
         await this.setMetadata();
-        this.ready = true;
-        this.updatePicker();
         if (this.controller) await this.startMedia();
         else this.emit('READY');
       } else if (call.method === 'stopCasting') {
@@ -207,7 +157,6 @@ export class CastView extends PlatformView implements MethodCallHandler {
       this.ownsSession = true;
     }
     this.session = session;
-    this.sessionType = session.sessionType;
     if (!this.ownsSession) {
       try { this.originalMetadata = await (await session.getController()).getAVMetadata(); } catch (_) {}
     }
@@ -282,9 +231,7 @@ export class CastView extends PlatformView implements MethodCallHandler {
   }
   getView(): WrappedBuilder<[Params]> { return new WrappedBuilder(ButtonBuilder); }
   dispose(): void {
-    this.disposed = true; this.ready = false; this.connectionRevision++;
-    this.updatePicker();
-    this.pickerListener = undefined;
+    this.disposed = true; this.connectionRevision++;
     this.channel.setMethodCallHandler(null);
     this.enqueue(async () => {
       this.detachController();
