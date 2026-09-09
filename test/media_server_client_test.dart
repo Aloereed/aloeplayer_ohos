@@ -81,12 +81,16 @@ void main() {
         expect((jsonDecode(body) as Map)['Pw'], 'test-password');
         expect(request.headers.value('X-Emby-Authorization'),
             contains('AloePlayer'));
+        expect(request.headers.value('Authorization'),
+            contains('MediaBrowser Client="AloePlayer"'));
         response = {
           'AccessToken': 'test-token',
           'User': {'Id': 'user'}
         };
       } else {
         expect(request.headers.value('X-Emby-Token'), 'test-token');
+        expect(request.headers.value('Authorization'),
+            contains('Token="test-token"'));
         if (route.endsWith('/stream')) {
           expect(request.uri.queryParameters['Static'], 'true');
           expect(request.uri.queryParameters['MediaSourceId'], 'source');

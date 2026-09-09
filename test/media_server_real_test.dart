@@ -1,0 +1,153 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as path;
+import 'package:aloeplayer/services/media_server_client.dart';
+import 'package:aloeplayer/services/media_server_catalog.dart';
+import 'package:aloeplayer/services/media_server_playback.dart';
+
+void main() {
+  test(
+      'real Jellyfin: login, versions, tracks, subtitles, decode, watched and resume',
+      () async {
+    final fixture = Directory('build/media-server-fixtures').absolute;
+    final auth = jsonDecode(
+        await File('${fixture.path}/jellyfin-12-runtime/test-auth.json')
+            .readAsString()) as Map;
+    final uri = Uri.parse(auth['url'] as String);
+    expect(uri.host, '127.0.0.1');
+    expect(uri.scheme, 'http');
+    final connection = await MediaServerClient.login(
+        url: uri.toString(),
+        username: auth['username'] as String,
+        password: auth['password'] as String,
+        kind: 'Jellyfin');
+    final client = MediaServerClient(connection);
+    final ffmpeg = '${fixture.path}/jellyfin-12-bin/jellyfin/ffmpeg.exe';
+    final reader = HttpClient();
+    Future<String> decode(String input, {int audio = 0}) async {
+      final result = await Process.run(ffmpeg, [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-nostdin',
+        '-ss',
+        '5',
+        '-i',
+        input,
+        '-t',
+        '3',
+        '-map',
+        '0:v:0',
+        '-map',
+        '0:a:$audio',
+        '-c:v',
+        'rawvideo',
+        '-c:a',
+        'pcm_s16le',
+        '-f',
+        'streamhash',
+        '-hash',
+        'sha256',
+        '-'
+      ]);
+      expect(result.exitCode, 0,
+          reason: 'Media decode failed: ${result.stderr}');
+      final output = (result.stdout as String).trim();
+      expect(output.split('\n'), hasLength(2));
+      return output;
+    }
+
+    try {
+      final libraries = await client.shelf(MediaServerShelf.libraries);
+      expect(libraries.items, hasLength(2));
+      final movies = libraries.items
+          .firstWhere((item) => item.name == 'Aloe Fixture Movies');
+      final page = await client.itemPage(parent: movies.id, limit: 1);
+      expect(page.items, hasLength(1));
+      expect(page.hasMore, isFalse);
+      final movie = await client.details(page.items.single.id);
+      final sources = await client.playbackSources(movie);
+      expect(sources, hasLength(2));
+      final source = sources.firstWhere(
+          (s) => s.streams.where((t) => t.type == 'Audio').length == 2);
+      final audio = source.streams.where((t) => t.type == 'Audio').last;
+      final subtitle = source.streams.firstWhere(
+          (t) => t.type == 'Subtitle' && t.data['Language'] == 'zho');
+      final direct = await client.playback(movie,
+          options: MediaServerPlaybackOptions(
+              sourceId: source.id,
+              audioIndex: audio.index,
+              subtitleIndex: subtitle.index,
+              mode: MediaServerPlayMode.original));
+      expect(direct.preferredAudioTrack, '2');
+      expect(direct.subtitles, hasLength(1));
+      final subResponse =
+          await (await reader.getUrl(Uri.parse(direct.subtitles.single)))
+              .close();
+      expect(subResponse.statusCode, 200);
+      expect(await utf8.decoder.bind(subResponse).join(), contains('中文字幕测试'));
+      final original =
+          await File(source.data['Path'] as String).resolveSymbolicLinks();
+      expect(path.isWithin('${fixture.path}/library', original), isTrue);
+      final expected = await decode(original, audio: 1);
+      final actual = await decode(direct.url, audio: 1);
+      expect(actual, expected);
+      await client.report(direct, 6000, false, true);
+      await client.report(direct, 7000, true, false);
+      final resumed = await client.details(movie.id);
+      expect(resumed.resumeMs, 7000);
+      expect(
+          (await client.shelf(MediaServerShelf.resume))
+              .items
+              .any((m) => m.id == movie.id),
+          isTrue);
+      await client.setFavorite(movie.id, true);
+      expect(
+          (await client.shelf(MediaServerShelf.favorites))
+              .items
+              .any((m) => m.id == movie.id),
+          isTrue);
+      await client.setFavorite(movie.id, false);
+      final transcoded = await client.playback(movie,
+          options: MediaServerPlaybackOptions(
+              sourceId: source.id,
+              audioIndex: audio.index,
+              subtitleIndex: -1,
+              maxBitrate: 2000000,
+              mode: MediaServerPlayMode.transcode));
+      expect(transcoded.preferredSubtitleTrack, 'no');
+      await decode(transcoded.url);
+      await client.report(transcoded, 8000, true, false);
+      final shows = libraries.items
+          .firstWhere((item) => item.name == 'Aloe Fixture Shows');
+      final series = (await client.itemPage(parent: shows.id))
+          .items
+          .firstWhere((m) => m.type == 'Series');
+      final seasons = await client.seasons(series.id);
+      expect(seasons.items, hasLength(1));
+      final episodes = await client.episodes(series.id,
+          seasonId: seasons.items.single.id, limit: 2);
+      expect(episodes.items, hasLength(2));
+      expect(episodes.hasMore, isTrue);
+      final last = await client.episodes(series.id,
+          seasonId: seasons.items.single.id, start: 2, limit: 2);
+      expect(last.items, hasLength(1));
+      expect(last.hasMore, isFalse);
+      await client.setPlayed(episodes.items.first.id, true);
+      expect(
+          (await client.shelf(MediaServerShelf.nextUp))
+              .items
+              .any((m) => m.id == episodes.items[1].id),
+          isTrue);
+      await client.setPlayed(episodes.items.first.id, false);
+      print(
+          'REAL JELLYFIN PASS: ${auth['version']}; 2 versions, 2 audio tracks, authenticated Chinese subtitle, direct decode hash, HLS transcode seek/decode, resume/favorite, season pagination/next-up');
+    } finally {
+      await client.close();
+      reader.close(force: true);
+    }
+  },
+      skip: Platform.environment['ALOE_REAL_JELLYFIN'] != '1',
+      timeout: const Timeout(Duration(minutes: 3)));
+}

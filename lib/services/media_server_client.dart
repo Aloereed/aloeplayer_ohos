@@ -164,10 +164,18 @@ class MediaServerClient {
         headers: headers);
   }
   Map<String, String> get headers => {
+        'Authorization': _authorization,
         'X-Emby-Authorization':
             'MediaBrowser Client="AloePlayer", Device="HarmonyOS", DeviceId="${connection.id}", Version="4.0.1"',
         if (connection.token.isNotEmpty) 'X-Emby-Token': connection.token,
       };
+  String get _authorization {
+    String quote(String value) =>
+        value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+    return 'MediaBrowser Client="AloePlayer", Device="HarmonyOS", DeviceId="${quote(connection.id)}", Version="4.0.1"'
+        '${connection.token.isEmpty ? '' : ', Token="${quote(connection.token)}"'}';
+  }
+
   static Future<MediaServerConnection> login(
       {required String url,
       required String username,
