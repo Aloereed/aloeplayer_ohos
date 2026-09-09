@@ -330,6 +330,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   bool _mirror = false;
   double _zoom = 1.0;
   PlaylistMode _loopMode = PlaylistMode.none;
+  final _playlistModeSerial = SerialExecutor();
   bool _enableBlur = false; // 控制栏高斯模糊，默认关闭
 
   // 长按无极调速
@@ -1085,6 +1086,18 @@ class _MPVPlayerState extends State<MPVPlayer>
     _sortPlaylist(_sortType, newOrder);
   }
 
+  Future<void> _applyPlaylistMode() => _playlistModeSerial.run(() async {
+    if (_disposing) return;
+    final mode = _loopMode;
+    // MPV's loop-playlist=no still advances through the queue once.
+    // Keep every entry open in off mode, including entries before the last.
+    if (player.platform is NativePlayer) {
+      await (player.platform as NativePlayer).setProperty(
+        'keep-open', mode == PlaylistMode.none ? 'always' : 'yes');
+    }
+    await player.setPlaylistMode(mode);
+  });
+
   Future<void> _openMedia(String filePath) async {
     if (_openingMedia || !mounted || _disposing) return;
     _openingMedia = true;
@@ -1129,9 +1142,10 @@ class _MPVPlayerState extends State<MPVPlayer>
 
     // 打开播放列表
     PlaybackSleepTimer.instance.attach(this, () => player.pause());
+    await _applyPlaylistMode();
     await player.open(playlist).timeout(const Duration(seconds: 20));
     _readyForRestore = true;
-    player.setPlaylistMode(_loopMode);
+    await _applyPlaylistMode();
     _tryRestorePosition();
     final remoteSubtitles = _mediaFor(filePath)?.subtitles ?? [];
     if (remoteSubtitles.isNotEmpty) await _loadRemoteSubtitle(filePath, remoteSubtitles);
@@ -2376,7 +2390,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                         newMode = PlaylistMode.none;
 
                       setState(() => _loopMode = newMode);
-                      player.setPlaylistMode(newMode);
+                      unawaited(_applyPlaylistMode());
                     },
                   ),
                 ),
@@ -2960,7 +2974,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                             onSelectionChanged:
                                 (Set<PlaylistMode> newSelection) {
                               setState(() => _loopMode = newSelection.first);
-                              player.setPlaylistMode(newSelection.first);
+                              unawaited(_applyPlaylistMode());
                             },
                           ),
                         ),
