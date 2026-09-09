@@ -1,6 +1,7 @@
 library castscreen.http;
 
 import 'dart:convert';
+import 'dart:async';
 import 'package:xml/xml.dart';
 import 'package:http/http.dart' as http;
 

@@ -18,3 +18,18 @@
 - 现有说明宣称必须有 URLBase；实际应按描述文档地址解析相对控制路径。
 
 验证依据：[UPnP 设备架构](https://openconnectivity.org/developer/specifications/upnp-resources/upnp/)、[AVTransport 规范](https://upnp.org/specs/av/UPnP-av-AVTransport-v3-Service.pdf)。本机测试不冒充真实电视或鸿蒙设备验收。
+
+## 68 — 首批完整投屏修复（4.0.1+221）
+
+为满足先交付上架包的时间要求，本阶段合并协议、媒体转发与主播放页入口，后续继续完善系统投播及兼容边界。
+
+- MPV 视频播放页（手机/桌面）及 MPV 音乐页新增投屏按钮；接收端开始播放成功后才暂停本机播放。
+- 修正 AVTransport 和 RenderingControl 默认 InstanceID：1 → 0；兼容带前缀 XML、厂商 serviceId、不同服务版本、缺失 URLBase/SCPD、相对或绝对控制地址和空成功响应。
+- SSDP 每次扫描独立 socket/map，按网络接口搜索并重试，去重并有界读取描述；等待接近扫描结束时收到的设备描述。单个接口失败不会终止全部发现。
+- 普通 HTTP/HTTPS 直链直接投送；本地文件、带请求头的网络文件、SMB/WebDAV 的本机播放链接通过临时令牌局域网地址供电视读取。根据到电视的实际路由选择本机地址。提供 HEAD/Range、MIME 和 DLNA 流式响应头。
+- 投屏页面重做为主题自适应列表，提供手动描述地址添加、错误复制、播放/暂停/停止/断开、进度拖动、音量控制及两秒状态刷新。返回页面不会销毁投屏文件服务。
+- 保留鸿蒙系统投播入口，改为用户主动展开；系统原生链路仍在后续专项验证范围内。
+- 全量 Flutter 测试 214 项通过、默认跳过 2 项显式 SMB 回环。新增真实本机 UDP/HTTP 模拟接收端验证，另验证 320px 深色界面；无真机、电视或上架验证。
+- 本阶段不承诺电视支持原视频编码，不进行转码；带鉴权的多级 HLS、系统投播生命周期及部分非 MPV 旧播放页入口在后续继续完善。
+
+安装包：`build/milestones/68-casting-first-release/`；release 签名 APP 和对应 HAP、源码 commit、哈希、构建时间见 manifest.json。

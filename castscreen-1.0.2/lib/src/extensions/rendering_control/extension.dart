@@ -11,7 +11,7 @@ part 'get_volume.dart';
 part 'set_mute.dart';
 part 'set_volume.dart';
 
-const _defaultInstanceID = '1';
+const _defaultInstanceID = '0';
 const _defaultChannel = 'Master';
 
 /// The action extension to implements RenderingControl SCPD Service

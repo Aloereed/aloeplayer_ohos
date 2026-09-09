@@ -1,3 +1,4 @@
+import 'screens/cast_screen_page.dart' show CastScreenPage;
 import 'widgets/sleep_timer_button.dart';
 import 'dart:async';
 import 'dart:io';
@@ -800,6 +801,11 @@ class _MediaKitMusicPlayerPageState extends State<MediaKitMusicPlayerPage>
               letterSpacing: 2,
             ),
           ),
+          IconButton(tooltip: '投屏', icon: const Icon(Icons.cast, color: Colors.white),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CastScreenPage(
+              mediaPath: widget.filePath, initialPosition: _player.state.position,
+              onCastStarted: () { if (mounted) _player.pause(); },
+            )))),
           BlurredIconButton(
             icon: Icons.queue_music,
             onPressed: () {

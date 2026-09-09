@@ -26,11 +26,9 @@ final class Service {
   Future<void> _init() async {
     spec.actionList = <ActionSpec>[];
     _actionsMap = <String, ActionSpec>{};
-    final resp = await Http.get(spec.scpdReqURL, ScpdServiceSpec.fromXml);
-    spec.actionList.addAll(resp.data.actionList);
-    for (var actionSpec in spec.actionList) {
-      _actionsMap[actionSpec.name] = actionSpec;
-    }
+    // Standard commands do not require SCPD. Broken or missing optional service
+    // documents must not prevent an otherwise functional renderer connecting.
+
   }
 
   /// Invoke a service action, and returns a generics type
@@ -80,14 +78,14 @@ final class Service {
   }
 
   Map<String, String> _parseXml(XmlDocument xml, String action) {
-    final outArgs = _actionsMap[action]!
-        .argumentList
-        .where((arg) => arg.direction == 'out');
-    final m = <String, String>{};
-    for (var arg in outArgs) {
-      m[arg.name] = xml.xpathEvaluate(_xpath(action, arg.name)).string;
+    final responses = xml.descendants.whereType<XmlElement>()
+        .where((e) => e.name.local == '${action}Response');
+    if (responses.isEmpty) {
+      // A number of renderers return HTTP 200/204 without an XML body on writes.
+      if (xml.children.isEmpty && !action.startsWith('Get')) return {};
+      throw CastProtocolException('设备未返回 $action 的结果');
     }
-    return m;
+    return {for (final child in responses.first.childElements) child.name.local: child.innerText.trim()};
   }
 
   static Map<String, String> _headers(ServiceSpec spec, String action) {
@@ -150,11 +148,11 @@ final class ServiceSpec {
     final eventSubURL = xml.xpathEvaluate(_xpath(index, 'eventSubURL')).string;
 
     // 使用传入的baseUrl作为基础URL
-    final controlReqURL = baseUrl + ((controlURL.startsWith('/'))? controlURL.substring(1): controlURL);
+    final controlReqURL = Uri.parse(baseUrl).resolve(controlURL).toString();
 
     print("[cast] controlReqURL: $controlReqURL");
 
-    final scpdReqURL = baseUrl + ((SCPDURL.startsWith('/'))? SCPDURL.substring(1): SCPDURL);
+    final scpdReqURL = Uri.parse(baseUrl).resolve(SCPDURL).toString();
     print("[cast] scpdReqURL: $scpdReqURL");
 
     return ServiceSpec(

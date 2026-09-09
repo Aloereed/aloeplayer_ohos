@@ -11,7 +11,7 @@ part 'previous.dart';
 part 'set_av_transport_uri.dart';
 part 'stop.dart';
 
-const _defaultInstanceID = '1';
+const _defaultInstanceID = '0';
 const _defaultSpeed = '1';
 
 /// The action extension to implements AVTransport SCPD Service

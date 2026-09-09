@@ -1,67 +1,69 @@
 part of 'lib.dart';
 
+/// A bounded HTTP/SOAP failure, retained for useful receiver diagnostics.
+class CastProtocolException implements Exception {
+  final String message;
+  final int? statusCode;
+  final int? upnpCode;
+  const CastProtocolException(this.message, {this.statusCode, this.upnpCode});
+  @override
+  String toString() => '$message${upnpCode == null ? '' : ' (UPnP $upnpCode)'}${statusCode == null ? '' : ' [HTTP $statusCode]'}';
+}
+
 abstract final class Http {
+  static const timeout = Duration(seconds: 8);
+  static const maxXmlBytes = 2 * 1024 * 1024;
+
   static Future<int> head(String url) async {
-    int statusCode = 0;
+    final client = http.Client();
     try {
-      await http.get(Uri.parse(url));
-      //ignored response statusCode
-      statusCode = 200;
-    } catch (error) {
-      // ignored
-    }
-    return statusCode;
+      final response = await client.send(http.Request('GET', Uri.parse(url))).timeout(timeout);
+      await response.stream.listen((_) {}).cancel();
+      return response.statusCode;
+    } finally { client.close(); }
   }
 
-  static Future<Model<T>> get<T>(String url, Converter<T> converter) async {
-    var m = <String, dynamic>{};
-    http.Response response;
-    int statusCode = 0;
-    try {
-      response = await http.get(Uri.parse(url));
-      statusCode = response.statusCode;
-      switch (statusCode) {
-        case 200:
-          final body = utf8.decode(response.bodyBytes);
-          m['xml'] = XmlDocument.parse(body);
-          break;
-        default:
-          m['msg'] = response.body;
-          break;
-      }
-    } catch (error) {
-      m['msg'] = '$error';
-    }
-    m['code'] = statusCode;
-    return Model.fromMap(m, converter);
-  }
+  static Future<Model<T>> get<T>(String url, Converter<T> converter) =>
+      _request('GET', url, converter);
 
-  static Future<Model<T>> post<T>(
-    String url,
-    Converter<T> converter, {
-    String? body,
-    Map<String, String>? headers,
-  }) async {
-    var m = <String, dynamic>{};
-    http.Response response;
-    int statusCode = 0;
+  static Future<Model<T>> post<T>(String url, Converter<T> converter,
+      {String? body, Map<String, String>? headers}) =>
+      _request('POST', url, converter, body: body, headers: headers);
+
+  static Future<Model<T>> _request<T>(String method, String url, Converter<T> converter,
+      {String? body, Map<String, String>? headers}) async {
+    final client = http.Client();
     try {
-      response = await http.post(Uri.parse(url), headers: headers, body: body);
-      statusCode = response.statusCode;
-      switch (statusCode) {
-        case 200:
-          final body = utf8.decode(response.bodyBytes);
-          m['xml'] = XmlDocument.parse(body);
-          break;
-        default:
-          m['msg'] = response.body;
-          break;
-      }
-    } catch (error) {
-      m['msg'] = '$error';
-    }
-    m['code'] = statusCode;
-    return Model.fromMap(m, converter);
+      return await (() async {
+        final request = http.Request(method, Uri.parse(url));
+        request.headers.addAll(headers ?? {});
+        if (body != null) request.bodyBytes = utf8.encode(body);
+        final response = await client.send(request);
+        final bytes = <int>[];
+        await for (final chunk in response.stream) {
+          if (bytes.length + chunk.length > maxXmlBytes) {
+            throw const CastProtocolException('设备描述或控制响应过大');
+          }
+          bytes.addAll(chunk);
+        }
+        XmlDocument xml;
+        try { xml = bytes.isEmpty ? XmlDocument() : XmlDocument.parse(utf8.decode(bytes)); }
+        catch (_) { throw CastProtocolException('设备返回了无法解析的 XML', statusCode: response.statusCode); }
+        final faults = xml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'Fault');
+        if (faults.isNotEmpty) {
+          String field(String name) => faults.first.descendants.whereType<XmlElement>()
+              .where((e) => e.name.local == name).map((e) => e.innerText.trim()).firstOrNull ?? '';
+          throw CastProtocolException(field('errorDescription').isNotEmpty ? field('errorDescription') : '设备拒绝控制命令',
+              statusCode: response.statusCode, upnpCode: int.tryParse(field('errorCode')));
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw CastProtocolException('设备请求失败', statusCode: response.statusCode);
+        }
+        return Model(response.statusCode, 'ok', converter(xml));
+      })().timeout(timeout);
+    } on TimeoutException {
+      throw const CastProtocolException('设备响应超时，请确认设备在线且位于同一网络');
+    } finally { client.close(); }
   }
 }
 
@@ -70,19 +72,5 @@ class Model<T> {
   final String msg;
   final T data;
   const Model(this.code, this.msg, this.data);
-  factory Model.fromMap(Map<String, dynamic> m, Converter<T> converter) {
-    return Model(
-        m.containsKey("code") ? m["code"] as int : 0,
-        m.containsKey("msg") ? m["msg"] as String : "ok",
-        converter(m.containsKey("xml") && m["xml"] != null
-            ? m["xml"]
-            : XmlDocument()));
-  }
-
-  @override
-  String toString() {
-    return '{code: $code, msg: $msg, data: $data}';
-  }
 }
-
 typedef Converter<T> = T Function(XmlDocument xml);

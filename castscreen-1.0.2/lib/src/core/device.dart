@@ -79,8 +79,6 @@ final class Device {
 
   /// The factory method create
   factory Device.create(Client client, XmlDocument xml, String baseUrl) {
-    // 打印xml
-    print(xml.toXmlString(pretty: true));
     return Device._(client, DeviceSpec.fromXml(xml, baseUrl));
   }
 
@@ -104,26 +102,25 @@ final class Device {
   /// Get current device provides service list
   List<Service> get services => _servicesMap.values.toList();
 
-  bool get _realDevice => _servicesMap.isNotEmpty;
+  bool get _realDevice => _avTransportService != null;
 
   /// Check current device is alive
   Future<bool> alive() async {
-    return await Http.head(spec.URLBase) == 200;
+    final code = await Http.head(client.LOCATION);
+    return code >= 200 && code < 300;
   }
 
   Future<void> _init() async {
     _servicesMap = <String, Service>{};
     for (var spec in spec.serviceSpecs) {
-      if (_supported(spec.serviceId)) {
+      if (RegExp(r':(AVTransport|RenderingControl|ConnectionManager):\d+$').hasMatch(spec.serviceType)) {
         var service = Service.build(spec);
         await service._init();
         _servicesMap[spec.serviceId] = service;
+        if (spec.serviceType.contains(':AVTransport:')) _avTransportService = service;
+        if (spec.serviceType.contains(':RenderingControl:')) _renderingControlService = service;
+        if (spec.serviceType.contains(':ConnectionManager:')) _connectionManagerService = service;
       }
-    }
-    if (_servicesMap.isNotEmpty) {
-      _avTransportService = _servicesMap[_svcMap[_avt]];
-      _renderingControlService = _servicesMap[_svcMap[_rc]];
-      _connectionManagerService = _servicesMap[_svcMap[_cm]];
     }
   }
 
@@ -203,52 +200,35 @@ final class DeviceSpec {
       this.serviceSpecs,
       this.iconSpecs);
 
-  /// The factory method fromXml
-  factory DeviceSpec.fromXml(XmlDocument xml, String baseUrl) {
-    print("[cast] base url: $baseUrl");
-    final deviceType = xml.xpathEvaluate(_xpath('deviceType')).string;
-    final presentationURL = xml.xpathEvaluate(_xpath('presentationURL')).string;
-    final friendlyName = xml.xpathEvaluate(_xpath('friendlyName')).string;
-    final manufacturer = xml.xpathEvaluate(_xpath('manufacturer')).string;
-    final manufacturerURL = xml.xpathEvaluate(_xpath('manufacturerURL')).string;
-    final modelDescription =
-        xml.xpathEvaluate(_xpath('modelDescription')).string;
-    final modelName = xml.xpathEvaluate(_xpath('modelName')).string;
-    final modelURL = xml.xpathEvaluate(_xpath('modelURL')).string;
-    final UPC = xml.xpathEvaluate(_xpath('UPC')).string;
-    final UDN = xml.xpathEvaluate(_xpath('UDN')).string;
-    final uuid = UDN.startsWith('uuid:') ? UDN.split(':')[1] : '';
-
-    // 尝试获取URLBase，如果不存在则使用传入的baseUrl
-    String URLBase = xml.xpathEvaluate('/root/URLBase/text()').string;
-    if (URLBase == null || URLBase.isEmpty) {
-      URLBase = baseUrl;
+  /// Prefix-independent parsing; embedded MediaRenderers are valid too.
+  factory DeviceSpec.fromXml(XmlDocument xml, String location) {
+    String value(XmlElement parent, String name) => parent.childElements
+        .where((e) => e.name.local == name).map((e) => e.innerText.trim()).firstOrNull ?? '';
+    final candidates = xml.descendants.whereType<XmlElement>().where((e) => e.name.local == 'device');
+    final device = candidates.where((d) => d.childElements
+        .where((e) => e.name.local == 'serviceList').expand((e) => e.childElements)
+        .any((s) => value(s, 'serviceType').contains(':AVTransport:'))).firstOrNull;
+    if (device == null) throw const CastProtocolException('该设备没有媒体播放服务');
+    final baseText = xml.rootElement.childElements.where((e) => e.name.local == 'URLBase')
+        .map((e) => e.innerText.trim()).firstOrNull ?? '';
+    final base = Uri.parse(baseText.isEmpty ? location : baseText);
+    if (!['http', 'https'].contains(base.scheme) || base.host.isEmpty) {
+      throw const CastProtocolException('设备描述中的 URLBase 无效');
     }
-    if(!URLBase.endsWith('/')){
-      URLBase += '/';
-    }
-
-    final length = xml.xpath('/root/device/serviceList/service').length;
-    final iconLength = xml.xpath('/root/device/iconList/icon').length;
-
-    return DeviceSpec(
-        deviceType,
-        presentationURL,
-        friendlyName,
-        manufacturer,
-        manufacturerURL,
-        modelDescription,
-        modelName,
-        modelURL,
-        UPC,
-        UDN,
-        uuid,
-        URLBase,
-        List.generate(
-            length, (index) => ServiceSpec.fromXml(xml, index + 1, URLBase)),
-        List.generate(
-            iconLength, (index) => IconSpec.fromXml(xml, index + 1)));
+    final services = device.childElements.where((e) => e.name.local == 'serviceList')
+        .expand((e) => e.childElements).where((e) => e.name.local == 'service')
+        .where((e) => value(e, 'controlURL').isNotEmpty).map((e) {
+      final control = value(e, 'controlURL');
+      final scpd = value(e, 'SCPDURL');
+      return ServiceSpec(base.toString(), value(e, 'serviceType'), value(e, 'serviceId'),
+          control, scpd, value(e, 'eventSubURL'), base.resolve(control).toString(),
+          scpd.isEmpty ? '' : base.resolve(scpd).toString());
+    }).toList();
+    final udn = value(device, 'UDN');
+    return DeviceSpec(value(device, 'deviceType'), value(device, 'presentationURL'),
+      value(device, 'friendlyName'), value(device, 'manufacturer'), value(device, 'manufacturerURL'),
+      value(device, 'modelDescription'), value(device, 'modelName'), value(device, 'modelURL'),
+      value(device, 'UPC'), udn, udn.isEmpty ? location : udn.replaceFirst('uuid:', ''),
+      base.toString(), services, []);
   }
-
-  static String _xpath(String name) => '/root/device/$name/text()';
 }

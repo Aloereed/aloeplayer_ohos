@@ -1,3 +1,4 @@
+import 'screens/cast_screen_page.dart' show CastScreenPage;
 import 'widgets/native_ass_overlay.dart';
 import 'services/mpv_output_policy.dart';
 import 'services/serial_executor.dart';
@@ -2414,6 +2415,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                 ),
               ]),
               const Spacer(),
+              IconButton(tooltip: '投屏', icon: const Icon(Icons.cast, color: Colors.white), onPressed: _openCastScreen),
               IconButton(
                 icon: const Icon(Icons.playlist_play, color: Colors.white),
                 onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
@@ -2430,6 +2432,15 @@ class _MPVPlayerState extends State<MPVPlayer>
         ),
       ),
     );
+  }
+
+  Future<void> _openCastScreen() async {
+    final source = _currentFilePath.isNotEmpty ? _currentFilePath : widget.filePath;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CastScreenPage(
+      mediaPath: source, httpHeaders: _mediaFor(source)?.httpHeaders ?? const {},
+      initialPosition: player.state.position,
+      onCastStarted: () { if (!_disposing) player.pause(); },
+    )));
   }
 
   Widget _buildTopBar() {
@@ -2478,6 +2489,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                     onPressed: () =>
                         setState(() => _showPlaylist = !_showPlaylist),
                   ),
+                  IconButton(tooltip: '投屏', icon: const Icon(Icons.cast, color: Colors.white), onPressed: _openCastScreen),
                   IconButton(
                     icon: const Icon(Icons.settings, color: Colors.white),
                     onPressed: () =>
