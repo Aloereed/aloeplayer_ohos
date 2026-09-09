@@ -45,6 +45,10 @@ void main() {
             'TotalRecordCount': 101
           }));
         } else {
+          if (route.endsWith('/Shows/NextUp')) {
+            expect(request.uri.queryParameters['LegacyNextUp'],
+                kind == 'Emby' ? 'true' : isNull);
+          }
           if (request.uri.queryParameters['IsFavorite'] == 'true') {
             expect(request.uri.queryParameters['Recursive'], 'true');
           }

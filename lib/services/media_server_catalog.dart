@@ -62,6 +62,9 @@ extension MediaServerCatalog on MediaServerClient {
         query['MediaTypes'] = 'Video';
       case MediaServerShelf.nextUp:
         modern = legacy = 'Shows/NextUp';
+        // Emby's own episode shelf requests this mode. Without it recent
+        // Emby versions can return no episodes for an in-progress series.
+        if (connection.kind == 'Emby') query['LegacyNextUp'] = true;
       case MediaServerShelf.latest:
         modern = 'Items';
         legacy = 'Users/$_user/Items';
