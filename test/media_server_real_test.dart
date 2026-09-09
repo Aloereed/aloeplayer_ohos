@@ -13,6 +13,7 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aloeplayer/services/media_server_progress.dart';
 import 'package:aloeplayer/models/playback_media.dart';
+import 'package:aloeplayer/services/media_server_diagnostics.dart';
 
 void main() {
   for (final kind in ['Jellyfin', 'Emby']) {
@@ -68,6 +69,18 @@ void main() {
       }
 
       try {
+        final diagnostics =
+            await MediaServerDiagnostics(client).run(CancelToken()).toList();
+        expect(diagnostics, hasLength(4));
+        expect(
+            diagnostics
+                .where((r) => r.status == MediaServerDiagnosticStatus.failed),
+            isEmpty);
+        final diagnosticSummary =
+            mediaServerDiagnosticSummary(kind, diagnostics);
+        expect(diagnosticSummary, contains(auth['version']));
+        expect(diagnosticSummary, isNot(contains(connection.token)));
+        expect(diagnosticSummary, isNot(contains(connection.url)));
         final libraries = await client.shelf(MediaServerShelf.libraries);
         expect(libraries.items, hasLength(3));
         final music = libraries.items

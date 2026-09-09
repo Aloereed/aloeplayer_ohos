@@ -8,8 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../services/media_server_client.dart';
 import 'media_server_home_page.dart';
+import 'media_server_diagnostics_page.dart';
 import 'media_server_detail_page.dart';
 import '../services/media_server_catalog.dart';
+import '../services/media_server_diagnostics.dart';
 
 String _serverError(Object error) {
   if (error is DioException) {
@@ -17,9 +19,11 @@ String _serverError(Object error) {
         error.response?.statusCode == 403) {
       return '登录失败或会话已过期，请检查账户并重新登录';
     }
-    return '服务器连接失败，请检查地址、网络和证书';
+    return mediaServerFailureMessage(error);
   }
-  return error.toString();
+  if (error is FormatException) return '服务器地址格式或返回数据不正确，请检查完整地址';
+  if (error is StateError) return error.message.toString();
+  return mediaServerFailureMessage(error);
 }
 
 class MediaServersPage extends StatefulWidget {
@@ -89,6 +93,14 @@ class _MediaServersPageState extends State<MediaServersPage> {
                                       connection: connection))),
                           trailing: PopupMenuButton<String>(
                               onSelected: (value) async {
+                                if (value == 'diagnostics') {
+                                  await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              MediaServerDiagnosticsPage(
+                                                  connection: connection)));
+                                }
                                 if (value == 'login') {
                                   await _login(connection);
                                 }
@@ -119,6 +131,9 @@ class _MediaServersPageState extends State<MediaServersPage> {
                                 }
                               },
                               itemBuilder: (_) => const [
+                                    PopupMenuItem(
+                                        value: 'diagnostics',
+                                        child: Text('连接诊断')),
                                     PopupMenuItem(
                                         value: 'login',
                                         child: Text('重新登录 / 编辑')),
@@ -192,6 +207,26 @@ class _LoginDialogState extends State<_LoginDialog> {
     }
   }
 
+  Future<void> _diagnoseAddress() async {
+    try {
+      final connection = MediaServerConnection(
+          id: 'diagnostic-address',
+          name: '地址检查',
+          url: MediaServerConnection.normalizeUrl(_url.text),
+          userId: '',
+          username: '',
+          token: '',
+          kind: _kind);
+      await Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) =>
+                  MediaServerDiagnosticsPage(connection: connection)));
+    } catch (error) {
+      if (mounted) setState(() => _error = _serverError(error));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
           title: const Text('登录媒体服务器'),
@@ -225,6 +260,9 @@ class _LoginDialogState extends State<_LoginDialog> {
             if (_busy) const LinearProgressIndicator(),
           ])),
           actions: [
+            TextButton(
+                onPressed: _busy ? null : _diagnoseAddress,
+                child: const Text('诊断地址')),
             TextButton(
                 onPressed: _busy ? null : () => Navigator.pop(context),
                 child: const Text('取消')),

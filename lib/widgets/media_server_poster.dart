@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../services/media_server_client.dart';
+import '../services/media_server_diagnostics.dart';
 
 String mediaServerError(Object error) {
   // Do not display Dio's raw request or authentication headers in the UI.
@@ -10,7 +11,7 @@ String mediaServerError(Object error) {
     if (status == 403) return '当前账号没有访问权限';
     if (status == 404 || status == 405) return '当前服务器版本不支持此功能，或内容已移除';
   }
-  return '加载失败，请检查网络或重新登录后重试';
+  return mediaServerFailureMessage(error);
 }
 
 class MediaServerPoster extends StatelessWidget {

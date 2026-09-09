@@ -8,6 +8,7 @@ import '../widgets/media_server_poster.dart';
 import 'media_server_detail_page.dart';
 import 'media_servers_page.dart';
 import 'downloads_page.dart';
+import 'media_server_diagnostics_page.dart';
 
 String shelfTitle(MediaServerShelf shelf) => switch (shelf) {
       MediaServerShelf.libraries => '媒体库',
@@ -135,6 +136,14 @@ class _MediaServerHomePageState extends State<MediaServerHomePage> {
             tooltip: '刷新首页',
             onPressed: _refresh,
             icon: const Icon(Icons.refresh)),
+        IconButton(
+            tooltip: '连接诊断',
+            icon: const Icon(Icons.network_check),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => MediaServerDiagnosticsPage(
+                        connection: widget.connection)))),
       ]),
       body: RefreshIndicator(
           onRefresh: _refresh,
