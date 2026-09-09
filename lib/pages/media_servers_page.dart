@@ -5,7 +5,9 @@ import '../widgets/member_feature_prompt.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../services/media_server_client.dart';
-import '../mpvplayer.dart';
+import 'media_server_home_page.dart';
+import 'media_server_detail_page.dart';
+import '../services/media_server_catalog.dart';
 
 String _serverError(Object error) {
   if (error is DioException) {
@@ -81,7 +83,7 @@ class _MediaServersPageState extends State<MediaServersPage> {
                           onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => MediaServerBrowser(
+                                  builder: (_) => MediaServerHomePage(
                                       connection: connection))),
                           trailing: PopupMenuButton<String>(
                               onSelected: (value) async {
@@ -232,7 +234,9 @@ class _LoginDialogState extends State<_LoginDialog> {
 class MediaServerBrowser extends StatefulWidget {
   final MediaServerConnection connection;
   final MediaServerClient? client;
-  const MediaServerBrowser({super.key, required this.connection, this.client});
+  final MediaServerItem? initialParent;
+  const MediaServerBrowser(
+      {super.key, required this.connection, this.client, this.initialParent});
   @override
   State<MediaServerBrowser> createState() => _MediaServerBrowserState();
 }
@@ -245,8 +249,6 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
   final _search = TextEditingController();
   final _scroll = ScrollController();
   Timer? _searchDelay;
-  CancelToken? _playCancel;
-  int _playGeneration = 0;
   bool _playing = false;
   String? _playError;
   @override
@@ -254,6 +256,8 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
     super.initState();
     _browser.addListener(_changed);
     _scroll.addListener(_nearEnd);
+    if (widget.initialParent != null)
+      _browser.parents.add(widget.initialParent!);
     _browser.load();
   }
 
@@ -298,52 +302,45 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
   }
 
   void _cancelPlayback() {
-    _playGeneration++;
-    _playCancel?.cancel('Playback request replaced');
-    _playCancel = null;
     _playing = false;
     _playError = null;
   }
 
   Future<void> _open(MediaServerItem item) async {
     if (_playing) return;
-    if (item.isFolder) {
+    if (item.isFolder && !['Series', 'Season'].contains(item.type)) {
       _cancelPlayback();
       _searchDelay?.cancel();
       _search.clear();
       await _browser.enter(item);
       return;
     }
-    if (!['Movie', 'Episode', 'Video', 'MusicVideo', 'Audio']
-        .contains(item.type)) {
-      setState(() => _playError = '此项目不是可直接播放的音视频');
-      return;
-    }
     setState(() {
       _playing = true;
       _playError = null;
     });
-    final generation = ++_playGeneration;
-    final cancel = _playCancel = CancelToken();
     try {
-      final media = await _client.playback(item, cancelToken: cancel);
-      if (!mounted || generation != _playGeneration) return;
+      _searchDelay?.cancel();
       await Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (_) => MPVPlayer(
-                  filePath: media.url,
-                  mediaQueue: [media],
-                  onPlayback: _client.report)));
-      if (mounted && generation == _playGeneration) await _browser.load();
+              builder: (_) => MediaServerDetailPage(
+                  connection: widget.connection, item: item)));
+      if (!mounted) return;
+      // Refresh only the changed tile; keep the large library and scroll position.
+      final updated = await _client.details(item.id);
+      if (mounted)
+        setState(() {
+          _browser.items = _browser.items
+              .map((entry) => entry.id == updated.id ? updated : entry)
+              .toList();
+        });
     } catch (e) {
-      if (mounted &&
-          generation == _playGeneration &&
-          !(e is DioException && CancelToken.isCancel(e))) {
+      if (mounted) {
         setState(() => _playError = _serverError(e));
       }
     } finally {
-      if (mounted && generation == _playGeneration) {
+      if (mounted) {
         setState(() => _playing = false);
       }
     }
@@ -351,7 +348,7 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-      canPop: _browser.parents.isEmpty,
+      canPop: _browser.parents.length <= (widget.initialParent == null ? 0 : 1),
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _browser.parents.isNotEmpty) _back();
       },

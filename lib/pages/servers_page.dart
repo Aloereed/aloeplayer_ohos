@@ -1,6 +1,7 @@
 import '../services/media_server_client.dart';
 import '../widgets/media_source_card.dart';
 import 'media_servers_page.dart';
+import 'media_server_home_page.dart';
 import 'catalog_page.dart';
 import 'downloads_page.dart';
 import 'continue_watching_page.dart';
@@ -223,7 +224,7 @@ class _ServersPageState extends State<ServersPage> {
             onOpen: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) => MediaServerBrowser(connection: server))),
+                    builder: (_) => MediaServerHomePage(connection: server))),
             onEdit: () => _addMediaServer(existing: server),
             onRemove: () =>
                 _remove(server.name, () => MediaServerStore.remove(server.id))),

@@ -88,23 +88,50 @@ class MediaServerItem {
   final String? overview;
   final int resumeMs;
   final bool isFolder;
+  final Map<String, dynamic> metadata;
   const MediaServerItem(
       {required this.id,
       required this.name,
       required this.type,
       this.overview,
       this.resumeMs = 0,
+      this.metadata = const {},
       this.isFolder = false});
+  int get durationMs =>
+      ((metadata['RunTimeTicks'] as num? ?? 0) / 10000).round();
+  bool get favorite => metadata['UserData']?['IsFavorite'] == true;
+  bool get played => metadata['UserData']?['Played'] == true;
+  String? get seriesId => metadata['SeriesId'] as String?;
+  int? get index => (metadata['IndexNumber'] as num?)?.toInt();
+  int? get seasonIndex => (metadata['ParentIndexNumber'] as num?)?.toInt();
+  bool get playable => [
+        'Movie',
+        'Episode',
+        'Video',
+        'MusicVideo',
+        'Audio',
+        'TvChannel'
+      ].contains(type);
   factory MediaServerItem.fromJson(Map<String, dynamic> data) =>
       MediaServerItem(
           id: data['Id'] as String,
           name: data['Name'] as String? ?? '',
           type: data['Type'] as String? ?? '',
           overview: data['Overview'] as String?,
+          metadata: Map<String, dynamic>.unmodifiable(data),
           resumeMs: ((data['UserData']?['PlaybackPositionTicks'] as num? ?? 0) /
                   10000)
               .round(),
-          isFolder: data['IsFolder'] as bool? ?? false);
+          isFolder: data['IsFolder'] as bool? ??
+              [
+                'CollectionFolder',
+                'Folder',
+                'Series',
+                'Season',
+                'MusicAlbum',
+                'BoxSet',
+                'Playlist'
+              ].contains(data['Type']));
 }
 
 class MediaServerPage {
