@@ -25,8 +25,28 @@ interface CastStatus {
 struct ButtonComponent {
   @Prop params: Params;
   @State castView: CastView = this.params.platformView as CastView;
+  @Builder
+  pickerContent() {
+    Row({ space: 10 }) {
+      Image($r('app.media.cast_picker'))
+        .width(24)
+        .height(24)
+      Text(this.castView.ready ? '选择投播设备' : '正在准备投播…')
+        .fontSize(16)
+        .fontColor(Color.White)
+        .fontWeight(FontWeight.Medium)
+    }
+    .width('100%')
+    .height(48)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(this.castView.ready ? '#175CD3' : '#667085')
+    .borderRadius(12)
+  }
   build() {
-    AVCastPicker({ sessionType: this.castView.sessionType })
+    AVCastPicker({
+      sessionType: this.castView.sessionType,
+      customPicker: () => this.pickerContent()
+    })
       .enabled(this.castView.ready)
       .width('100%')
       .height('100%')
@@ -34,7 +54,10 @@ struct ButtonComponent {
 }
 @Builder
 function ButtonBuilder(params: Params) {
-  ButtonComponent({ params: params }).backgroundColor(Color.Transparent)
+  ButtonComponent({ params: params })
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Transparent)
 }
 
 @Observed

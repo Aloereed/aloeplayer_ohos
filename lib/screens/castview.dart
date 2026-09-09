@@ -147,7 +147,7 @@ class _CastExampleState extends State<CastExample> {
   }
 
   String get _label => switch (_status.state) {
-        'READY' => '点击下方系统投播图标选择设备',
+        'READY' => '点击下方“选择投播设备”打开系统投播',
         'CONNECTING' => '正在连接接收设备…',
         'LOADING' => '已发送媒体，等待接收端播放…',
         'PLAYING' => '系统投播正在播放',
