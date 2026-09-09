@@ -9,6 +9,7 @@ import 'credential_store.dart';
 import 'media_server_playback.dart';
 import 'playback_report_queue.dart';
 import 'media_server_query.dart';
+import 'media_server_progress.dart';
 
 class MediaServerConnection {
   final String id, name, url, userId, username, token, kind;
@@ -319,6 +320,9 @@ class MediaServerClient {
         media.url,
         () => PlaybackReportQueue((report) async {
               if (session.closed) return;
+              final observed = DateTime.fromMillisecondsSinceEpoch(
+                  report.observedMs ?? DateTime.now().millisecondsSinceEpoch,
+                  isUtc: true);
               final payload = {
                 'ItemId': session.itemId,
                 'PositionTicks':
@@ -350,6 +354,21 @@ class MediaServerClient {
                         ? 'Sessions/Playing/Stopped'
                         : 'Sessions/Playing/Progress',
                     payload);
+                try {
+                  await MediaServerProgressStore.instance
+                      .acknowledge(connection, media, observed)
+                      .timeout(const Duration(seconds: 1));
+                } catch (_) {}
+              } catch (_) {
+                if (session.canSeek && report.positionMs > 0) {
+                  try {
+                    await MediaServerProgressStore.instance
+                        .record(connection, media, report.positionMs,
+                            observed: observed)
+                        .timeout(const Duration(seconds: 1));
+                  } catch (_) {}
+                }
+                rethrow;
               } finally {
                 if (report.stopped) {
                   await session.close();
@@ -358,7 +377,8 @@ class MediaServerClient {
                 }
               }
             }));
-    return reporter.add(PlaybackReport(positionMs, stopped, playing));
+    return reporter.add(PlaybackReport(positionMs, stopped, playing,
+        observedMs: DateTime.now().millisecondsSinceEpoch));
   }
 
   Future<void> _postReport(String route, Map<String, dynamic> payload) async {

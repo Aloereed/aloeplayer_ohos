@@ -3,7 +3,9 @@ import 'dart:async';
 class PlaybackReport {
   final int positionMs;
   final bool stopped, playing;
-  const PlaybackReport(this.positionMs, this.stopped, this.playing);
+  final int? observedMs;
+  const PlaybackReport(this.positionMs, this.stopped, this.playing,
+      {this.observedMs});
 }
 
 /// One in-flight report and one latest pending state per playback session.

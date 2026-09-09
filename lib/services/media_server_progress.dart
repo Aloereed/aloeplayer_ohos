@@ -70,6 +70,23 @@ class MediaServerProgressStore {
     });
   }
 
+  Future<void> acknowledge(MediaServerConnection connection,
+          PlaybackMedia media, DateTime observed) =>
+      _writes.run(() async {
+        final uri = Uri.tryParse(media.id);
+        if (uri?.scheme != 'aloe-server' ||
+            uri!.host != connection.id ||
+            uri.pathSegments.length != 1) return;
+        final rows = await _read();
+        final count = rows.length;
+        final account = _account(connection);
+        rows.removeWhere((row) =>
+            row['account'] == account &&
+            row['item'] == uri.pathSegments.single &&
+            (row['observed'] as int) <= observed.millisecondsSinceEpoch);
+        if (rows.length != count) await _save(rows);
+      });
+
   Future<MediaServerSyncResult> sync(MediaServerClient client) {
     final account = _account(client.connection);
     return _running[account] ??= _sync(client, account).whenComplete(() {

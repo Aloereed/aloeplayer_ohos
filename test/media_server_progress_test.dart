@@ -86,6 +86,13 @@ void main() {
       expect(conflict.superseded, 1);
       expect(conflict.pending, 0);
       expect(posts, previousPosts);
+      await reopened.record(client.connection, media, 5000,
+          observed: date.add(const Duration(seconds: 10)));
+      await reopened.acknowledge(client.connection, media, date);
+      expect(jsonDecode(prefs.getString(MediaServerProgressStore.storageKey)!),
+          hasLength(1));
+      await reopened.acknowledge(
+          client.connection, media, date.add(const Duration(seconds: 10)));
       await reopened.record(client.connection, media, 0);
       expect(jsonDecode(prefs.getString(MediaServerProgressStore.storageKey)!),
           isEmpty);

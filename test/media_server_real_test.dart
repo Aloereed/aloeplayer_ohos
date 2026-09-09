@@ -20,6 +20,7 @@ void main() {
     test(
         'real $kind: login, versions, tracks, subtitles, decode, watched and resume',
         () async {
+      SharedPreferences.setMockInitialValues({});
       final fixture = Directory('build/media-server-fixtures').absolute;
       final auth = jsonDecode(await File(
               '${fixture.path}/${kind == 'Jellyfin' ? 'jellyfin-12-runtime' : 'emby-4.10-runtime'}/test-auth.json')
@@ -246,8 +247,29 @@ void main() {
         final expected = await decode(original, audio: 1);
         final actual = await decode(direct.url, audio: 1);
         expect(actual, expected);
-        await client.report(direct, 6000, false, true);
+        final failProgress = InterceptorsWrapper(onRequest: (options, handler) {
+          if (options.path == 'Sessions/Playing/Progress') {
+            handler.reject(DioException(
+                requestOptions: options,
+                response: Response(requestOptions: options, statusCode: 503)));
+          } else {
+            handler.next(options);
+          }
+        });
+        client.dio.interceptors.add(failProgress);
+        await expectLater(client.report(direct, 6000, false, true),
+            throwsA(isA<DioException>()));
+        client.dio.interceptors.remove(failProgress);
+        final progressPrefs = await SharedPreferences.getInstance();
+        expect(
+            jsonDecode(
+                progressPrefs.getString(MediaServerProgressStore.storageKey)!),
+            hasLength(1));
         await client.report(direct, 7000, true, false);
+        expect(
+            jsonDecode(
+                progressPrefs.getString(MediaServerProgressStore.storageKey)!),
+            isEmpty);
         final resumed = await client.details(movie.id);
         expect(resumed.resumeMs, 7000);
         expect(

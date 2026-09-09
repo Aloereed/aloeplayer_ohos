@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:aloeplayer/services/media_server_client.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   test('pagination preserves proxy prefix, filters and server total', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final requests = <Uri>[];

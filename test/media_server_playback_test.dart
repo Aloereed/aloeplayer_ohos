@@ -1,10 +1,85 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
+import 'package:aloeplayer/services/media_server_progress.dart';
 import 'package:aloeplayer/services/media_server_client.dart';
 import 'package:aloeplayer/services/media_server_playback.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+  test(
+      'failed online reports persist, successful reports clear older state, failed stop can sync later',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var rejectReports = true, syncedPosition = 0;
+    server.listen((request) async {
+      final body = await utf8.decoder.bind(request).join();
+      request.response.headers.contentType = ContentType.json;
+      if (request.uri.path.endsWith('/PlaybackInfo')) {
+        request.response.write(jsonEncode({
+          'PlaySessionId': 'session',
+          'MediaSources': [
+            {'Id': 'source', 'SupportsDirectPlay': true}
+          ]
+        }));
+      } else if (request.uri.path.endsWith('/UserData')) {
+        syncedPosition =
+            ((jsonDecode(body)['PlaybackPositionTicks'] as num) / 10000)
+                .round();
+        request.response.write('{}');
+      } else if (request.method == 'GET') {
+        request.response.write(jsonEncode({
+          'Id': 'movie',
+          'Type': 'Movie',
+          'RunTimeTicks': 100000000,
+          'UserData': {}
+        }));
+      } else {
+        if (rejectReports &&
+            (request.uri.path.endsWith('/Progress') ||
+                request.uri.path.endsWith('/Stopped')))
+          request.response.statusCode = 503;
+        request.response.write('{}');
+      }
+      await request.response.close();
+    });
+    final client = MediaServerClient(MediaServerConnection(
+        id: 'device',
+        name: 'Test',
+        url: 'http://127.0.0.1:${server.port}',
+        userId: 'u',
+        username: 'u',
+        token: 'secret',
+        kind: 'Jellyfin'));
+    try {
+      final media = await client.playback(
+          const MediaServerItem(id: 'movie', name: 'Movie', type: 'Movie'));
+      await expectLater(client.report(media, 1000, false, true),
+          throwsA(isA<DioException>()));
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+          (jsonDecode(prefs.getString(MediaServerProgressStore.storageKey)!)
+                  as List)
+              .single['position'],
+          1000);
+      rejectReports = false;
+      await client.report(media, 2000, false, true);
+      expect(jsonDecode(prefs.getString(MediaServerProgressStore.storageKey)!),
+          isEmpty);
+      rejectReports = true;
+      await expectLater(client.report(media, 3000, true, false),
+          throwsA(isA<DioException>()));
+      final sync = await MediaServerProgressStore.instance.sync(client);
+      expect(sync.sent, 1);
+      expect(sync.pending, 0);
+      expect(syncedPosition, 3000);
+    } finally {
+      await client.close();
+      await server.close(force: true);
+    }
+  });
   test(
       'stop is delivered and relay released even when start acknowledgement fails',
       () async {
