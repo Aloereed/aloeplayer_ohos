@@ -1,3 +1,4 @@
+import 'pages/private_space_page.dart';
 import 'widgets/customer_support.dart';
 import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'widgets/harmony_switch_tile.dart';
@@ -1678,6 +1679,9 @@ class _SettingsTabState extends State<SettingsTab> {
           SizedBox(height: 16),
           _buildThemeSection(context),
           SizedBox(height: 16),
+          ListTile(leading: const Icon(Icons.lock_person_outlined), title: const Text('隐私空间'),
+            subtitle: const Text('PIN 保护的独立媒体区'), trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrivateSpacePage()))),
           _buildPlayerSection(context),
           SizedBox(height: 16),
           _buildSubtitleSection(context),

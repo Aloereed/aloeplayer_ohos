@@ -80,6 +80,7 @@
       }
     ],
     requestPermissions: [
+      { name: "ohos.permission.PRIVACY_WINDOW" },
       {
         name: "ohos.permission.INTERNET"
       },

@@ -1,3 +1,4 @@
+import 'widgets/player_interaction_lock.dart';
 import 'widgets/playback_failure.dart';
 import 'services/shortcut_source.dart';
 import 'screens/cast_screen_page.dart' show CastScreenPage;
@@ -237,11 +238,12 @@ class _BrightnessSliderState extends State<BrightnessSlider> {
 
 class MPVPlayer extends StatefulWidget {
   final String filePath;
+  final bool privateMode;
   final List<PlaybackMedia>? mediaQueue;
   final int? initialPositionMs;
   final Future<void> Function(PlaybackMedia media, int positionMs, bool stopped, bool playing)? onPlayback;
 
-  const MPVPlayer({Key? key, required this.filePath, this.mediaQueue, this.onPlayback, this.initialPositionMs}) : super(key: key);
+  const MPVPlayer({Key? key, required this.filePath, this.privateMode = false, this.mediaQueue, this.onPlayback, this.initialPositionMs}) : super(key: key);
 
   @override
   _MPVPlayerState createState() => _MPVPlayerState();
@@ -258,6 +260,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   final List<StreamSubscription> _subscriptions = [];
   bool _openingMedia = false;
   bool _disposing = false;
+  bool _privateSuspended = false;
   bool _switchingHdr = false;
   bool _nativeHdr = false, _outputHdr = false;
   MpvOutputMode _outputMode = MpvOutputMode.automatic;
@@ -496,6 +499,7 @@ class _MPVPlayerState extends State<MPVPlayer>
         format: video.hwPixelformat ?? video.pixelformat);
     }));
     _subscriptions.add(player.stream.log.listen((log) {
+      if (widget.privateMode) return;
       if ((log.level == 'error' || log.level == 'fatal') && RegExp(r'shader|glsl', caseSensitive: false).hasMatch(log.text)) {
         _imageEnhancer.shaderFailed(detail: log.text);
       }
@@ -684,6 +688,13 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (widget.privateMode) {
+      if (state != AppLifecycleState.resumed && mounted && !_disposing) {
+        setState(() => _privateSuspended = true);
+        unawaited(player.pause());
+      }
+      return;
+    }
     if (state != AppLifecycleState.resumed) _flushPosition();
     _handleLifecycleChange(state);
   }
@@ -773,6 +784,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   // 初始化 Audio Service
   void _initializeAudioService() async {
+    if (widget.privateMode) return;
     if (_audioServiceInitialized) return;
 
     try {
@@ -1104,7 +1116,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     _tryRestorePosition();
     final remoteSubtitles = _mediaFor(filePath)?.subtitles ?? [];
     if (remoteSubtitles.isNotEmpty) await _loadRemoteSubtitle(filePath, remoteSubtitles);
-    await applyPlaybackPreferences(player, _historyId);
+    if (!widget.privateMode) await applyPlaybackPreferences(player, _historyId);
 
     // 更新 Audio Service 的媒体信息
     _updateMediaItem();
@@ -1157,7 +1169,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       _tryRestorePosition();
       final subtitles = _mediaFor(url)?.subtitles ?? [];
       if (subtitles.isNotEmpty) await _loadRemoteSubtitle(url, subtitles);
-      await applyPlaybackPreferences(player, _historyId);
+      if (!widget.privateMode) await applyPlaybackPreferences(player, _historyId);
       _updateMediaItem();
     } catch (_) {}
   }
@@ -1167,6 +1179,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   bool _pipPlaying = false;
   bool _openingPip = false;
   Future<void> _openSystemPip() async {
+    if (widget.privateMode) return;
     if (Platform.operatingSystem != 'ohos' || _openingMedia || _openingPip || _pipController != null) return;
     _openingPip = true;
     await _updateOutput();
@@ -1215,6 +1228,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   bool _initialSeekConsumed = false;
   Future<void> _beginHistory(String url) async {
+    if (widget.privateMode) { _historyId = ''; _readyForRestore = false; _lastPosition = Duration.zero; return; }
     _readyForRestore = !_openingMedia;
     final media = _mediaFor(url);
     _historyId = media?.id ?? PlaybackMedia.localId(url);
@@ -1240,6 +1254,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   Future<void> _flushPosition() async {
+    if (widget.privateMode) return;
     final id = _historyId;
     final position = _lastPosition;
     final media = _mediaFor(_currentFilePath);
@@ -1338,6 +1353,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   void _takeScreenshot() async {
+    if (widget.privateMode) return;
     if (_capturingFrame || _disposing) return;
     _capturingFrame = true;
     try {
@@ -1755,7 +1771,11 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PlayerInteractionLock(child: _buildUnlockedPlayer(context));
+
+  Widget _buildUnlockedPlayer(BuildContext context) {
+    if (widget.privateMode && _privateSuspended) return Scaffold(backgroundColor: Colors.black,
+      body: Center(child: FilledButton.icon(onPressed: () => Navigator.maybePop(context), icon: const Icon(Icons.lock), label: const Text('返回隐私空间解锁'))));
     return GalacticHotkeys<PlayerHotkey>(
       shortcuts: _getHotkeyShortcuts(),
       onShortcutPressed: _handleHotkey,
@@ -2291,7 +2311,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                     },
                   ),
                 ),
-                PopupMenuItem(
+                if (!widget.privateMode) PopupMenuItem(
                   child: ListTile(
                     leading: const Icon(Icons.camera_alt, color: Colors.white),
                     title:
@@ -2376,7 +2396,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                 ),
               ]),
               const Spacer(),
-              IconButton(tooltip: '投屏', icon: const Icon(Icons.cast, color: Colors.white), onPressed: _openCastScreen),
+              if (!widget.privateMode) IconButton(tooltip: '投屏', icon: const Icon(Icons.cast, color: Colors.white), onPressed: _openCastScreen),
               IconButton(
                 icon: const Icon(Icons.playlist_play, color: Colors.white),
                 onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
@@ -2396,6 +2416,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   Future<void> _openCastScreen() async {
+    if (widget.privateMode) return;
     final source = _currentFilePath.isNotEmpty ? _currentFilePath : widget.filePath;
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CastScreenPage(
       mediaPath: source, httpHeaders: _mediaFor(source)?.httpHeaders ?? const {},
@@ -2451,7 +2472,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                     onPressed: () =>
                         setState(() => _showPlaylist = !_showPlaylist),
                   ),
-                  IconButton(tooltip: '投屏', icon: const Icon(Icons.cast, color: Colors.white), onPressed: _openCastScreen),
+                  if (!widget.privateMode) IconButton(tooltip: '投屏', icon: const Icon(Icons.cast, color: Colors.white), onPressed: _openCastScreen),
                   IconButton(
                     icon: const Icon(Icons.settings, color: Colors.white),
                     onPressed: () =>
@@ -2742,7 +2763,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                               setState(() => _showSettings = false);
                               showImageEnhancementSheet(context, _imageEnhancer);
                             }))),
-                        if (Platform.operatingSystem == 'ohos') ListTile(
+                        if (!widget.privateMode && Platform.operatingSystem == 'ohos') ListTile(
                           leading: const Icon(Icons.picture_in_picture_alt, color: Colors.white),
                           title: const Text('系统画中画', style: TextStyle(color: Colors.white)),
                           subtitle: const Text('在悬浮小窗中继续播放', style: TextStyle(color: Colors.white70)),
@@ -2911,7 +2932,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                               style: TextStyle(color: Colors.white)),
                           onTap: _openDanmakuFile,
                         ),
-                        ListTile(
+                        if (!widget.privateMode) ListTile(
                           leading:
                               const Icon(Icons.camera_alt, color: Colors.white),
                           title: const Text('截图',

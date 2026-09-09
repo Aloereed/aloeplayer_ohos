@@ -1,3 +1,4 @@
+import { window } from '@kit.ArkUI';
 import { FlutterPlugin, FlutterPluginBinding, MethodCall, MethodChannel, MethodResult } from '@ohos/flutter_ohos';
 import { statfs } from '@kit.CoreFileKit';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -24,7 +25,10 @@ export default class DeviceToolsPlugin implements FlutterPlugin {
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'aloeplayer/device-tools');
     backgroundTaskManager.on('continuousTaskCancel', this.canceled);
     this.channel.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
-      if (call.method === 'freeBytes') {
+      if (call.method === 'privateWindow') {
+        window.getLastWindow(this.context).then((current: window.Window) => current.setWindowPrivacyMode(call.argument('enabled') as boolean))
+          .then(() => result.success(null)).catch((error: BusinessError) => result.error('PRIVACY', 'Cannot protect private window', error.code));
+      } else if (call.method === 'freeBytes') {
         statfs.getFreeSize('/data/storage/el2/base').then((size: number) => result.success(size)).catch((error: BusinessError) => result.error('STORAGE', 'Cannot read storage capacity: ' + error.code, null));
       } else if (call.method === 'requestDownloadNotificationPermission') {
         this.requestNotifications().then(() => result.success(null)).catch((error: BusinessError) =>

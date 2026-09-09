@@ -1,3 +1,4 @@
+import 'widgets/player_interaction_lock.dart';
 import 'screens/cast_screen_page.dart' show CastScreenPage;
 import 'widgets/sleep_timer_button.dart';
 import 'dart:async';
@@ -664,7 +665,9 @@ class _MediaKitMusicPlayerPageState extends State<MediaKitMusicPlayerPage>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PlayerInteractionLock(child: _buildUnlockedPlayer(context));
+
+  Widget _buildUnlockedPlayer(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTabletLayout = screenWidth > 600;
 

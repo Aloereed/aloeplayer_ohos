@@ -1,3 +1,4 @@
+import 'widgets/player_interaction_lock.dart';
 import 'widgets/sleep_timer_button.dart';
 import 'dart:async';
 import 'screens/cast_screen_page.dart' show CastScreenPage;
@@ -1053,7 +1054,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PlayerInteractionLock(child: _buildUnlockedPlayer(context));
+
+  Widget _buildUnlockedPlayer(BuildContext context) {
     // 获取屏幕宽度
     final screenWidth = MediaQuery.of(context).size.width;
     // 定义一个阈值，超过这个宽度就认为是平板布局

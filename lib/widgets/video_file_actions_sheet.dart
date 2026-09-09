@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
-enum VideoFileAction { play, favorite, refreshThumbnail, share, cast, convert, extractSubtitle, extractAudio, delete }
+enum VideoFileAction { play, favorite, refreshThumbnail, share, cast, convert, extractSubtitle, extractAudio, privateSpace, delete }
 
 Future<VideoFileAction?> showVideoFileActions(BuildContext context, {
   required String name, required String details, required Future<Uint8List?> thumbnail,
@@ -62,6 +62,7 @@ class VideoFileActionsSheet extends StatelessWidget {
         const Divider(height: 24),
         action(Icons.share_outlined, '分享', '使用系统分享菜单', VideoFileAction.share),
         action(Icons.cast_rounded, '投屏', '连接同一网络中的播放设备', VideoFileAction.cast),
+        action(Icons.lock_person_outlined, '复制到隐私空间', 'PIN 保护的独立副本，原文件保留', VideoFileAction.privateSpace),
         const Divider(height: 24),
         action(Icons.video_file_outlined, '转换为 MP4', conversionBusy ? '当前已有转换任务' : '打开转换选项', VideoFileAction.convert, enabled: !conversionBusy),
         action(Icons.subtitles_outlined, '抽取字幕', '查看并导出内挂字幕轨道', VideoFileAction.extractSubtitle),

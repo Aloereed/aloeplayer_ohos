@@ -1,3 +1,4 @@
+import 'widgets/player_interaction_lock.dart';
 import 'services/shortcut_source.dart';
 import 'widgets/media_url_dialog.dart';
 import 'screens/cast_screen_page.dart' show CastScreenPage;
@@ -232,7 +233,9 @@ class _PlayerTabState extends State<PlayerTab>
     });
   }
 
+  bool _interactionLocked = false;
   Future<bool> _onWillPop() async {
+    if (_interactionLocked) return false;
     if (widget.isFullScreen) {
       widget.toggleFullScreen();
       return true; // 阻止退出程序
@@ -3177,7 +3180,9 @@ class _PlayerTabState extends State<PlayerTab>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PlayerInteractionLock(onLockChanged: (value) => _interactionLocked = value, child: _buildUnlockedPlayer(context));
+
+  Widget _buildUnlockedPlayer(BuildContext context) {
     return GalacticHotkeys<String>(
       shortcuts: {
         'Play': [

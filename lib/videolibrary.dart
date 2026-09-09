@@ -1,3 +1,4 @@
+import 'pages/private_space_page.dart';
 import 'services/shortcut_source.dart';
 import 'widgets/media_url_dialog.dart';
 import 'widgets/library_toolbar_title.dart';
@@ -2310,6 +2311,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
       switch (action) {
         case VideoFileAction.play:
           widget.getopenfile(file.path); widget.startPlayerPage(context);
+        case VideoFileAction.privateSpace:
+          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => PrivateSpacePage(importSource: file.path)));
         case VideoFileAction.favorite: await _toggleFavorite(file);
         case VideoFileAction.refreshThumbnail: await _regenerateThumbnail(file);
         case VideoFileAction.convert: _showConvertToMp4Dialog(file);
