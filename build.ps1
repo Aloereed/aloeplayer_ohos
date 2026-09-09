@@ -14,7 +14,9 @@ param(
     [switch]$Offline,
     [switch]$Locked,
     [switch]$NoVersionBump,
-    [switch]$UseCurrentProfile
+    [switch]$UseCurrentProfile,
+    [ValidatePattern('^[A-Fa-f0-9]{64}$')]
+    [string]$ComparisonMpvSha256
 )
 
 $ErrorActionPreference = "Stop"
@@ -160,7 +162,18 @@ try {
     # localize paths before Hvigor consumes that generated file.
     Write-Host "阶段 2/3: 准备 OHOS 插件路径" -ForegroundColor Cyan
     & $preparePluginsScript -ProjectRoot $projectRoot
-    & (Join-Path $projectRoot 'tool\repair_mpv_timing.ps1') -ProjectRoot $projectRoot
+    if ($ComparisonMpvSha256) {
+        if ($BuildType -ne 'hap' -or $Config -ne 'debug') {
+            throw 'Comparison MPV libraries are allowed only for debug HAP signing.'
+        }
+        $comparisonLibrary = Join-Path $projectRoot 'ohos\entry\src\main\cpp\thirdparty\mpv\arm64-v8a\lib\libmpv.so.2'
+        if ((Get-FileHash -LiteralPath $comparisonLibrary -Algorithm SHA256).Hash -ne $ComparisonMpvSha256) {
+            throw 'Comparison MPV library does not match the explicitly requested SHA256.'
+        }
+        Write-Host "Preserving comparison MPV without timing patch: $ComparisonMpvSha256"
+    } else {
+        & (Join-Path $projectRoot 'tool\repair_mpv_timing.ps1') -ProjectRoot $projectRoot
+    }
 
     # --no-pub is intentional only in this second phase: dependencies were
     # refreshed immediately above, and another implicit pub get would overwrite
