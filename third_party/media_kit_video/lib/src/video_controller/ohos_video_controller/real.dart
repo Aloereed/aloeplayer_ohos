@@ -30,9 +30,11 @@ class OhosVideoController extends PlatformVideoController {
   Completer<void>? _surfaceReady;
 
   /// Change only the output; mpv retains the playlist, selected tracks and clock.
-  Future<void> setNativeOutput(bool enabled, {String hwdec = 'auto-safe'}) async {
+  Future<void> setNativeOutput(bool enabled,
+      {String hwdec = 'auto-safe'}) async {
     await lock.synchronized(() async {
-      if (_disposed || platform.disposed || enabled == usesNativeSurface) return;
+      if (_disposed || platform.disposed || enabled == usesNativeSurface)
+        return;
       await setProperty('vo', 'null');
       if (enabled) {
         nativeSurfaceError.value = null;
@@ -43,60 +45,74 @@ class OhosVideoController extends PlatformVideoController {
         final viewId = _nativeViewId;
         _nativeViewId = null;
         _nativeSurfaceId = null;
-        if (viewId != null) await _channel.invokeMethod('NativeSurface.Dispose', {
-          'handle': (await player.handle).toString(), 'viewId': viewId,
-        });
+        if (viewId != null)
+          await _channel.invokeMethod('NativeSurface.Dispose', {
+            'handle': (await player.handle).toString(),
+            'viewId': viewId,
+          });
         if (_sourceWidth > 0 && _sourceHeight > 0) {
           final width = _requestedWidth ?? _sourceWidth;
           final height = _requestedHeight ?? _sourceHeight;
           await _channel.invokeMethod('VideoOutputManager.SetSurfaceSize', {
             'handle': (await player.handle).toString(),
-            'width': width.toString(), 'height': height.toString(),
+            'width': width.toString(),
+            'height': height.toString(),
           });
           await setProperty('ohos-surface-size', '${width}x$height');
         }
         await setProperty('wid', wid.value?.toString() ?? '0');
         await setProperty('hwdec', hwdec);
         await setProperty('vo', 'gpu-next');
-        if (player.state.duration > Duration.zero) await player.seek(player.state.position);
+        if (player.state.duration > Duration.zero)
+          await player.seek(player.state.position);
       }
     });
     if (enabled && usesNativeSurface) {
       await _surfaceReady?.future.timeout(const Duration(seconds: 8));
     }
   }
+
   bool _disposed = false;
   int? _nativeViewId;
   String? _nativeSurfaceId;
   final nativeSurfaceError = ValueNotifier<String?>(null);
 
   Future<void> createNativeSurface(int viewId) => lock.synchronized(() async {
-    if (_disposed || platform.disposed) return;
-    if (_nativeViewId != null && _nativeViewId != viewId) {
-      throw StateError('Only one native Video may use this controller.');
-    }
-    _nativeViewId = viewId;
-    try {
-      await _channel.invokeMethod('NativeSurface.Create', {
-        'handle': (await player.handle).toString(), 'viewId': viewId,
+        if (_disposed || platform.disposed) return;
+        if (_nativeViewId != null && _nativeViewId != viewId) {
+          throw StateError('Only one native Video may use this controller.');
+        }
+        _nativeViewId = viewId;
+        try {
+          await _channel.invokeMethod('NativeSurface.Create', {
+            'handle': (await player.handle).toString(),
+            'viewId': viewId,
+          });
+        } catch (_) {
+          _nativeViewId = null;
+          rethrow;
+        }
       });
-    } catch (_) {
-      _nativeViewId = null;
-      rethrow;
-    }
-  });
 
-  Future<void> updateNativeRect(int viewId, Rect rect) => lock.synchronized(() async {
-    if (_disposed || platform.disposed || _nativeViewId != viewId) return;
-    await _channel.invokeMethod('NativeSurface.SetRect', {
-      'handle': (await player.handle).toString(), 'viewId': viewId,
-      'left': rect.left, 'top': rect.top, 'width': rect.width, 'height': rect.height,
-    });
-  });
+  Future<void> updateNativeRect(int viewId, Rect rect) =>
+      lock.synchronized(() async {
+        if (_disposed || platform.disposed || _nativeViewId != viewId) return;
+        await _channel.invokeMethod('NativeSurface.SetRect', {
+          'handle': (await player.handle).toString(),
+          'viewId': viewId,
+          'left': rect.left,
+          'top': rect.top,
+          'width': rect.width,
+          'height': rect.height,
+        });
+      });
 
   Future<void> attachNativeSurface(int viewId, String surfaceId) =>
       lock.synchronized(() async {
-        if (_disposed || platform.disposed || !usesNativeSurface || _nativeViewId != viewId) return;
+        if (_disposed ||
+            platform.disposed ||
+            !usesNativeSurface ||
+            _nativeViewId != viewId) return;
         final parsed = BigInt.tryParse(surfaceId);
         if (parsed == null || parsed <= BigInt.zero || parsed.bitLength > 63) {
           throw ArgumentError('Invalid OHOS surface ID');
@@ -111,8 +127,11 @@ class OhosVideoController extends PlatformVideoController {
         if (player.state.duration > Duration.zero) {
           await player.seek(player.state.position);
         }
-        if (await platform.getProperty('current-vo', waitForInitialization: false) != 'ohcodec') {
-          throw StateError('OHCodec direct output is unavailable for this video');
+        if (await platform.getProperty('current-vo',
+                waitForInitialization: false) !=
+            'ohcodec') {
+          throw StateError(
+              'OHCodec direct output is unavailable for this video');
         }
         if (!(_surfaceReady?.isCompleted ?? true)) _surfaceReady!.complete();
       });
@@ -122,16 +141,20 @@ class OhosVideoController extends PlatformVideoController {
         await setProperty('vo', 'null');
         await setProperty('wid', '0');
         await _channel.invokeMethod('NativeSurface.Dispose', {
-          'handle': (await player.handle).toString(), 'viewId': viewId,
+          'handle': (await player.handle).toString(),
+          'viewId': viewId,
         });
         _nativeViewId = null;
         _nativeSurfaceId = null;
       });
+
   /// Whether [OhosVideoController] is supported on the current platform or not.
   static bool get supported => Platform.operatingSystem == 'ohos';
 
   /// Pointer address to the global object reference of `OHNativeWindow`.
   final ValueNotifier<int?> wid = ValueNotifier<int?>(null);
+  final _textureReady = Completer<void>();
+  String? _boundTextureWid;
 
   /// [Lock] used to synchronize [onLoadHooks], [onUnloadHooks] & [subscription].
   final lock = Lock();
@@ -151,13 +174,18 @@ class OhosVideoController extends PlatformVideoController {
   /// Listener for updating the --wid property.
   Future<void> widListener() {
     return lock.synchronized(() async {
-      if (_disposed || usesNativeSurface) return;
+      if (_disposed || platform.disposed || usesNativeSurface) return;
       final widValue = wid.value?.toString() ?? '0';
-      await setProperties({'wid': widValue});
+      if (widValue == '0' || widValue == _boundTextureWid) return;
+      await setProperty('vo', 'null');
+      await setProperty('wid', widValue);
+      await setProperty('vo', configuration.vo!);
+      _boundTextureWid = widValue;
       // Instead of seeking to the start (Duration.zero), seek to the current playback position
       // without jumping the user to the start of the media.
       final currentPosition = player.state.position;
-      await player.seek(currentPosition);
+      if (player.state.duration > Duration.zero)
+        await player.seek(currentPosition);
     });
   }
 
@@ -199,14 +227,15 @@ class OhosVideoController extends PlatformVideoController {
 
         final handle = await player.handle;
 
-        if (!usesNativeSurface) await _channel.invokeMethod(
-          'VideoOutputManager.SetSurfaceSize',
-          {
-            'handle': handle.toString(),
-            'width': width.toString(),
-            'height': height.toString(),
-          },
-        );
+        if (!usesNativeSurface)
+          await _channel.invokeMethod(
+            'VideoOutputManager.SetSurfaceSize',
+            {
+              'handle': handle.toString(),
+              'width': width.toString(),
+              'height': height.toString(),
+            },
+          );
         await setProperties({
           'ohos-surface-size': [width, height].join('x'),
         });
@@ -270,29 +299,38 @@ class OhosVideoController extends PlatformVideoController {
     _controllers[handle] = controller;
     controller.nativeOutput.value = configuration.vo == 'ohcodec';
 
-    await _channel.invokeMethod(
-      'VideoOutputManager.Create',
-      {
-        'handle': handle.toString(),
-      },
-    );
+    await controller.lock.synchronized(() async {
+      // Do not initialize an EGL output against wid=0 while Resize is in flight.
+      await controller.setProperty('vo', 'null');
+      await _channel.invokeMethod(
+        'VideoOutputManager.Create',
+        {
+          'handle': handle.toString(),
+        },
+      );
+      await controller._textureReady.future.timeout(const Duration(seconds: 8));
+      final textureWid = controller.wid.value!.toString();
+      await controller.setProperty('wid', textureWid);
+      controller._boundTextureWid = textureWid;
 
-    await controller.setProperties(
-      {
-        'vo': controller.usesNativeSurface ? 'null' : configuration.vo!,
-        'hwdec': controller.usesNativeSurface ? 'ohcodec' : configuration.hwdec!,
-        'vid': 'auto',
-        'force-window': 'yes',
-        'sub-use-margins': 'no',
-        'sub-scale-with-window': 'no',
-        'osd-font': 'HarmonyOS Sans SC',
-      },
-    );
+      await controller.setProperties(
+        {
+          'vo': controller.usesNativeSurface ? 'null' : configuration.vo!,
+          'hwdec':
+              controller.usesNativeSurface ? 'ohcodec' : configuration.hwdec!,
+          'vid': 'auto',
+          'force-window': 'yes',
+          'sub-use-margins': 'no',
+          'sub-scale-with-window': 'no',
+          'osd-font': 'HarmonyOS Sans SC',
+        },
+      );
 
-    await controller.setProperties({'ohos-surface-size': '1x1'});
-    if (controller.usesNativeSurface) {
-      controller.rect.value = const Rect.fromLTWH(0, 0, 1, 1);
-    }
+      await controller.setProperties({'ohos-surface-size': '1x1'});
+      if (controller.usesNativeSurface) {
+        controller.rect.value = const Rect.fromLTWH(0, 0, 1, 1);
+      }
+    });
 
     // Return the [PlatformVideoController].
     return controller;
@@ -305,24 +343,31 @@ class OhosVideoController extends PlatformVideoController {
   /// * “Premature optimization is the root of all evil”
   /// * “With great power comes great responsibility”
   @override
-  Future<void> setSize({int? width, int? height}) => lock.synchronized(() async {
-    if (_disposed || usesNativeSurface) return;
-    if ((width == null) != (height == null) || (width != null && (width <= 0 || height! <= 0))) {
-      throw ArgumentError('Set both positive output dimensions, or clear both.');
-    }
-    _requestedWidth = width;
-    _requestedHeight = height;
-    final outputWidth = width ?? _sourceWidth;
-    final outputHeight = height ?? _sourceHeight;
-    if (outputWidth == 0 || outputHeight == 0) return;
-    if (rect.value?.width.toInt() == outputWidth && rect.value?.height.toInt() == outputHeight) return;
-    final handle = await player.handle;
-    await _channel.invokeMethod('VideoOutputManager.SetSurfaceSize', {
-      'handle': handle.toString(), 'width': outputWidth.toString(), 'height': outputHeight.toString(),
-    });
-    await setProperty('ohos-surface-size', '${outputWidth}x$outputHeight');
-    rect.value = Rect.fromLTWH(0, 0, outputWidth.toDouble(), outputHeight.toDouble());
-  });
+  Future<void> setSize({int? width, int? height}) =>
+      lock.synchronized(() async {
+        if (_disposed || usesNativeSurface) return;
+        if ((width == null) != (height == null) ||
+            (width != null && (width <= 0 || height! <= 0))) {
+          throw ArgumentError(
+              'Set both positive output dimensions, or clear both.');
+        }
+        _requestedWidth = width;
+        _requestedHeight = height;
+        final outputWidth = width ?? _sourceWidth;
+        final outputHeight = height ?? _sourceHeight;
+        if (outputWidth == 0 || outputHeight == 0) return;
+        if (rect.value?.width.toInt() == outputWidth &&
+            rect.value?.height.toInt() == outputHeight) return;
+        final handle = await player.handle;
+        await _channel.invokeMethod('VideoOutputManager.SetSurfaceSize', {
+          'handle': handle.toString(),
+          'width': outputWidth.toString(),
+          'height': outputHeight.toString(),
+        });
+        await setProperty('ohos-surface-size', '${outputWidth}x$outputHeight');
+        rect.value = Rect.fromLTWH(
+            0, 0, outputWidth.toDouble(), outputHeight.toDouble());
+      });
 
   /// Disposes the instance. Releases allocated resources back to the system.
   Future<void> _dispose() async {
@@ -334,7 +379,8 @@ class OhosVideoController extends PlatformVideoController {
     _controllers.remove(handle);
     if (usesNativeSurface && _nativeViewId != null) {
       await _channel.invokeMethod('NativeSurface.Dispose', {
-        'handle': handle.toString(), 'viewId': _nativeViewId,
+        'handle': handle.toString(),
+        'viewId': _nativeViewId,
       });
     }
     nativeSurfaceError.dispose();
@@ -352,53 +398,63 @@ class OhosVideoController extends PlatformVideoController {
   static final _controllers = HashMap<int, OhosVideoController>();
 
   /// [MethodChannel] for invoking platform specific native implementation.
-  static final _channel =
-      const MethodChannel('com.alexmercerind/media_kit_video')
-        ..setMethodCallHandler(
-          (MethodCall call) async {
-            try {
-              debugPrint(call.method.toString());
-              debugPrint(call.arguments.toString());
-              switch (call.method) {
-                case 'NativeSurface.Created':
-                  final controller = _controllers[int.parse(call.arguments['handle'] as String)];
-                  try {
-                    await controller?.attachNativeSurface(call.arguments['viewId'] as int, call.arguments['surfaceId'] as String);
-                  } catch (error) {
-                    if (controller != null && !controller._disposed) {
-                      controller.nativeSurfaceError.value = error.toString();
-                    }
-                  }
-                  break;
-                case 'NativeSurface.Destroyed':
-                  await _controllers[int.parse(call.arguments['handle'] as String)]?.detachNativeSurface(call.arguments['viewId'] as int);
-                  break;
-                case 'VideoOutput.Resize':
-                  {
-                    // Notify about updated texture ID & [Rect].
-                    final int handle = call.arguments['handle'];
-                    final Rect rect = Rect.fromLTWH(
-                      call.arguments['rect']['left'] * 1.0,
-                      call.arguments['rect']['top'] * 1.0,
-                      call.arguments['rect']['width'] * 1.0,
-                      call.arguments['rect']['height'] * 1.0,
-                    );
-                    final int id = call.arguments['id'];
-                    final int wid = call.arguments['wid'];
-                    _controllers[handle]?.rect.value = rect;
-                    _controllers[handle]?.id.value = id;
-                    _controllers[handle]?.wid.value = wid;
-                    break;
-                  }
-                default:
-                  {
-                    break;
-                  }
+  static final _channel = const MethodChannel(
+      'com.alexmercerind/media_kit_video')
+    ..setMethodCallHandler(
+      (MethodCall call) async {
+        try {
+          debugPrint(call.method.toString());
+          debugPrint(call.arguments.toString());
+          switch (call.method) {
+            case 'NativeSurface.Created':
+              final controller =
+                  _controllers[int.parse(call.arguments['handle'] as String)];
+              try {
+                await controller?.attachNativeSurface(
+                    call.arguments['viewId'] as int,
+                    call.arguments['surfaceId'] as String);
+              } catch (error) {
+                if (controller != null && !controller._disposed) {
+                  controller.nativeSurfaceError.value = error.toString();
+                }
               }
-            } catch (exception, stacktrace) {
-              debugPrint(exception.toString());
-              debugPrint(stacktrace.toString());
-            }
-          },
-        );
+              break;
+            case 'NativeSurface.Destroyed':
+              await _controllers[int.parse(call.arguments['handle'] as String)]
+                  ?.detachNativeSurface(call.arguments['viewId'] as int);
+              break;
+            case 'VideoOutput.Resize':
+              {
+                // Notify about updated texture ID & [Rect].
+                final int handle = call.arguments['handle'];
+                final Rect rect = Rect.fromLTWH(
+                  call.arguments['rect']['left'] * 1.0,
+                  call.arguments['rect']['top'] * 1.0,
+                  call.arguments['rect']['width'] * 1.0,
+                  call.arguments['rect']['height'] * 1.0,
+                );
+                final int id = call.arguments['id'];
+                final int wid = call.arguments['wid'];
+                _controllers[handle]?.rect.value = rect;
+                _controllers[handle]?.id.value = id;
+                _controllers[handle]?.wid.value = wid;
+                final controller = _controllers[handle];
+                if (controller != null &&
+                    wid > 0 &&
+                    !controller._textureReady.isCompleted) {
+                  controller._textureReady.complete();
+                }
+                break;
+              }
+            default:
+              {
+                break;
+              }
+          }
+        } catch (exception, stacktrace) {
+          debugPrint(exception.toString());
+          debugPrint(stacktrace.toString());
+        }
+      },
+    );
 }

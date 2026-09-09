@@ -18,6 +18,7 @@ export class VideoOutput {
   private wid: number = 0;
   private w: number = 0;
   private h: number = 0;
+  private disposed: boolean = false;
   private textureUpdateCallback: TextureUpdateCallback;
   private textureRegistry: TextureRegistry;
   private surfaceProducer: SurfaceTextureEntry;
@@ -27,10 +28,14 @@ export class VideoOutput {
     this.surfaceProducer = surfaceProducer;
     this.textureUpdateCallback = textureUpdateCallback;
     this.textureRegistry = textureRegistry;
-    this.setSurfaceSize(0, 0, true);
+    this.id = surfaceProducer.getTextureId();
+    this.wid = surfaceProducer.getSurfaceId();
+    this.setSurfaceSize(1, 1, true);
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     try {
       this.onSurfaceDestroyed();
     } catch (e) {
@@ -38,7 +43,8 @@ export class VideoOutput {
     }
   }
 
-  async setSurfaceSize(width: number, height: number, force: boolean = false): Promise<void> {
+  setSurfaceSize(width: number, height: number, force: boolean = false): void {
+    if (this.disposed || width <= 0 || height <= 0) return;
     try {
       if (!force && this.w == width && this.h == height) {
         return;
@@ -53,7 +59,7 @@ export class VideoOutput {
     }
   }
 
-  private async onSurfaceCreated(): Promise<void> {
+  private onSurfaceCreated(): void {
     Log.i(TAG, "onSurfaceCreated");
     try {
       this.id = this.surfaceProducer.getTextureId();
@@ -64,9 +70,13 @@ export class VideoOutput {
     }
   }
 
-  private async onSurfaceDestroyed(): Promise<void> {
+  private onSurfaceDestroyed(): void {
     Log.i(TAG, "onSurfaceDestroyed");
-    this.textureUpdateCallback.onTextureUpdate(this.id, 0, 0, 0);
-    this.surfaceProducer.release();
+    try {
+      this.textureUpdateCallback.onTextureUpdate(this.id, 0, 0, 0);
+    } finally {
+      // SurfaceTextureRegistryEntry.release is unimplemented in Flutter OHOS.
+      this.textureRegistry.unregisterTexture(this.id);
+    }
   }
 }
