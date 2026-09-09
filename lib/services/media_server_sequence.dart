@@ -19,14 +19,18 @@ class MediaServerSequence {
       required PlaybackMedia media,
       this.options = const MediaServerPlaybackOptions()})
       : _items = {media.url: item},
-        enabled = item.type == 'Episode' && item.seriesId != null;
+        enabled = (item.type == 'Episode' && item.seriesId != null) ||
+            (item.type == 'Audio' && item.albumId != null);
 
   Future<PlaybackMedia?> adjacent(PlaybackMedia current, bool forward) async {
     final item = _items[current.url];
-    if (item == null) throw StateError('Current episode unavailable');
+    if (item == null) throw StateError('Current media unavailable');
     _items.removeWhere((url, _) => url != current.url);
-    final adjacent = await client.adjacentEpisode(item,
-        forward: forward, cancelToken: cancelToken);
+    final adjacent = item.type == 'Audio'
+        ? await client.adjacentTrack(item,
+            forward: forward, cancelToken: cancelToken)
+        : await client.adjacentEpisode(item,
+            forward: forward, cancelToken: cancelToken);
     if (adjacent == null) return null;
     final prepared = await client.playback(adjacent,
         cancelToken: cancelToken,

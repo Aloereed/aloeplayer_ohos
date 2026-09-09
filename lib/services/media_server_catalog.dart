@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'media_server_client.dart';
+import 'media_server_query.dart';
 
 enum MediaServerShelf { libraries, resume, nextUp, latest, favorites }
 
@@ -181,6 +182,39 @@ extension MediaServerCatalog on MediaServerClient {
         if (!seen.add(item.id)) continue;
         added++;
         if (item.type != 'Episode') continue;
+        if (found && forward) return item;
+        if (item.id == current.id) {
+          if (!forward) return previous;
+          found = true;
+        }
+        previous = item;
+      }
+      if (!page.hasMore || added == 0 || page.nextStart <= start) return null;
+      start = page.nextStart;
+    }
+  }
+
+  Future<MediaServerItem?> adjacentTrack(MediaServerItem current,
+      {required bool forward, CancelToken? cancelToken}) async {
+    final album = current.albumId;
+    if (current.type != 'Audio' || album == null || album.isEmpty) return null;
+    final seen = <String>{};
+    MediaServerItem? previous;
+    var found = false, start = 0;
+    while (true) {
+      final page = await itemPage(
+          parent: album,
+          start: start,
+          limit: 200,
+          cancelToken: cancelToken,
+          query: const MediaServerQuery(
+              type: MediaServerTypeFilter.audio, sort: MediaServerSort.track));
+      var added = 0;
+      for (final item in page.items) {
+        if (!seen.add(item.id)) continue;
+        added++;
+        if (item.type != 'Audio' ||
+            (item.albumId != null && item.albumId != album)) continue;
         if (found && forward) return item;
         if (item.id == current.id) {
           if (!forward) return previous;

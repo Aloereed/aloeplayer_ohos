@@ -1276,7 +1276,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     _lastPosition = Duration.zero;
     await _historyService.updateHistory(HistoryItem(filePath: _historyId, durationMs: previous?.durationMs ?? 0,
       lastPosition: previous?.lastPosition ?? 0, lastPlayed: DateTime.now(),
-      mediaType: {'.mp3', '.flac', '.m4a', '.wav', '.ogg', '.aac', '.opus'}.contains(path.extension(media?.title ?? url).toLowerCase()) ? 'audio' : 'video', title: _mediaTitle(url)));
+      mediaType: media?.mediaType ?? ({'.mp3', '.flac', '.m4a', '.wav', '.ogg', '.aac', '.opus'}.contains(path.extension(media?.title ?? url).toLowerCase()) ? 'audio' : 'video'), title: _mediaTitle(url)));
   }
 
   void _tryRestorePosition() {
@@ -1386,7 +1386,9 @@ class _MPVPlayerState extends State<MPVPlayer>
       if (!mounted || _disposing) return;
       if (prepared == null) {
         if (!automatic) ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(forward ? '已经是最后一集' : '已经是第一集')));
+            SnackBar(content: Text(current.mediaType == 'audio'
+                ? (forward ? '已经是最后一首' : '已经是第一首')
+                : (forward ? '已经是最后一集' : '已经是第一集'))));
         return;
       }
       final oldPosition = _lastPosition.inMilliseconds;
@@ -1409,7 +1411,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       await _openMedia(prepared.url);
     } catch (_) {
       if (mounted && !_disposing) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('切集失败，请检查网络后点击上一集或下一集重试')));
+          const SnackBar(content: Text('切换失败，请检查网络后重试')));
     } finally {
       if (prepared != null && !adopted) {
         try { await widget.onDiscardMedia?.call(prepared); } catch (_) {}
@@ -2916,7 +2918,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                         ListTile(leading: const Icon(Icons.tune, color: Colors.white), title: const Text('字幕同步、书签与章节', style: TextStyle(color: Colors.white)), onTap: _showPlaybackTools),
                         ListTile(leading: const Icon(Icons.bedtime_outlined, color: Colors.white), title: const Text('定时停止', style: TextStyle(color: Colors.white)), onTap: () => showSleepTimer(context)),
                         if (widget.onAdjacentMedia != null) SwitchListTile(
-                          title: const Text('连续播放下一集', style: TextStyle(color: Colors.white)),
+                          title: Text(_mediaFor(_currentFilePath)?.mediaType == 'audio' ? '连续播放下一首' : '连续播放下一集', style: const TextStyle(color: Colors.white)),
                           value: _autoNextEpisode,
                           onChanged: (value) => setState(() => _autoNextEpisode = value)),
                         _buildSettingItem(

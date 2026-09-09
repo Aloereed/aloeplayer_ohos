@@ -8,6 +8,8 @@ import 'package:aloeplayer/services/media_server_playback.dart';
 import 'package:aloeplayer/services/media_server_download.dart';
 import 'package:crypto/crypto.dart';
 import 'package:aloeplayer/services/media_server_query.dart';
+import 'package:aloeplayer/services/media_server_sequence.dart';
+import 'package:dio/dio.dart';
 
 void main() {
   for (final kind in ['Jellyfin', 'Emby']) {
@@ -64,7 +66,82 @@ void main() {
 
       try {
         final libraries = await client.shelf(MediaServerShelf.libraries);
-        expect(libraries.items, hasLength(2));
+        expect(libraries.items, hasLength(3));
+        final music = libraries.items
+            .firstWhere((item) => item.name == 'Aloe Fixture Music');
+        final tracks = await client.itemPage(
+            parent: music.id,
+            query: const MediaServerQuery(
+                type: MediaServerTypeFilter.audio,
+                sort: MediaServerSort.track));
+        expect(tracks.items.map((item) => item.name),
+            ['Zebra', 'Alpha', 'Middle']);
+        final firstTrack = await client.details(tracks.items.first.id);
+        expect(firstTrack.albumId, isNotEmpty);
+        final album = await client.details(firstTrack.albumId!);
+        expect(album.type, 'MusicAlbum');
+        final albumTracks = await client.itemPage(
+            parent: album.id,
+            query: const MediaServerQuery().forParent(album.type));
+        expect(albumTracks.items.map((item) => item.name),
+            ['Zebra', 'Alpha', 'Middle']);
+        expect((await client.adjacentTrack(firstTrack, forward: true))?.name,
+            'Alpha');
+        expect(await client.adjacentTrack(firstTrack, forward: false), isNull);
+        expect(
+            (await client.adjacentTrack(tracks.items.last, forward: false))
+                ?.name,
+            'Alpha');
+        expect(await client.adjacentTrack(tracks.items.last, forward: true),
+            isNull);
+        final song = await client.playback(firstTrack,
+            options: const MediaServerPlaybackOptions(
+                mode: MediaServerPlayMode.original));
+        expect(song.mediaType, 'audio');
+        Future<String> audioHash(String input) async {
+          final result = await Process.run(ffmpeg, [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-nostdin',
+            '-ss',
+            '3',
+            '-i',
+            input,
+            '-t',
+            '3',
+            '-map',
+            '0:a:0',
+            '-c:a',
+            'pcm_s16le',
+            '-f',
+            'streamhash',
+            '-hash',
+            'sha256',
+            '-'
+          ]);
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          return (result.stdout as String).trim();
+        }
+
+        expect(
+            await audioHash(song.url),
+            await audioHash(
+                '${fixture.path}/library/Music/Aloe Artist/Aloe Album/1-01 Zebra.flac'));
+        final musicSequence = MediaServerSequence(
+            client: client,
+            cancelToken: CancelToken(),
+            item: firstTrack,
+            media: song);
+        expect(musicSequence.enabled, isTrue);
+        final secondSong = (await musicSequence.adjacent(song, true))!;
+        expect(secondSong.title, 'Alpha');
+        final thirdSong = (await musicSequence.adjacent(secondSong, true))!;
+        expect(thirdSong.title, 'Middle');
+        expect(await musicSequence.adjacent(thirdSong, true), isNull);
+        await client.discardPlayback(song);
+        await client.discardPlayback(secondSong);
+        await client.discardPlayback(thirdSong);
         final movies = libraries.items
             .firstWhere((item) => item.name == 'Aloe Fixture Movies');
         final page = await client.itemPage(parent: movies.id, limit: 1);

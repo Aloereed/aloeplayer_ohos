@@ -48,7 +48,12 @@ class _MediaServerFilterDialogState extends State<MediaServerFilterDialog> {
                   .toList(),
               onChanged: (value) => setState(() {
                     sort = value!;
-                    descending = sort != MediaServerSort.name;
+                    descending = {
+                      MediaServerSort.added,
+                      MediaServerSort.premiere,
+                      MediaServerSort.rating,
+                      MediaServerSort.duration
+                    }.contains(sort);
                   })),
           CheckboxListTile(
               contentPadding: EdgeInsets.zero,

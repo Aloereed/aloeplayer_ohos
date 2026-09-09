@@ -106,6 +106,7 @@ class MediaServerItem {
   bool get favorite => metadata['UserData']?['IsFavorite'] == true;
   bool get played => metadata['UserData']?['Played'] == true;
   String? get seriesId => metadata['SeriesId'] as String?;
+  String? get albumId => metadata['AlbumId'] as String?;
   int? get index => (metadata['IndexNumber'] as num?)?.toInt();
   int? get seasonIndex => (metadata['ParentIndexNumber'] as num?)?.toInt();
   bool get playable => [

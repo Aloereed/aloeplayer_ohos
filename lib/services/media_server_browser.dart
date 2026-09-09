@@ -41,7 +41,7 @@ class MediaServerBrowserController extends ChangeNotifier {
       final result = await client.itemPage(
           parent: parents.lastOrNull?.id,
           search: search,
-          query: filters,
+          query: filters.forParent(parents.lastOrNull?.type),
           start: start,
           cancelToken: cancel);
       if (_disposed || generation != _generation) return;

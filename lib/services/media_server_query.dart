@@ -2,7 +2,15 @@ enum MediaServerTypeFilter { all, movies, series, episodes, audio }
 
 enum MediaServerWatchFilter { all, unwatched, watched }
 
-enum MediaServerSort { name, added, premiere, rating, duration }
+enum MediaServerSort {
+  name,
+  added,
+  premiere,
+  rating,
+  duration,
+  track,
+  automatic
+}
 
 class MediaServerQuery {
   final MediaServerTypeFilter type;
@@ -12,7 +20,7 @@ class MediaServerQuery {
   const MediaServerQuery(
       {this.type = MediaServerTypeFilter.all,
       this.watched = MediaServerWatchFilter.all,
-      this.sort = MediaServerSort.name,
+      this.sort = MediaServerSort.automatic,
       this.favorites = false,
       this.descending = false});
 
@@ -20,7 +28,18 @@ class MediaServerQuery {
       type != MediaServerTypeFilter.all ||
       watched != MediaServerWatchFilter.all ||
       favorites;
-  bool get changed => filtered || sort != MediaServerSort.name || descending;
+  bool get changed =>
+      filtered || sort != MediaServerSort.automatic || descending;
+  MediaServerQuery forParent(String? type) => sort == MediaServerSort.automatic
+      ? MediaServerQuery(
+          type: this.type,
+          watched: watched,
+          favorites: favorites,
+          descending: descending,
+          sort: type == 'MusicAlbum'
+              ? MediaServerSort.track
+              : MediaServerSort.name)
+      : this;
   bool matches(
       {required String itemType,
       required bool played,
@@ -66,6 +85,8 @@ class MediaServerQuery {
           MediaServerSort.premiere => 'PremiereDate,SortName',
           MediaServerSort.rating => 'CommunityRating,SortName',
           MediaServerSort.duration => 'Runtime,SortName',
+          MediaServerSort.track => 'ParentIndexNumber,IndexNumber,SortName',
+          MediaServerSort.automatic => 'SortName',
         },
         'SortOrder': descending ? 'Descending' : 'Ascending',
       };
@@ -73,6 +94,13 @@ class MediaServerQuery {
       const ['全部类型', '电影', '剧集系列', '单集', '音频'][value.index];
   static String watchLabel(MediaServerWatchFilter value) =>
       const ['全部观看状态', '未看', '已看'][value.index];
-  static String sortLabel(MediaServerSort value) =>
-      const ['名称', '添加时间', '首映时间', '评分', '时长'][value.index];
+  static String sortLabel(MediaServerSort value) => const [
+        '名称',
+        '添加时间',
+        '首映时间',
+        '评分',
+        '时长',
+        '碟号与曲号',
+        '默认（专辑按曲序）'
+      ][value.index];
 }

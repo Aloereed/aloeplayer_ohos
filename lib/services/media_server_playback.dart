@@ -335,6 +335,7 @@ Future<MediaServerPlaybackSession> prepareServerPlayback(
             .toString(),
         url: relay.url,
         title: title,
+        mediaType: itemType == 'Audio' ? 'audio' : 'video',
         subtitles: subtitles,
         startPositionMs: resumeMs,
         preferredAudioTrack:

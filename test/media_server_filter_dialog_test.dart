@@ -33,7 +33,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('未看').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('名称'));
+    await tester.tap(find.text('默认（专辑按曲序）'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('评分').last);
     await tester.pumpAndSettle();

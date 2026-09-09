@@ -51,6 +51,31 @@ MediaServerPage page(List<String> ids,
         total: total,
         limit: limit);
 void main() {
+  test('album defaults to track order but explicit sorting survives navigation',
+      () async {
+    final client = Client();
+    final browser = MediaServerBrowserController(client);
+    addTearDown(browser.dispose);
+    var pending = browser.enter(const MediaServerItem(
+        id: 'album', name: 'Album', type: 'MusicAlbum', isFolder: true));
+    expect(client.requests.last.filters.parameters['SortBy'],
+        'ParentIndexNumber,IndexNumber,SortName');
+    client.requests.last.result.complete(page([], total: 0));
+    await pending;
+    pending =
+        browser.setFilters(const MediaServerQuery(sort: MediaServerSort.name));
+    expect(client.requests.last.filters.parameters['SortBy'], 'SortName');
+    client.requests.last.result.complete(page([], total: 0));
+    await pending;
+    pending = browser.setFilters(const MediaServerQuery());
+    expect(client.requests.last.filters.sort, MediaServerSort.track);
+    client.requests.last.result.complete(page([], total: 0));
+    await pending;
+    pending = browser.back();
+    expect(client.requests.last.filters.sort, MediaServerSort.name);
+    client.requests.last.result.complete(page([], total: 0));
+    await pending;
+  });
   test(
       'filter changes cancel stale pages; changed items leave filtered lists without skipping the next item',
       () async {

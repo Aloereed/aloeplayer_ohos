@@ -66,13 +66,13 @@ config.update({'ServerName':'Aloe generated fixture only','MinResumeDurationSeco
                'MinResumePct':1,'MaxResumePct':95})
 api('System/Configuration','POST',config)
 existing = {library['Name'] for library in api('Library/VirtualFolders')}
-for folder, collection_type in [('Movies','movies'),('Shows','tvshows')]:
+for folder, collection_type in [('Movies','movies'),('Shows','tvshows'),('Music','music')]:
     name = 'Aloe Fixture ' + folder
     if name not in existing:
         options = {'PathInfos':[{'Path':str(ROOT / 'build/media-server-fixtures/library' / folder)}],
           'EnableRealtimeMonitor':False,'EnableChapterImageExtraction':False,
           'MinResumeDurationSeconds':1,'MinResumePct':1,'MaxResumePct':95,
-          'TypeOptions':[{'Type':t,'MetadataFetchers':[],'ImageFetchers':[]} for t in ['Movie','Series','Season','Episode']],
+          'TypeOptions':[{'Type':t,'MetadataFetchers':[],'ImageFetchers':[]} for t in ['Movie','Series','Season','Episode','MusicArtist','MusicAlbum','Audio']],
           'LocalMetadataReaderOrder':['Nfo']}
         api('Library/VirtualFolders','POST',{'LibraryOptions':options},
             {'Name':name,'CollectionType':collection_type,'RefreshLibrary':'true'})
@@ -89,10 +89,11 @@ for attempt in range(30):
     items = api('Items',query={'UserId':auth['userId'],'Recursive':'true','Fields':'MediaSources,Overview'})['Items']
     episodes = [i for i in items if i['Type'] == 'Episode']
     movies = [i for i in items if i['Type'] == 'Movie']
-    if len(episodes) >= 3 and movies:
+    tracks = [i for i in items if i['Type'] == 'Audio']
+    if len(episodes) >= 3 and movies and len(tracks) == 3:
         (RUNTIME / 'items.json').write_text(json.dumps(items,ensure_ascii=False),encoding='utf-8')
         print(json.dumps({'result':'READY','version':info['Version'],'movieItems':len(movies),
-                          'episodes':len(episodes),'loopbackPort':state['port']}))
+                          'episodes':len(episodes),'tracks':len(tracks),'loopbackPort':state['port']}))
         break
     time.sleep(1)
 else:

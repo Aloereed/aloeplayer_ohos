@@ -10,6 +10,7 @@ class PlaybackMedia {
   final Map<String, String> httpHeaders;
   final int? startPositionMs;
   final String? preferredAudioTrack, preferredSubtitleTrack;
+  final String? mediaType;
   const PlaybackMedia(
       {required this.id,
       required this.url,
@@ -18,6 +19,7 @@ class PlaybackMedia {
       this.subtitles = const [],
       this.httpHeaders = const {},
       this.startPositionMs,
+      this.mediaType,
       this.preferredAudioTrack,
       this.preferredSubtitleTrack});
 
