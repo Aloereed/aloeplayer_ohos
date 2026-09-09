@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/download_task.dart';
 import '../services/download_manager.dart';
+import '../services/media_server_download.dart';
 import '../mpvplayer.dart';
 import '../models/playback_media.dart';
 import 'remote_playback_page.dart';
@@ -106,12 +107,33 @@ class _DownloadsPageState extends State<DownloadsPage> {
                                                 color: Theme.of(context)
                                                     .colorScheme
                                                     .error)),
+                                      if (task.subtitles.isNotEmpty)
+                                        Text(
+                                            '已保存 ${task.subtitles.length} 条外挂字幕'),
+                                      if (task.subtitleError != null)
+                                        Text(task.subtitleError!),
                                       if (task.status ==
                                           DownloadStatus.completed)
                                         Text(task.destination,
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis),
                                       Wrap(spacing: 8, children: [
+                                        if (task.status == DownloadStatus.completed &&
+                                            task.serverId.startsWith(
+                                                MediaServerDownloadSource
+                                                    .serverPrefix))
+                                          TextButton.icon(
+                                              onPressed: manager
+                                                      .savingSubtitles(task)
+                                                  ? null
+                                                  : () => _action(() => manager
+                                                      .retrySubtitles(task)),
+                                              icon: const Icon(
+                                                  Icons.subtitles_outlined),
+                                              label: Text(
+                                                  manager.savingSubtitles(task)
+                                                      ? '保存字幕中'
+                                                      : '补下载字幕')),
                                         if (task.status ==
                                                 DownloadStatus.downloading ||
                                             task.status ==

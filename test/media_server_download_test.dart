@@ -16,6 +16,7 @@ void main() {
     var headSupported = true;
     var downloadsAllowed = true;
     var playbackInfoRequests = 0;
+    var subtitleMode = 'correct';
     final conditionals = <String?>[];
     final body = [1, 2, 3, 4, 5, 6];
     server.listen((request) async {
@@ -28,9 +29,40 @@ void main() {
         response.headers.contentType = ContentType.json;
         response.write(jsonEncode({
           'MediaSources': [
-            {'Id': 'version', 'Container': 'mkv'}
+            {
+              'Id': 'version',
+              'Container': 'mkv',
+              'MediaStreams': [
+                {
+                  'Index': 4,
+                  'Type': 'Subtitle',
+                  'IsExternal': true,
+                  'Codec': 'subrip',
+                  'Language': 'zho'
+                },
+                {
+                  'Index': 5,
+                  'Type': 'Subtitle',
+                  'IsExternal': false,
+                  'Codec': 'subrip',
+                  'Language': 'eng'
+                }
+              ]
+            }
           ]
         }));
+      } else if (request.uri.path.contains('/Subtitles/')) {
+        response.headers.contentType =
+            subtitleMode == 'html' ? ContentType.html : ContentType.text;
+        if (subtitleMode == 'large') {
+          response.contentLength = 33 * 1024 * 1024;
+          response.add([1]);
+          await response.close().catchError((_) {});
+          return;
+        }
+        response.write(subtitleMode == 'html'
+            ? '<html>Login</html>'
+            : '1\n00:00:01,000 --> 00:00:02,000\n中文字幕\n');
       } else if (request.uri.path.endsWith('/Users/u')) {
         response.headers.contentType = ContentType.json;
         response.write(jsonEncode({
@@ -107,6 +139,17 @@ void main() {
       expect(file.size, 6);
       expect(file.etag, '"v1"');
       expect((await source.getFile(file.path))?.path, file.path);
+      subtitleMode = 'html';
+      final rejected =
+          await source.saveSubtitles('${directory.path}/rejected.mkv');
+      expect(rejected.files, isEmpty);
+      expect(rejected.error, isNotNull);
+      subtitleMode = 'large';
+      final oversized =
+          await source.saveSubtitles('${directory.path}/oversized.mkv');
+      expect(oversized.files, isEmpty);
+      expect(oversized.error, isNotNull);
+      subtitleMode = 'correct';
       SharedPreferences.setMockInitialValues({});
       final manager = DownloadManager.forTesting(
           directory: directory.path,
@@ -123,10 +166,27 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
       expect(task.status, DownloadStatus.completed, reason: task.error);
+      while (task.subtitles.isEmpty && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(task.subtitles, hasLength(1));
+      expect(task.subtitleError, isNull);
       expect(await File(task.destination).readAsBytes(), body);
       final offline = await manager.offlineMedia('aloe-server://device/item');
       expect(offline?.url, task.destination);
       expect(offline?.id, 'aloe-server://device/item');
+      expect(offline?.subtitles, task.subtitles.keys.toList());
+      final subtitleFile = File(task.subtitles.keys.single);
+      expect(await subtitleFile.readAsString(), contains('中文字幕'));
+      await subtitleFile.writeAsString('damaged');
+      expect(
+          (await manager.offlineMedia('aloe-server://device/item'))?.subtitles,
+          isEmpty);
+      await manager.retrySubtitles(task);
+      expect(task.subtitleError, isNull);
+      expect(task.subtitles, hasLength(1));
+      expect(await File(task.subtitles.keys.single).readAsString(),
+          contains('中文字幕'));
       final fromDownloads = await manager.downloadedMedia(task);
       expect(fromDownloads?.id, offline?.id);
       expect(fromDownloads?.url, task.destination);

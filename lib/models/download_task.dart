@@ -12,6 +12,9 @@ class DownloadTask {
   int received;
   DownloadStatus status;
   String? error;
+  Map<String, int> subtitles;
+  String? subtitleError;
+  bool finalizing;
   DownloadTask(
       {required this.id,
       required this.serverId,
@@ -23,7 +26,11 @@ class DownloadTask {
       this.etag,
       this.received = 0,
       this.status = DownloadStatus.queued,
-      this.error});
+      this.error,
+      Map<String, int>? subtitles,
+      this.subtitleError,
+      this.finalizing = false})
+      : subtitles = subtitles ?? {};
   String get partialPath => '$destination.aloe-part-$id';
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -36,7 +43,10 @@ class DownloadTask {
         if (etag != null) 'etag': etag,
         'received': received,
         'status': status.name,
-        'error': error
+        'error': error,
+        'subtitles': subtitles,
+        'subtitleError': subtitleError,
+        'finalizing': finalizing,
       };
   factory DownloadTask.fromJson(Map<String, dynamic> json) {
     var status = DownloadStatus.values.firstWhere(
@@ -56,6 +66,10 @@ class DownloadTask {
         etag: json['etag'] as String?,
         received: json['received'] as int? ?? 0,
         status: status,
-        error: json['error'] as String?);
+        error: json['error'] as String?,
+        subtitles: (json['subtitles'] as Map? ?? {})
+            .map((key, value) => MapEntry(key as String, value as int)),
+        subtitleError: json['subtitleError'] as String?,
+        finalizing: json['finalizing'] == true);
   }
 }

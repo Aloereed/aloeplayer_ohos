@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
+import 'package:path/path.dart' as path;
+import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart';
 import '../models/server_config.dart';
 import 'file_service.dart';
@@ -48,6 +51,8 @@ class MediaServerDownloadSource
   final _reader = HttpClient()..autoUncompress = false;
   CastMediaRelay? _relay;
   MediaServerDownloadFile? _file;
+  MediaServerSource? _source;
+  String? _itemId;
   bool _closed = false;
   MediaServerDownloadSource(MediaServerConnection connection)
       : client = MediaServerClient(connection);
@@ -161,10 +166,142 @@ class MediaServerDownloadSource
           etag: etag,
           modified: modified);
       _file = file;
+      _source = source;
+      _itemId = item.id;
       return file;
     } finally {
       await response.listen((_) {}).cancel();
     }
+  }
+
+  Future<({Map<String, int> files, String? error})> saveSubtitles(
+      String destination,
+      {Map<String, int> existing = const {}}) async {
+    final source = _source;
+    if (_closed || source == null || _itemId == null || _relay == null) {
+      throw StateError('请重新连接后下载字幕');
+    }
+    final saved = <String, int>{};
+    for (final entry in existing.entries) {
+      final file = File(entry.key);
+      if (await file.exists() &&
+          await file.length() == entry.value &&
+          entry.value > 0) saved[entry.key] = entry.value;
+    }
+    var failures = 0, total = saved.values.fold<int>(0, (a, b) => a + b);
+    final streams = source.streams
+        .where((s) => s.type == 'Subtitle' && s.external)
+        .toList();
+    final deadline = Timer(const Duration(seconds: 45), () {
+      unawaited(disconnect().catchError((_) {}));
+    });
+    try {
+      for (final stream in streams.take(32)) {
+        File? partial;
+        RandomAccessFile? writer;
+        try {
+          if (_closed) throw StateError('字幕下载已中断');
+          final codec = (stream.data['Codec'] as String? ?? '').toLowerCase();
+          final extension = switch (codec) {
+            'srt' || 'subrip' || 'ttml' || 'mov_text' => 'srt',
+            'webvtt' || 'vtt' => 'vtt',
+            'ass' => 'ass',
+            'ssa' => 'ssa',
+            _ => null,
+          };
+          if (extension == null) {
+            failures++;
+            continue;
+          }
+          var language = (stream.data['Language'] as String? ?? 'und')
+              .replaceAll(RegExp('[^a-zA-Z0-9_-]'), '_');
+          if (language.isEmpty) language = 'und';
+          if (language.length > 24) language = language.substring(0, 24);
+          final prefix =
+              '${path.withoutExtension(destination)}.aloe-sub.$language.${stream.index}.';
+          if (saved.keys.any((name) =>
+              name.startsWith(prefix) && name.endsWith('.$extension')))
+            continue;
+          final upstream = resolveMediaServerUrl(
+              client.connection.url,
+              (!['ttml', 'mov_text'].contains(codec)
+                      ? stream.data['DeliveryUrl'] as String?
+                      : null) ??
+                  'Videos/${Uri.encodeComponent(_itemId!)}/${Uri.encodeComponent(source.id)}/Subtitles/${stream.index}/Stream.$extension');
+          final address = _relay!.grantRemote(upstream,
+              headers:
+                  upstream.origin == Uri.parse(client.connection.url).origin
+                      ? client.headers
+                      : const {});
+          final request = await _reader
+              .getUrl(Uri.parse(address))
+              .timeout(const Duration(seconds: 8));
+          request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
+          final response =
+              await request.close().timeout(const Duration(seconds: 10));
+          final encoding =
+              response.headers.value(HttpHeaders.contentEncodingHeader);
+          final contentType = response.headers.contentType?.mimeType;
+          if (response.statusCode != 200 ||
+              (encoding != null && encoding != 'identity') ||
+              contentType == 'text/html' ||
+              contentType == 'application/json' ||
+              response.contentLength > 32 * 1024 * 1024) {
+            await response.listen((_) {}).cancel();
+            throw StateError('服务器未返回可保存的字幕');
+          }
+          final target = '$prefix${const Uuid().v4()}.$extension';
+          partial = File('$target.aloe-part');
+          writer = await partial.open(mode: FileMode.write);
+          var size = 0;
+          await for (final bytes
+              in response.timeout(const Duration(seconds: 10))) {
+            if (size == 0 &&
+                RegExp(r'^\s*(<!doctype|<html)', caseSensitive: false).hasMatch(
+                    utf8.decode(bytes.take(512).toList(),
+                        allowMalformed: true))) {
+              throw StateError('服务器返回了网页');
+            }
+            size += bytes.length;
+            if (size > 32 * 1024 * 1024 || total + size > 128 * 1024 * 1024) {
+              throw StateError('字幕文件过大');
+            }
+            await writer.writeFrom(bytes);
+          }
+          if (size == 0 ||
+              (response.contentLength >= 0 && size != response.contentLength)) {
+            throw StateError('字幕下载不完整');
+          }
+          await writer.flush();
+          await writer.close();
+          writer = null;
+          await partial.rename(target);
+          saved[target] = size;
+          total += size;
+        } catch (_) {
+          failures++;
+        } finally {
+          try {
+            await writer?.close();
+          } finally {
+            if (partial != null && await partial.exists())
+              await partial.delete();
+          }
+        }
+        if (_closed) {
+          failures += streams.length;
+          break;
+        }
+      }
+    } finally {
+      deadline.cancel();
+    }
+    return (
+      files: saved,
+      error: failures > 0 || streams.length > 32
+          ? '部分外挂字幕未保存，可重试；图片字幕暂不支持独立下载'
+          : null
+    );
   }
 
   @override

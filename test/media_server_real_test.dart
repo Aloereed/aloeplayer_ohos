@@ -197,6 +197,26 @@ void main() {
             await client.dio.post('$userRoute/Policy', data: policy);
           }
           final file = await download.prepare(movie, sourceId: source.id);
+          final subtitleDirectory =
+              await Directory.systemTemp.createTemp('aloe-real-subtitle-');
+          try {
+            final saved = await download
+                .saveSubtitles('${subtitleDirectory.path}/movie.mkv');
+            expect(saved.error, isNull);
+            expect(saved.files, hasLength(2));
+            final texts = await Future.wait(
+                saved.files.keys.map((name) => File(name).readAsString()));
+            expect(texts.any((text) => text.contains('中文字幕测试')), isTrue);
+            expect(
+                texts.any((text) => text.contains('English fixture subtitle')),
+                isTrue);
+            final retried = await download.saveSubtitles(
+                '${subtitleDirectory.path}/movie.mkv',
+                existing: saved.files);
+            expect(retried.files.keys.toSet(), saved.files.keys.toSet());
+          } finally {
+            await subtitleDirectory.delete(recursive: true);
+          }
           expect(file.size, await File(original).length());
           final full = await download.getFileStreamForRevision(file);
           expect((await sha256.bind(full).first).toString(),

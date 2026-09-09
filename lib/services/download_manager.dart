@@ -51,6 +51,8 @@ class DownloadManager extends ChangeNotifier {
   StreamIterator<Uint8List>? _iterator;
   FileService? _activeSource;
   String? _activeId;
+  final _subtitleBusy = <String>{};
+  bool savingSubtitles(DownloadTask task) => _subtitleBusy.contains(task.id);
   Future<void> _writes = Future.value();
   Future<void> initialize() => _initializing ??= _load();
   Future<void> _load() async {
@@ -76,6 +78,24 @@ class DownloadManager extends ChangeNotifier {
     if (raw != null) {
       tasks.addAll((jsonDecode(raw) as List)
           .map((e) => DownloadTask.fromJson(e as Map<String, dynamic>)));
+      var recovered = false;
+      for (final task in tasks.where((t) => t.finalizing)) {
+        final destination = File(task.destination);
+        if (!await File(task.partialPath).exists() &&
+            await destination.exists() &&
+            await destination.length() == task.size) {
+          task.status = DownloadStatus.completed;
+          task.received = task.size;
+          task.error = null;
+          if (task.serverId
+              .startsWith(MediaServerDownloadSource.serverPrefix)) {
+            task.subtitleError = '字幕保存可能未完成，可补下载';
+          }
+        }
+        task.finalizing = false;
+        recovered = true;
+      }
+      if (recovered) await _persist();
     }
     notifyListeners();
   }
@@ -164,12 +184,73 @@ class DownloadManager extends ChangeNotifier {
           id: id,
           url: task.destination,
           title: task.name,
+          subtitles: await _validSubtitles(task),
           mediaType: {'.mp3', '.flac', '.m4a', '.wav', '.ogg', '.aac', '.opus'}
                   .contains(path.extension(task.destination).toLowerCase())
               ? 'audio'
               : 'video');
     } on FileSystemException {
       return null;
+    }
+  }
+
+  Future<List<String>> _validSubtitles(DownloadTask task) async {
+    final result = <String>[];
+    for (final entry in task.subtitles.entries) {
+      try {
+        final file = File(entry.key);
+        if (entry.value > 0 &&
+            await file.exists() &&
+            await file.length() == entry.value) result.add(entry.key);
+      } on FileSystemException {
+        continue;
+      }
+    }
+    return result;
+  }
+
+  Future<void> retrySubtitles(DownloadTask task) => _saveSubtitles(task);
+  Future<void> _saveSubtitles(DownloadTask task,
+      [MediaServerDownloadSource? prepared]) async {
+    if (task.status != DownloadStatus.completed || !_subtitleBusy.add(task.id))
+      return;
+    MediaServerDownloadSource? source = prepared;
+    try {
+      task.subtitleError = '字幕正在保存；若中断可补下载';
+      await _persist();
+      notifyListeners();
+      if (source == null) {
+        if (await downloadedMedia(task) == null) throw StateError('原文件已移动或不完整');
+        final opened = _openSourceOverride != null
+            ? await _openSourceOverride!(task.serverId)
+            : await MediaServerDownloadSource.restore(task.serverId);
+        if (opened is! MediaServerDownloadSource) {
+          await opened.disconnect();
+          throw StateError('此下载不支持独立字幕');
+        }
+        source = opened;
+        final file = await source.getFile(task.remotePath);
+        if (file == null ||
+            file.size != task.size ||
+            (task.etag != null && fileEtag(file) != task.etag) ||
+            (task.modifiedMs != null &&
+                file.modified?.millisecondsSinceEpoch != task.modifiedMs)) {
+          throw StateError('远端版本已变化，请重新下载媒体');
+        }
+      }
+      final result = await source.saveSubtitles(task.destination,
+          existing: task.subtitles);
+      task.subtitles = result.files;
+      task.subtitleError = result.error;
+    } catch (error) {
+      task.subtitleError = '字幕未全部保存：${mediaServerDownloadError(error)}';
+    } finally {
+      try {
+        if (prepared == null) await source?.disconnect();
+      } catch (_) {}
+      _subtitleBusy.remove(task.id);
+      await _persist();
+      notifyListeners();
     }
   }
 
@@ -243,6 +324,11 @@ class DownloadManager extends ChangeNotifier {
   }
 
   Future<void> pause(DownloadTask task) async {
+    if (task.status == DownloadStatus.completed ||
+        task.status == DownloadStatus.canceled) {
+      if (_activeId == task.id) await _stopActive();
+      return;
+    }
     task.status = DownloadStatus.paused;
     notifyListeners();
     if (_activeId == task.id) await _stopActive();
@@ -275,8 +361,9 @@ class DownloadManager extends ChangeNotifier {
   Future<void> removeFinished() async {
     await initialize();
     tasks.removeWhere((task) =>
-        task.status == DownloadStatus.completed ||
-        task.status == DownloadStatus.canceled);
+        !_subtitleBusy.contains(task.id) &&
+        (task.status == DownloadStatus.completed ||
+            task.status == DownloadStatus.canceled));
     await _persist();
     notifyListeners();
   }
@@ -455,8 +542,18 @@ class DownloadManager extends ChangeNotifier {
         if (task.received != task.size) throw StateError('连接提前结束，可重试继续下载');
         if (await File(task.destination).exists())
           throw StateError('目标文件已存在，请另存');
+        task.finalizing = true;
+        await _persist();
+        if (task.status != DownloadStatus.downloading) {
+          task.finalizing = false;
+          return;
+        }
         await part.rename(task.destination);
+        task.finalizing = false;
         task.status = DownloadStatus.completed;
+        await _persist();
+        if (files is MediaServerDownloadSource)
+          await _saveSubtitles(task, files);
       }
     } catch (e) {
       if (task.status == DownloadStatus.downloading) {

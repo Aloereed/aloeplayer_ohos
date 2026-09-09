@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aloeplayer/models/download_task.dart';
@@ -117,6 +118,51 @@ Future<void> waitForStatus(
 }
 
 void main() {
+  test(
+      'restart recovers a committed download but never accepts an unfinished partial file',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('aloe-finalize-');
+    try {
+      final completed = DownloadTask(
+          id: 'completed',
+          serverId: 'media-server:test',
+          remotePath: '/i/s/media.mkv',
+          name: 'Movie',
+          destination: '${directory.path}/completed.mkv',
+          size: 3,
+          received: 3,
+          status: DownloadStatus.downloading,
+          finalizing: true);
+      final incomplete = DownloadTask(
+          id: 'partial',
+          serverId: 'server',
+          remotePath: '/movie.mkv',
+          name: 'Movie',
+          destination: '${directory.path}/partial.mkv',
+          size: 3,
+          received: 3,
+          status: DownloadStatus.downloading,
+          finalizing: true);
+      await File(completed.destination).writeAsBytes([1, 2, 3]);
+      await File(incomplete.partialPath).writeAsBytes([1, 2, 3]);
+      SharedPreferences.setMockInitialValues({
+        'download.tasks.v1':
+            jsonEncode([completed.toJson(), incomplete.toJson()])
+      });
+      final manager = DownloadManager.forTesting(
+          directory: directory.path,
+          openSource: (_) async => throw StateError('No network expected'));
+      await manager.initialize();
+      expect(manager.tasks.first.status, DownloadStatus.completed);
+      expect(manager.tasks.first.finalizing, isFalse);
+      expect(manager.tasks.last.status, DownloadStatus.paused);
+      expect(await File(incomplete.destination).exists(), isFalse);
+      await manager.pause(manager.tasks.first);
+      expect(manager.tasks.first.status, DownloadStatus.completed);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   test('resume rejects a same-size replacement when its ETag changed',
       () async {

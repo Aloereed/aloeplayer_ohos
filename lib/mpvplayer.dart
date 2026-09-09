@@ -1142,7 +1142,8 @@ class _MPVPlayerState extends State<MPVPlayer>
     _updateMediaItem();
 
     // 自动检测并载入字幕文件（仅对特定目录下的本地文件）
-    if (!isHttpUrl && !isFileUrl) {
+    if (!isHttpUrl && !isFileUrl && remoteSubtitles.isEmpty &&
+        Uri.tryParse(_mediaFor(filePath)?.id ?? '')?.scheme != 'aloe-server') {
       await _autoLoadSubtitle(resolvedPath);
     }
 
@@ -1165,7 +1166,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     }
     final subtitle = media.preferredSubtitleTrack;
     if (subtitle == 'external' && media.subtitles.isNotEmpty) {
-      await player.setSubtitleTrack(SubtitleTrack.uri(media.subtitles.first));
+      await _selectExternalSubtitle(media.subtitles.first);
     } else if (subtitle != null) {
       await player.setSubtitleTrack(SubtitleTrack(subtitle, null, null));
     }
@@ -1175,7 +1176,15 @@ class _MPVPlayerState extends State<MPVPlayer>
     final id = _historyId;
     final preferences = await PlaybackToolsStore.preferences(id);
     final matches = matchSubtitles(_mediaTitle(url), candidates, preferredLanguage: preferences.subtitleLanguage);
-    if (mounted && !_disposing && id == _historyId) await player.setSubtitleTrack(SubtitleTrack.uri(matches.isEmpty ? candidates.first : matches.first));
+    if (mounted && !_disposing && id == _historyId) await _selectExternalSubtitle(matches.isEmpty ? candidates.first : matches.first);
+  }
+
+  Future<void> _selectExternalSubtitle(String address) async {
+    try { await player.setSubtitleTrack(SubtitleTrack.uri(address)); }
+    catch (_) {
+      if (mounted && !_disposing) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('外挂字幕加载失败，可在字幕列表中切换或重新下载')));
+    }
   }
 
   Future<void> _autoLoadSubtitle(String filePath) async {
@@ -1610,6 +1619,12 @@ class _MPVPlayerState extends State<MPVPlayer>
         currentTrack: player.state.track.subtitle,
         onSelect: player.setSubtitleTrack,
         onOpenExternal: _openSubtitleFile,
+        externalTracks: (_mediaFor(_currentFilePath)?.subtitles ?? []).map((file) {
+          final name = path.basename(file);
+          final parts = name.split('.aloe-sub.').last.split('.');
+          return SubtitleTrack.uri(file, title: name.contains('.aloe-sub.') && parts.length >= 2
+              ? '外挂字幕 ${parts[0]} · ${parts[1]}' : '外部字幕 ${name.length < 80 ? name : ''}');
+        }).toList(),
       ),
     );
   }
