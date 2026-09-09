@@ -44,7 +44,7 @@ struct ButtonComponent {
       Image($r('app.media.cast_picker'))
         .width(24)
         .height(24)
-      Text(this.ready ? '选择投播设备' : '正在准备投播…')
+      Text('选择投播设备')
         .fontSize(16)
         .fontColor(Color.White)
         .fontWeight(FontWeight.Medium)
@@ -52,15 +52,32 @@ struct ButtonComponent {
     .width('100%')
     .height(48)
     .justifyContent(FlexAlign.Center)
-    .backgroundColor(this.ready ? '#175CD3' : '#667085')
+    .backgroundColor('#175CD3')
     .borderRadius(12)
   }
   build() {
-    AVCastPicker({
-      sessionType: this.sessionType,
-      customPicker: () => this.pickerContent()
-    })
-      .enabled(this.ready)
+    // AVCastPicker can retain its custom builder's first render. Mount it
+    // only after initialization; its custom content must not capture readiness.
+    Stack() {
+      if (this.ready) {
+        AVCastPicker({
+          sessionType: this.sessionType,
+          customPicker: () => this.pickerContent()
+        })
+          .width('100%')
+          .height('100%')
+      } else {
+        Row({ space: 10 }) {
+          LoadingProgress().width(24).height(24).color(Color.White)
+          Text('正在准备投播…').fontSize(16).fontColor(Color.White)
+        }
+          .width('100%')
+          .height(48)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor('#667085')
+          .borderRadius(12)
+      }
+    }
       .width('100%')
       .height('100%')
   }
