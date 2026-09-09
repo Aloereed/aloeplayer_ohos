@@ -1,0 +1,18 @@
+pkgname=aloe-mpv-direct
+pkgver=0.41.0
+pkgrel=1
+pkgdesc="MPV upstream OHCodec with native Surface output"
+url="https://github.com/ErBWs/mpv"
+archs=("arm64-v8a")
+license=("LGPL-2.1-or-later")
+depends=()
+makedepends=("meson" "ninja" "cmake" "python3" "pkg-config")
+downloadpackage=false
+autounpack=false
+buildtools="custom"
+packagename=unused
+prepare() { test -f mpv/meson.build && test -f ffmpeg-upstream/configure; }
+build() { bash ./build-local.sh > "$buildlog" 2>&1; }
+package() { test -f "$LYCIUM_ROOT/usr/$pkgname/$ARCH/lib/libmpv.so"; }
+check() { "$OHOS_SDK/native/llvm/bin/llvm-readelf" -h "$LYCIUM_ROOT/usr/$pkgname/$ARCH/lib/libmpv.so" | grep -q AArch64; }
+cleanbuild() { :; }

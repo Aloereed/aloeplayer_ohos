@@ -1,0 +1,173 @@
+diff --git a/meson.build b/meson.build
+index 1e9c7c4..ac3489c 100644
+--- a/meson.build
++++ b/meson.build
+@@ -488,6 +488,7 @@ if features['ohos']
+                      cc.find_library('native_window')]
+     sources += files('audio/out/ao_ohaudio.c',
+                      'video/out/ohos_common.c',
++                     'video/out/vo_ohcodec.c',
+                      'video/out/hwdec/hwdec_ohcodec.c')
+ endif
+ 
+diff --git a/video/out/vo.c b/video/out/vo.c
+index c9cde30..3b9a0b5 100644
+--- a/video/out/vo.c
++++ b/video/out/vo.c
+@@ -54,6 +54,7 @@ extern const struct vo_driver video_out_gpu;
+ extern const struct vo_driver video_out_gpu_next;
+ extern const struct vo_driver video_out_libmpv;
+ extern const struct vo_driver video_out_null;
++extern const struct vo_driver video_out_ohcodec;
+ extern const struct vo_driver video_out_image;
+ extern const struct vo_driver video_out_lavc;
+ extern const struct vo_driver video_out_caca;
+@@ -101,6 +102,9 @@ static const struct vo_driver *const video_out_drivers[] =
+     &video_out_x11,
+ #endif
+     &video_out_libmpv,
++#if HAVE_OHOS
++    &video_out_ohcodec,
++#endif
+     &video_out_null,
+ 
+     // should not be auto-selected
+diff --git a/video/out/vo_ohcodec.c b/video/out/vo_ohcodec.c
+new file mode 100644
+index 0000000..7dcec37
+--- /dev/null
++++ b/video/out/vo_ohcodec.c
+@@ -0,0 +1,133 @@
++/* OHCodec direct Surface output, using upstream FFmpeg one-shot tokens.
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ * Based on mpv's vo_mediacodec_embed.c lifecycle.
++ */
++#include <errno.h>
++#include <libavcodec/ohcodec_buffer.h>
++#include <libavutil/hwcontext.h>
++#include <libavutil/hwcontext_oh.h>
++#include "common/common.h"
++#include "video/mp_image.h"
++#include "video/hwdec.h"
++#include "vo.h"
++#include "ohos_common.h"
++
++struct priv {
++    struct mp_image *pending;
++    struct mp_hwdec_ctx hwctx;
++};
++
++static void discard_pending(struct vo *vo)
++{
++    struct priv *p = vo->priv;
++    // The AVFrame destructor discards an unrendered token exactly once.
++    mp_image_unrefp(&p->pending);
++}
++
++static int preinit(struct vo *vo)
++{
++    struct priv *p = vo->priv;
++    if (!vo_ohos_init(vo))
++        return -1;
++    vo->hwdec_devs = hwdec_devices_create();
++    AVBufferRef *ref = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_OHCODEC);
++    if (!ref) {
++        hwdec_devices_destroy(vo->hwdec_devs);
++        vo->hwdec_devs = NULL;
++        vo_ohos_uninit(vo);
++        return -1;
++    }
++    AVHWDeviceContext *device = (void *)ref->data;
++    AVOHCodecDeviceContext *oh = device->hwctx;
++    oh->native_window = vo_ohos_native_window(vo);
++    if (av_hwdevice_ctx_init(ref) < 0) {
++        av_buffer_unref(&ref);
++        hwdec_devices_destroy(vo->hwdec_devs);
++        vo->hwdec_devs = NULL;
++        vo_ohos_uninit(vo);
++        return -1;
++    }
++    p->hwctx = (struct mp_hwdec_ctx) {
++        .driver_name = "ohcodec",
++        .av_device_ref = ref,
++        .hw_imgfmt = IMGFMT_OHCODEC,
++    };
++    hwdec_devices_add(vo->hwdec_devs, &p->hwctx);
++    MP_INFO(vo, "OHCodec direct Surface ready (upstream token API)\n");
++    return 0;
++}
++
++static int query_format(struct vo *vo, int format)
++{
++    return format == IMGFMT_OHCODEC;
++}
++
++static int reconfig(struct vo *vo, struct mp_image_params *params)
++{
++    discard_pending(vo);
++    vo_ohos_invalidate_color(vo);
++    struct mp_image_params output = *params;
++    vo_ohos_set_color(vo, &output);
++    return 0;
++}
++
++static bool draw_frame(struct vo *vo, struct vo_frame *frame)
++{
++    struct priv *p = vo->priv;
++    discard_pending(vo);
++    // Surface retains the displayed image. Never submit a token twice.
++    if (frame->current && !frame->redraw && !frame->repeat)
++        p->pending = mp_image_new_ref(frame->current);
++    return VO_TRUE;
++}
++
++static void flip_page(struct vo *vo)
++{
++    struct priv *p = vo->priv;
++    if (!p->pending)
++        return;
++    AVOHCodecBuffer *token = (void *)p->pending->planes[3];
++    if (token) {
++        int ret = av_ohcodec_release_buffer(token, 1);
++        if (ret < 0 && ret != AVERROR(ESTALE) && ret != AVERROR(EALREADY))
++            MP_WARN(vo, "OHCodec Surface render failed: %d\n", ret);
++    }
++    discard_pending(vo);
++}
++
++static int control(struct vo *vo, uint32_t request, void *data)
++{
++    if (request == VOCTRL_RESET) {
++        discard_pending(vo);
++        return VO_TRUE;
++    }
++    return VO_NOTIMPL;
++}
++
++static void uninit(struct vo *vo)
++{
++    struct priv *p = vo->priv;
++    discard_pending(vo);
++    if (p->hwctx.av_device_ref) {
++        hwdec_devices_remove(vo->hwdec_devs, &p->hwctx);
++        av_buffer_unref(&p->hwctx.av_device_ref);
++    }
++    hwdec_devices_destroy(vo->hwdec_devs);
++    vo->hwdec_devs = NULL;
++    vo_ohos_uninit(vo);
++}
++
++const struct vo_driver video_out_ohcodec = {
++    .description = "HarmonyOS OHCodec (direct Surface, upstream tokens)",
++    .name = "ohcodec",
++    // Let mpv schedule flip_page against its clock, including silent videos.
++    .caps = VO_CAP_NORETAIN,
++    .preinit = preinit,
++    .query_format = query_format,
++    .reconfig = reconfig,
++    .control = control,
++    .draw_frame = draw_frame,
++    .flip_page = flip_page,
++    .uninit = uninit,
++    .priv_size = sizeof(struct priv),
++};

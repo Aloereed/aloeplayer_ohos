@@ -15,6 +15,10 @@ if (-not $LibraryPath) {
 $originalHash = 'DAECEFE473819A40EFC795D2E0CF6916BE2C830BC39CB9CCF4251F4C67194D63'
 $repairedHash = '7438FCC2AAC0E0BBF2F7ED7F04C286EFD2A06BC5BCB8C2212A3123FCA1F1DFF5'
 $actualHash = (Get-FileHash -LiteralPath $LibraryPath -Algorithm SHA256).Hash
+if ($actualHash -eq '0E566EAA73A04CBF7BBB3AAD6F3B6E51096A4F00FD13028A06A3286CE8D665D8') {
+    Write-Host 'Verified rebuilt MPV OHCodec direct output with timed presentation and upstream buffer tokens; no binary patch required.'
+    return
+}
 if ($actualHash -eq '672E98D497199A89E20893979ECEC686DEE1113BBE1B609C9A9266AA1679BD32') {
     Write-Host 'Verified unchanged media-kit OHOS upstream MPV (20260715); no custom binary patches applied.'
     return

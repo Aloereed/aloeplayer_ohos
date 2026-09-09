@@ -1,0 +1,9 @@
+{
+  "mpv": "6edeee00a07b9b76f197aa71eee3d029fb090de4",
+  "upstream-build": "255944a4fc22fd5418024f942b5a8b10e2531283",
+  "libplacebo": "cee9b076f2c63104ccfd497fa79c39a867293ec4",
+  "glslang": "46ef757e048e760b46601e6e77ae0cb72c97bd2f",
+  "ffmpeg": "7dddf74de0346fee1f17bd49563efc5ab9deaf98",
+  "ffmpeg_archive_sha256": "07e4c6a1f1ebdcc2d8bb30e9c7f9f944363290170f589c343427d9727560bc6b",
+  "sdk": "/home/huzheng/command-line-tools/sdk/default/openharmony"
+}
