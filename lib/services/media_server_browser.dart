@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'media_server_client.dart';
+import 'media_server_query.dart';
 
 /// Owns query generations so late requests cannot overwrite a newer location.
 class MediaServerBrowserController extends ChangeNotifier {
@@ -10,6 +11,7 @@ class MediaServerBrowserController extends ChangeNotifier {
   List<MediaServerItem> items = [];
   final List<MediaServerItem> parents = [];
   String search = '';
+  MediaServerQuery filters = const MediaServerQuery();
   bool busy = false, hasMore = false;
   int? total;
   Object? error;
@@ -39,6 +41,7 @@ class MediaServerBrowserController extends ChangeNotifier {
       final result = await client.itemPage(
           parent: parents.lastOrNull?.id,
           search: search,
+          query: filters,
           start: start,
           cancelToken: cancel);
       if (_disposed || generation != _generation) return;
@@ -67,6 +70,32 @@ class MediaServerBrowserController extends ChangeNotifier {
   Future<void> query(String value) {
     search = value.trim();
     return load();
+  }
+
+  Future<void> setFilters(MediaServerQuery value) {
+    filters = value;
+    return load();
+  }
+
+  void updateItem(MediaServerItem updated) {
+    final index = items.indexWhere((item) => item.id == updated.id);
+    if (_disposed || index < 0) return;
+    _cancel?.cancel('Item state updated');
+    _generation++;
+    busy = false;
+    if (filters.matches(
+        itemType: updated.type,
+        played: updated.played,
+        favorite: updated.favorite)) {
+      items = [...items]..[index] = updated;
+    } else {
+      items = [...items]..removeAt(index);
+      if (_nextStart > 0) _nextStart--;
+      if (total != null && total! > 0) total = total! - 1;
+      if (total != null && _nextStart >= total!) hasMore = false;
+    }
+    _notify();
+    if (items.isEmpty && hasMore) unawaited(load(more: true));
   }
 
   Future<void> enter(MediaServerItem folder) {

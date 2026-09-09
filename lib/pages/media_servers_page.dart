@@ -1,5 +1,7 @@
 import 'dart:async';
 import '../services/media_server_browser.dart';
+import '../services/media_server_query.dart';
+import '../widgets/media_server_filter_dialog.dart';
 import '../services/member_access.dart';
 import '../widgets/member_feature_prompt.dart';
 import 'package:flutter/material.dart';
@@ -250,6 +252,8 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
   final _scroll = ScrollController();
   Timer? _searchDelay;
   bool _playing = false;
+  int _interactionGeneration = 0;
+  CancelToken? _itemRefreshCancel;
   String? _playError;
   @override
   void initState() {
@@ -301,7 +305,31 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
     _browser.back();
   }
 
+  Future<void> _filter() async {
+    _searchDelay?.cancel();
+    final selected = await showDialog<MediaServerQuery>(
+        context: context,
+        builder: (_) => MediaServerFilterDialog(initial: _browser.filters));
+    if (!mounted) return;
+    if (selected == null) {
+      if (_browser.search != _search.text.trim())
+        _query(_search.text, now: true);
+      return;
+    }
+    await _applyFilters(selected);
+  }
+
+  Future<void> _applyFilters(MediaServerQuery selected) async {
+    _cancelPlayback();
+    _searchDelay?.cancel();
+    _browser.search = _search.text.trim();
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    await _browser.setFilters(selected);
+  }
+
   void _cancelPlayback() {
+    _interactionGeneration++;
+    _itemRefreshCancel?.cancel('Browser interaction changed');
     _playing = false;
     _playError = null;
   }
@@ -319,6 +347,7 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
       _playing = true;
       _playError = null;
     });
+    final generation = ++_interactionGeneration;
     try {
       _searchDelay?.cancel();
       await Navigator.push(
@@ -326,21 +355,18 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
           MaterialPageRoute(
               builder: (_) => MediaServerDetailPage(
                   connection: widget.connection, item: item)));
-      if (!mounted) return;
+      if (!mounted || generation != _interactionGeneration) return;
       // Refresh only the changed tile; keep the large library and scroll position.
-      final updated = await _client.details(item.id);
-      if (mounted)
-        setState(() {
-          _browser.items = _browser.items
-              .map((entry) => entry.id == updated.id ? updated : entry)
-              .toList();
-        });
+      final cancel = _itemRefreshCancel = CancelToken();
+      final updated = await _client.details(item.id, cancelToken: cancel);
+      if (mounted && generation == _interactionGeneration)
+        _browser.updateItem(updated);
     } catch (e) {
-      if (mounted) {
+      if (mounted && generation == _interactionGeneration) {
         setState(() => _playError = _serverError(e));
       }
     } finally {
-      if (mounted) {
+      if (mounted && generation == _interactionGeneration) {
         setState(() => _playing = false);
       }
     }
@@ -357,6 +383,13 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
               title: Text(
                   _browser.parents.lastOrNull?.name ?? widget.connection.name),
               actions: [
+                IconButton(
+                    tooltip: '筛选与排序',
+                    onPressed: _playing ? null : _filter,
+                    icon: Icon(Icons.filter_list,
+                        color: _browser.filters.changed
+                            ? Theme.of(context).colorScheme.primary
+                            : null)),
                 IconButton(
                     tooltip: '刷新媒体',
                     onPressed: _playing ? null : () => _browser.load(),
@@ -379,6 +412,16 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
                             })),
                     onChanged: (text) => _query(text),
                     onSubmitted: (text) => _query(text, now: true))),
+            if (_browser.filters.changed)
+              Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(children: [
+                    Expanded(child: Text(_browser.filters.summary)),
+                    TextButton(
+                        onPressed: () =>
+                            _applyFilters(const MediaServerQuery()),
+                        child: const Text('清除筛选'))
+                  ])),
             if (_browser.busy || _playing) const LinearProgressIndicator(),
             if (_browser.error != null || _playError != null)
               Padding(
@@ -403,8 +446,10 @@ class _MediaServerBrowserState extends State<MediaServerBrowser> {
                         _browser.items.isEmpty &&
                         _browser.error == null
                     ? Center(
-                        child: Text(
-                            _browser.search.isEmpty ? '此媒体库暂无内容' : '没有匹配的媒体'))
+                        child: Text(_browser.search.isEmpty &&
+                                !_browser.filters.filtered
+                            ? '此媒体库暂无内容'
+                            : '没有匹配的媒体'))
                     : GridView.builder(
                         controller: _scroll,
                         padding: const EdgeInsets.all(12),

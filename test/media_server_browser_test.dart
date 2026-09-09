@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aloeplayer/services/media_server_client.dart';
 import 'package:aloeplayer/services/media_server_browser.dart';
+import 'package:aloeplayer/services/media_server_query.dart';
 
 const connection = MediaServerConnection(
     id: 'c',
@@ -18,8 +19,9 @@ class Request {
   final String? parent;
   final int start;
   final CancelToken? cancel;
+  final MediaServerQuery filters;
   final result = Completer<MediaServerPage>();
-  Request(this.search, this.parent, this.start, this.cancel);
+  Request(this.search, this.parent, this.start, this.cancel, this.filters);
 }
 
 class Client extends MediaServerClient {
@@ -31,8 +33,9 @@ class Client extends MediaServerClient {
       String search = '',
       int start = 0,
       int limit = 100,
+      MediaServerQuery query = const MediaServerQuery(),
       CancelToken? cancelToken}) {
-    final request = Request(search, parent, start, cancelToken);
+    final request = Request(search, parent, start, cancelToken, query);
     requests.add(request);
     return request.result.future;
   }
@@ -48,6 +51,41 @@ MediaServerPage page(List<String> ids,
         total: total,
         limit: limit);
 void main() {
+  test(
+      'filter changes cancel stale pages; changed items leave filtered lists without skipping the next item',
+      () async {
+    final client = Client();
+    final browser = MediaServerBrowserController(client);
+    addTearDown(browser.dispose);
+    final old = browser.load();
+    final filtered = browser.setFilters(const MediaServerQuery(
+        type: MediaServerTypeFilter.movies,
+        watched: MediaServerWatchFilter.unwatched,
+        sort: MediaServerSort.added,
+        descending: true));
+    expect(client.requests.first.cancel!.isCancelled, isTrue);
+    expect(client.requests.last.filters.parameters['IsPlayed'], isFalse);
+    client.requests.last.result.complete(page(['first'], total: 2));
+    await filtered;
+    client.requests.first.result.complete(page(['stale'], total: 1));
+    await old;
+    final more = browser.load(more: true);
+    final pendingMore = client.requests.last;
+    browser.updateItem(MediaServerItem.fromJson({
+      'Id': 'first',
+      'Type': 'Movie',
+      'UserData': {'Played': true}
+    }));
+    expect(pendingMore.cancel!.isCancelled, isTrue);
+    expect(client.requests.last.start, 0);
+    client.requests.last.result.complete(page(['second'], total: 1));
+    pendingMore.result.complete(page(['obsolete'], start: 1, total: 2));
+    await more;
+    await Future<void>.delayed(Duration.zero);
+    expect(browser.items.single.id, 'second');
+    expect(browser.total, 1);
+    expect(browser.hasMore, isFalse);
+  });
   test('new search cancels pending request and ignores a late response',
       () async {
     final client = Client();

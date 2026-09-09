@@ -7,6 +7,7 @@ import 'package:aloeplayer/services/media_server_catalog.dart';
 import 'package:aloeplayer/services/media_server_playback.dart';
 import 'package:aloeplayer/services/media_server_download.dart';
 import 'package:crypto/crypto.dart';
+import 'package:aloeplayer/services/media_server_query.dart';
 
 void main() {
   for (final kind in ['Jellyfin', 'Emby']) {
@@ -148,6 +149,26 @@ void main() {
                 .any((m) => m.id == movie.id),
             isTrue);
         await client.setFavorite(movie.id, false);
+        await client.setPlayed(movie.id, true);
+        expect(
+            (await client.itemPage(
+                    parent: movies.id,
+                    query: const MediaServerQuery(
+                        type: MediaServerTypeFilter.movies,
+                        watched: MediaServerWatchFilter.unwatched)))
+                .items,
+            isEmpty);
+        expect(
+            (await client.itemPage(
+                    parent: movies.id,
+                    query: const MediaServerQuery(
+                        type: MediaServerTypeFilter.movies,
+                        watched: MediaServerWatchFilter.watched)))
+                .items
+                .single
+                .id,
+            movie.id);
+        await client.setPlayed(movie.id, false);
         final transcoded = await client.playback(movie,
             options: MediaServerPlaybackOptions(
                 sourceId: source.id,
@@ -163,6 +184,13 @@ void main() {
         final series = (await client.itemPage(parent: shows.id))
             .items
             .firstWhere((m) => m.type == 'Series');
+        for (final sort in MediaServerSort.values) {
+          final sorted = await client.itemPage(
+              parent: shows.id,
+              query: MediaServerQuery(
+                  type: MediaServerTypeFilter.episodes, sort: sort));
+          expect(sorted.items, hasLength(3));
+        }
         final seasons = await client.seasons(series.id);
         expect(seasons.items, hasLength(1));
         final episodes = await client.episodes(series.id,

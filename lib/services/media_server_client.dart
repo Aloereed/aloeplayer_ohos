@@ -8,6 +8,7 @@ import '../models/playback_media.dart';
 import 'credential_store.dart';
 import 'media_server_playback.dart';
 import 'playback_report_queue.dart';
+import 'media_server_query.dart';
 
 class MediaServerConnection {
   final String id, name, url, userId, username, token, kind;
@@ -224,6 +225,7 @@ class MediaServerClient {
       String search = '',
       int start = 0,
       int limit = 100,
+      MediaServerQuery query = const MediaServerQuery(),
       CancelToken? cancelToken}) async {
     if (start < 0 || limit < 1 || limit > 200)
       throw ArgumentError('Invalid media page bounds');
@@ -241,8 +243,7 @@ class MediaServerClient {
           'Limit': limit,
           'EnableTotalRecordCount': true,
           'Fields': 'Overview,MediaSourceCount',
-          'SortBy': 'SortName',
-          'SortOrder': 'Ascending',
+          ...query.parameters,
         });
     final rows = response.data?['Items'] as List? ?? [];
     final total = response.data?['TotalRecordCount'];
