@@ -1871,7 +1871,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   @override
-  Widget build(BuildContext context) => PlayerInteractionLock(child: _buildUnlockedPlayer(context));
+  Widget build(BuildContext context) => PlayerInteractionLock(controlsVisible: _showControls, child: _buildUnlockedPlayer(context));
 
   Widget _buildUnlockedPlayer(BuildContext context) {
     if (widget.privateMode && _privateSuspended) return Scaffold(backgroundColor: Colors.black,
