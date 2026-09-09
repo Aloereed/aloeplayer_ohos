@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum LocalImportAction { copy, shortcut, gallery, fileManager, folder, webdav, playFile, playUrl }
+enum LocalImportAction { copy, shortcut, gallery, fileManager, folder, mediaLibrary, playFile, playUrl }
 
 Future<LocalImportAction?> showLocalImportSheet(BuildContext context, {required String destination, String media = '视频'}) {
   final content = LocalImportSheet(destination: destination, media: media);
@@ -76,7 +76,7 @@ class LocalImportSheet extends StatelessWidget {
           if (media == '视频') ActionChip(avatar: const Icon(Icons.photo_library_outlined, size: 18), label: const Text('从相册复制'), onPressed: () => choose(LocalImportAction.gallery)),
           ActionChip(avatar: const Icon(Icons.folder_open_outlined, size: 18), label: const Text('文件管理器'), onPressed: () => choose(LocalImportAction.fileManager)),
           ActionChip(avatar: const Icon(Icons.create_new_folder_outlined, size: 18), label: const Text('新建文件夹'), onPressed: () => choose(LocalImportAction.folder)),
-          ActionChip(avatar: const Icon(Icons.cloud_download_outlined, size: 18), label: const Text('从 WebDAV 下载'), onPressed: () => choose(LocalImportAction.webdav)),
+          ActionChip(avatar: const Icon(Icons.video_library_outlined, size: 18), label: const Text('前往媒体库（WebDAV / SMB）'), onPressed: () => choose(LocalImportAction.mediaLibrary)),
         ]),
         const SizedBox(height: 8),
         ExpansionTile(tilePadding: EdgeInsets.zero, title: const Text('保存位置与说明'), children: [

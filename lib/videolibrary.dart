@@ -27,7 +27,6 @@ import 'package:video_thumbnail_ohos/video_thumbnail_ohos.dart';
 import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'package:media_info/media_info.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'webdav.dart';
 import 'settings.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
@@ -1204,26 +1203,6 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     return '刚刚';
   }
 
-  void _openWebDavFileManager(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return WebDAVDialog(onLoadFiles: _loadItems, fileExts: [
-          'mp4',
-          'mkv',
-          'avi',
-          'mov',
-          'flv',
-          'wmv',
-          'webm',
-          'rmvb',
-          'wmv',
-          'ts'
-        ]);
-      },
-    );
-  }
-
   Widget _buildSortMenuItem(
     BuildContext context,
     String title,
@@ -1427,7 +1406,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         case LocalImportAction.gallery: await _pickVideoWithImagePicker();
         case LocalImportAction.fileManager: await _pickVideoWithFileManager(context);
         case LocalImportAction.folder: await _createNewFolder(context);
-        case LocalImportAction.webdav: _openWebDavFileManager(context);
+        case LocalImportAction.mediaLibrary: widget.changeTab(2);
         case LocalImportAction.playFile: await _openFile();
         case LocalImportAction.playUrl: _showUrlDialog(context);
       }
