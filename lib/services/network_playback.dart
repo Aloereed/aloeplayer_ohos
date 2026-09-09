@@ -6,6 +6,7 @@ import 'http_service.dart';
 
 const mediaExtensions = {
   '.mp4',
+  '.m3u8',
   '.mkv',
   '.avi',
   '.mov',

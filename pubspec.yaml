@@ -18,6 +18,7 @@ dependencies:
   flutter_subtitle: 0.0.6
   fluttertoast: 8.2.2
   http: 1.6.0
+  mime: 2.0.0
   lpinyin: 2.0.3
   lrc: 1.0.2
   marquee: 2.3.0
@@ -260,4 +261,4 @@ flutter:
   uses-material-design: true
 name: aloeplayer
 publish_to: none
-version: 4.0.1+222
+version: 4.0.1+223

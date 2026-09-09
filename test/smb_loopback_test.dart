@@ -11,6 +11,9 @@ import 'package:aloeplayer/libsmb2_service/libsmb2_service.dart';
 import 'package:aloeplayer/libsmb2_service/libsmb2_file.dart';
 import 'package:aloeplayer/libsmb2_service/smb_worker.dart';
 import 'package:aloeplayer/services/smb_service.dart';
+import 'package:aloeplayer/services/file_service.dart';
+import 'package:aloeplayer/services/http_service.dart';
+import 'package:aloeplayer/services/media_cast_service.dart';
 
 class _WireBackend implements SmbWorkerBackend {
   late final Libsmb2Service service;
@@ -57,6 +60,52 @@ void main() {
   const enabled = bool.fromEnvironment('SMB_LOOPBACK_TEST');
   const configPath = String.fromEnvironment('SMB_LOOPBACK_CONFIG',
       defaultValue: 'build/smb-loopback-data/server.json');
+  test(
+      'real SMB casting relay remains readable after closing the original browser connection',
+      () async {
+    final config = jsonDecode(await File(configPath).readAsString());
+    expect(config['host'], matches(RegExp(r'^(127\.0\.0\.1|\[::1\]):\d+$')));
+    final browser = SmbService.forTesting(SmbWorker.forTesting(_wireEntry),
+        readerFactory: () => SmbWorker.forTesting(_wireEntry));
+    final proxy = HttpService.forSource(SmbFileService(service: browser));
+    final cast = MediaCastService.forTesting(
+        advertisedHost: '127.0.0.1', fileProxy: proxy);
+    final reader = HttpClient();
+    try {
+      await browser.connect(
+          host: config['host'],
+          username: config['username'],
+          password: config['password'],
+          domain: '');
+      final file = (await browser.listFiles('/Videos'))
+          .firstWhere((file) => file.name == 'clip #100% 中文.mkv');
+      await proxy.startServer();
+      final url =
+          await cast.startLocalServer(proxy.getFileUrlLocalhost(file.path));
+      await browser.disconnect();
+      await proxy.stopServer();
+      final request = await reader.getUrl(Uri.parse(url));
+      request.headers.set('Range', 'bytes=65530-327679');
+      final response = await request.close();
+      expect(response.statusCode, 206);
+      expect(response.headers.value('content-range'),
+          'bytes 65530-327679/8388608');
+      var count = 0;
+      await for (final chunk in response) {
+        for (final byte in chunk) {
+          expect(byte, (65530 + count) % 256);
+          count++;
+        }
+      }
+      expect(count, 327680 - 65530);
+    } finally {
+      reader.close(force: true);
+      await cast.closeIdleRelay();
+      cast.dispose();
+      await proxy.stopServer();
+      await browser.disconnect();
+    }
+  }, skip: !enabled);
   test('real SMB worker reads stay byte-exact while a separate worker browses',
       () async {
     final config = jsonDecode(await File(configPath).readAsString());

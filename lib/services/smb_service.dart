@@ -30,6 +30,20 @@ class SmbService {
       {required SmbWorker Function() readerFactory})
       : _libsmb2Service = worker,
         _readerFactory = readerFactory;
+  SmbService._independent(this._libsmb2Service, this._readerFactory);
+
+  Future<SmbService> independent() async {
+    final settings = _reads?.settings;
+    if (!isConnected || settings == null) throw StateError('SMB 连接已关闭');
+    final next = SmbService._independent(_readerFactory(), _readerFactory);
+    try {
+      if (!await next.connect(host: settings.host, username: settings.username,
+          password: settings.password, domain: settings.domain,
+          signingRequired: settings.signingRequired, anonymousLogin: settings.anonymousLogin,
+          encryption: settings.encryption)) throw StateError('无法创建投屏读取连接');
+      return next;
+    } catch (_) { await next.disconnect(); rethrow; }
+  }
 
   bool get isConnected => !_closing && _libsmb2Service.isConnected;
 

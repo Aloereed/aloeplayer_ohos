@@ -73,6 +73,11 @@ abstract class FileService {
   Future<FileItem?> getFile(String path);
 }
 
+/// Casting owns a separate connection so leaving the browser cannot stop it.
+abstract class IndependentFileService {
+  Future<FileService> independent();
+}
+
 bool hasKnownFileSize(FileItem file) =>
     file.size >= 0 && (file is! WebDavFileItem || file.webdavFile.sizeKnown);
 String? fileEtag(FileItem file) =>
@@ -94,7 +99,7 @@ abstract class RevisionAwareFileService {
 }
 
 // SMB文件服务实现
-class SmbFileService implements FileService {
+class SmbFileService implements FileService, IndependentFileService {
   final SmbService _smbService;
   SmbFileService({SmbService? service}) : _smbService = service ?? SmbService();
 
@@ -151,10 +156,12 @@ class SmbFileService implements FileService {
 
   // 获取底层SMB服务（用于HTTP服务）
   SmbService get smbService => _smbService;
+  @override
+  Future<FileService> independent() async => SmbFileService(service: await _smbService.independent());
 }
 
 // WebDAV文件服务实现
-class WebDavFileService implements FileService, RevisionAwareFileService {
+class WebDavFileService implements FileService, RevisionAwareFileService, IndependentFileService {
   final WebDavService _webdavService;
   WebDavFileService({WebDavService? service})
       : _webdavService = service ?? WebDavService();
@@ -211,6 +218,8 @@ class WebDavFileService implements FileService, RevisionAwareFileService {
 
   // 获取底层WebDAV服务（用于HTTP服务）
   WebDavService get webdavService => _webdavService;
+  @override
+  Future<FileService> independent() async => WebDavFileService(service: await _webdavService.independent());
 }
 
 // 文件服务工厂

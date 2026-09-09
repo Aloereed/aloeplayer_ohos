@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/cast_device.dart';
@@ -40,10 +41,17 @@ class _CastScreenPageState extends State<CastScreenPage> {
   double? _drag;
   double _volume = 50;
   CastExample? _systemPicker;
+  bool _relayNetwork = true;
+  List<NetworkInterface> _interfaces = const [];
   @override
   void initState() {
     super.initState();
-    if (widget.discover) service.startDiscovery();
+    if (widget.discover) {
+      service.startDiscovery();
+      MediaCastService.localInterfaces().then((interfaces) {
+        if (mounted) setState(() => _interfaces = interfaces);
+      }).catchError((Object _) {});
+    }
   }
 
   Future<void> _cast(CastDevice device) async {
@@ -54,6 +62,8 @@ class _CastScreenPageState extends State<CastScreenPage> {
       if (await service.castMedia(widget.mediaPath,
           headers: widget.httpHeaders,
           title: widget.title,
+          relayNetwork: _relayNetwork,
+          isAudio: widget.isAudio,
           startPosition: widget.initialPosition)) widget.onCastStarted?.call();
     } finally {
       if (mounted) setState(() => _connecting = false);
@@ -93,7 +103,11 @@ class _CastScreenPageState extends State<CastScreenPage> {
     setState(() => _connecting = true);
     try {
       final url = await service.startLocalServer(widget.mediaPath,
-          headers: widget.httpHeaders);
+          headers: widget.httpHeaders, forceRelay: _relayNetwork);
+      if (!mounted) {
+        await service.closeIdleRelay();
+        return;
+      }
       if (mounted)
         setState(() => _systemPicker = CastExample(
             initUri: jsonEncode({
@@ -119,6 +133,25 @@ class _CastScreenPageState extends State<CastScreenPage> {
 
   String _time(Duration value) =>
       '${value.inMinutes}:${(value.inSeconds % 60).toString().padLeft(2, '0')}';
+
+  Future<void> _closeSystem() async {
+    setState(() {
+      _systemPicker = null;
+      _connecting = true;
+    });
+    try {
+      await service.closeIdleRelay();
+    } finally {
+      if (mounted) setState(() => _connecting = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_systemPicker != null) unawaited(service.closeIdleRelay());
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
       animation: service,
@@ -142,7 +175,9 @@ class _CastScreenPageState extends State<CastScreenPage> {
           body: ListView(padding: const EdgeInsets.all(16), children: [
             Card(
                 child: ListTile(
-                    leading: const Icon(Icons.movie_outlined),
+                    leading: Icon(widget.isAudio
+                        ? Icons.music_note
+                        : Icons.movie_outlined),
                     title: Text(name,
                         maxLines: 2, overflow: TextOverflow.ellipsis),
                     subtitle: Text(widget.initialPosition > Duration.zero
@@ -167,6 +202,36 @@ class _CastScreenPageState extends State<CastScreenPage> {
                                 label: const Text('复制错误详情')),
                           ]))),
             if (busy) const LinearProgressIndicator(),
+            Card(
+                child: ExpansionTile(title: const Text('投屏网络设置'), children: [
+              SwitchListTile(
+                  title: const Text('通过本机转发网络媒体'),
+                  subtitle: const Text(
+                      '帮助仅支持 HTTP 的电视读取 HTTPS、鉴权和 HLS 地址。关闭后，普通网络直链由电视直接读取。'),
+                  value: _relayNetwork,
+                  onChanged: busy || _systemPicker != null
+                      ? null
+                      : (value) => setState(() => _relayNetwork = value)),
+              ListTile(
+                  title: Text(service.preferredInterfaceAddress ?? '自动选择投屏网络'),
+                  subtitle:
+                      const Text('连接多个网络或 VPN 时，可手动选择 Wi-Fi 地址。更改将在下次投送时生效。'),
+                  trailing: PopupMenuButton<String>(
+                      tooltip: '选择投屏网络',
+                      enabled: !busy && _systemPicker == null,
+                      onSelected: (value) => setState(() =>
+                          service.preferredInterfaceAddress =
+                              value.isEmpty ? null : value),
+                      itemBuilder: (_) => [
+                            const PopupMenuItem(value: '', child: Text('自动选择')),
+                            for (final interface in _interfaces)
+                              for (final address in interface.addresses)
+                                PopupMenuItem(
+                                    value: address.address,
+                                    child: Text(
+                                        '${interface.name} · ${address.address}')),
+                          ])),
+            ])),
             if (active != null)
               Card(
                   child: Padding(
@@ -177,6 +242,9 @@ class _CastScreenPageState extends State<CastScreenPage> {
                             Text('已连接：${active.name}',
                                 style: Theme.of(context).textTheme.titleMedium),
                             Text(active.isPlaying ? '正在投屏' : '已暂停或停止'),
+                            if (service.relayRequests > 0)
+                              Text(
+                                  '接收端已读取 ${(service.relayedBytes / 1048576).toStringAsFixed(1)} MB'),
                             if (service.duration > Duration.zero) ...[
                               Slider(
                                   value: (_drag ??
@@ -278,7 +346,7 @@ class _CastScreenPageState extends State<CastScreenPage> {
               if (_systemPicker != null) ...[
                 _systemPicker!,
                 TextButton(
-                    onPressed: () => setState(() => _systemPicker = null),
+                    onPressed: busy ? null : _closeSystem,
                     child: const Text('关闭系统投播，返回 DLNA')),
               ],
             ],

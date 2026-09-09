@@ -16,6 +16,7 @@ import 'webdav_service.dart';
 class HttpService {
   static final HttpService instance = HttpService._();
   HttpService._();
+  HttpService.forSource(FileService source) : _source = source;
   HttpService.forTesting(FileService source, {String? lanAddress})
       : _source = source,
         _lanAddressOverride = lanAddress;
@@ -180,6 +181,22 @@ class HttpService {
       _url(filePath, 'http://127.0.0.1:$_port');
   List<String> getAccessUrls() => [baseUrl];
 
+  Future<DetachedMediaSource?> detachForCast(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'http' || _server == null || uri.port != _port ||
+        (uri.host != 'localhost' && InternetAddress.tryParse(uri.host)?.isLoopback != true)) return null;
+    final grant = _grants[uri.queryParameters['token']];
+    if (grant == null || grant.lan || grant.expires.isBefore(DateTime.now())) throw StateError('媒体链接已失效，请重新打开文件');
+    final original = grant.source;
+    if (original is! IndependentFileService) return null;
+    final independent = await (original as IndependentFileService).independent();
+    final proxy = HttpService.forSource(independent);
+    try {
+      if (!await proxy.startServer()) throw StateError('无法启动投屏读取服务');
+      return DetachedMediaSource._(proxy, independent, grant.path);
+    } catch (_) { await proxy.stopServer(); await independent.disconnect(); rethrow; }
+  }
+
   Future<Response> _handle(Request request, {required bool lan}) async {
     if (request.method != 'GET' && request.method != 'HEAD')
       return Response(405, headers: {'Allow': 'GET, HEAD'});
@@ -246,4 +263,33 @@ class _FileGrant {
   final DateTime expires;
   final bool lan;
   _FileGrant(this.source, this.path, this.expires, this.lan);
+}
+
+class DetachedMediaSource {
+  final HttpService _proxy;
+  final FileService _source;
+  final String _root;
+  final String url;
+  bool _closed = false;
+  DetachedMediaSource._(this._proxy, this._source, String filePath)
+      : _root = path.posix.dirname(filePath), url = _proxy.getFileUrlLocalhost(filePath);
+
+  /// Resolve relative HLS paths through per-file grants, never by exposing the
+  /// NAS account or treating a loopback proxy URL as the NAS directory layout.
+  Uri? resolveReference(Uri parent, String reference) {
+    final uri = Uri.parse(reference);
+    if (uri.hasScheme || uri.hasAuthority) return null;
+    if (parent.port != _proxy._port || InternetAddress.tryParse(parent.host)?.isLoopback != true) return null;
+    final grant = _proxy._grants[parent.queryParameters['token']];
+    if (grant == null || _closed) throw StateError('投屏文件授权已关闭');
+    final relative = Uri.decodeComponent(uri.path);
+    final target = path.posix.normalize(relative.startsWith('/') ? relative : path.posix.join(path.posix.dirname(grant.path), relative));
+    if (!path.posix.isWithin(_root, target)) throw StateError('播放列表引用了媒体目录之外的文件');
+    return Uri.parse(_proxy.getFileUrlLocalhost(target));
+  }
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    try { await _proxy.stopServer(); } finally { await _source.disconnect(); }
+  }
 }

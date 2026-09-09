@@ -19,6 +19,8 @@ class WebDavService {
   WebDavDigest? _digest;
   bool _basicLatin1 = false;
   String _username = '', _password = '';
+  String _probePath = '/';
+  String? _certificateSha256;
   bool _connected = false;
   int _generation = 0;
   final Set<CancelToken> _requests = {};
@@ -40,6 +42,8 @@ class WebDavService {
     _paths = WebDavPaths(baseUrl);
     _username = username;
     _password = password;
+    _probePath = probePath;
+    _certificateSha256 = certificateSha256;
     final origin = _paths!.base;
     // Validate configuration before allocating a client.
     final adapter = webDavHttpAdapter(origin, fingerprint: certificateSha256);
@@ -99,6 +103,19 @@ class WebDavService {
     _basicLatin1 = false;
     _username = '';
     _password = '';
+    _probePath = '/';
+    _certificateSha256 = null;
+  }
+
+  Future<WebDavService> independent() async {
+    final paths = _paths;
+    if (!isConnected || paths == null) throw StateError('WebDAV 连接已关闭');
+    final next = WebDavService();
+    try {
+      await next.connect(baseUrl: paths.base.toString(), username: _username,
+        password: _password, probePath: _probePath, certificateSha256: _certificateSha256);
+      return next;
+    } catch (_) { await next.disconnect(); rethrow; }
   }
 
   CancelToken _newRequest() {

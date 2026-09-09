@@ -64,6 +64,18 @@ class _Backend implements SmbWorkerBackend {
 void _entry(SendPort output) => serveSmbWorker(output, _Backend());
 
 void main() {
+  test('independent cast connection survives browser disconnect and retains SMB security settings', () async {
+    final browser = SmbService.forTesting(SmbWorker.forTesting(_entry), readerFactory: () => SmbWorker.forTesting(_entry));
+    await browser.connect(host: 'nas', username: 'viewer', password: 'test', domain: 'test-domain',
+      signingRequired: true, anonymousLogin: true, encryption: true);
+    final cast = await browser.independent();
+    try {
+      await browser.disconnect();
+      expect(cast.isConnected, isTrue);
+      expect(await (await cast.getFileStream('/flags')).expand((bytes) => bytes).toList(), [1,1,1]);
+      expect(await (await cast.getRangeStream('/clip', start: 1, end: 4)).expand((bytes) => bytes).toList(), [1,2,3]);
+    } finally { await cast.disconnect(); await browser.disconnect(); }
+  });
   test(
       'SMB media reads remain independent of slow directory work and preserve security options',
       () async {

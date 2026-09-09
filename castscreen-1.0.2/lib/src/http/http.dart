@@ -27,11 +27,11 @@ abstract final class Http {
       _request('GET', url, converter);
 
   static Future<Model<T>> post<T>(String url, Converter<T> converter,
-      {String? body, Map<String, String>? headers}) =>
-      _request('POST', url, converter, body: body, headers: headers);
+      {String? body, Map<String, String>? headers, Duration requestTimeout = timeout}) =>
+      _request('POST', url, converter, body: body, headers: headers, requestTimeout: requestTimeout);
 
   static Future<Model<T>> _request<T>(String method, String url, Converter<T> converter,
-      {String? body, Map<String, String>? headers}) async {
+      {String? body, Map<String, String>? headers, Duration requestTimeout = timeout}) async {
     final client = http.Client();
     try {
       return await (() async {
@@ -60,7 +60,7 @@ abstract final class Http {
           throw CastProtocolException('设备请求失败', statusCode: response.statusCode);
         }
         return Model(response.statusCode, 'ok', converter(xml));
-      })().timeout(timeout);
+      })().timeout(requestTimeout);
     } on TimeoutException {
       throw const CastProtocolException('设备响应超时，请确认设备在线且位于同一网络');
     } finally { client.close(); }

@@ -45,3 +45,19 @@
 - 补全旧视频播放器菜单与旧音乐播放器投屏按钮，主播放器传递实际时长；系统投播打开时禁用 DLNA 切换，避免两个链路争用同一媒体服务。
 - `tool/test_system_cast.cjs` 运行生产 CastView 逻辑（只替换 OHOS API、剥离 ArkUI 组件），覆盖会话借用/恢复、命令失败、真实元数据、新媒体、晚到创建和断开竞态。实际 ArkTS/UI 由 Hvigor HAP 编译检查；不将模拟 API 当成设备验证。
 - 投屏 HTTP/UDP、320px 页面及桥接测试合计 7 项通过；修改页面分析无 error。后续阶段继续处理 HLS、网络选择和转发边界。
+
+安装包：`build/milestones/69-system-casting/`，debug 签名 HAP 先归档，再打 release APP；来源提交 `953a206`。APP 内版本、QQ scheme、MPV 两个输出驱动和全部运行时 ELF section 均已核验。
+
+## 70 — HLS、NAS 独立连接与流式转发（4.0.1+223）
+
+- 提取有界流式转发服务：16 个并发读取、2 MiB 播放列表、32768 个资源授权、20 秒 I/O 空闲超时；关闭接收端连接会取消上游读取。立即输出小数据块，不等待填满缓冲。
+- 普通网络地址可选择本机转发，帮助仅支持 HTTP 的电视访问 HTTPS。支持手选本机网络接口，默认仍优先按电视实际路由选择；系统选择器无目标时优先 Wi-Fi 接口。
+- HLS 主/子播放列表、音轨 URI、AES 密钥、初始化片段和分片 URI 改写成带会话令牌的局域网地址。按最终重定向地址解析相对路径，解压 gzip/deflate 列表后重算 HEAD/Range；媒体二进制的 Content-Encoding 原样传递。
+- URL 内 Basic 认证转换为私有请求头；跨源跳转或分片不携带 Authorization、Cookie 或常见 API key/token 类凭据。源站不支持 HEAD 时以 GET 获取响应头；普通视频仍以背压流式传送，不读取整个视频到内存。
+- SMB/WebDAV 投屏创建独立连接和仅供本机读取的文件授权；原浏览器退出/切换/断开不再关闭投屏数据源。保留 SMB 签名、加密、匿名等选项及 WebDAV 证书指纹。投屏关闭时释放独立代理和连接。
+- NAS 的 HLS 相对路径按真实文件目录产生单文件授权，限制在所选媒体目录内，不把本机代理路径误当 NAS 路径。媒体库识别 `.m3u8`。本地 HLS 同样限制文件目录，拒绝越界及符号链接逃逸。
+- 换片失败保留旧媒体服务；命令与可取消的两秒状态读取串行执行，旧查询不能覆盖新暂停状态。针对 UPnP 701 做有限状态重试，对部分接收端的元数据拒绝尝试空元数据；错误仍保留原始 UPnP 编号。
+- 全量 Flutter 回归 227 项通过，3 项真实 SMB 回环默认跳过；这 3 项另以显式开关实际执行通过。新增真实认证 WebDAV→独立代理→HLS/Range 转发，以及真实 SMB2→独立连接→Range 字节校验；均只绑定本机，不访问电视或用户设备。
+- 64 MiB 本机单次 SHA-256 观测：原站 114 MiB/s，本地文件转发 131 MiB/s，网络转发 122 MiB/s；三个哈希完全相同，进程峰值约 282–286 MiB。JIT/缓存会影响单次结果，此数据不证明转发加速，也不代表手机/Wi-Fi 性能。复现：`dart tool/benchmark_cast_relay.dart`。
+
+复现：常规 `flutter test --no-pub`；真实 SMB 测试按 `docs/network-library-tests.md` 开启回环服务，再执行带 `SMB_LOOPBACK_TEST=true` 的 `test/smb_loopback_test.dart`。原生系统会话另跑 `node tool/test_system_cast.cjs`。后续继续完善播放状态确认、接收端边界和页面可观测性。

@@ -37,6 +37,7 @@ final class Service {
     INPUT input,
     Map<String, String> Function(INPUT input) inputConvertor,
     OUTPUT Function(Map<String, String>) outputConvertor,
+    {Duration requestTimeout = const Duration(seconds: 8)}
   ) async {
     final xmlBody = _buildXml(action, inputConvertor(input));
     final resp = await Http.post(
@@ -44,18 +45,20 @@ final class Service {
       (xml) => _parseXml(xml, action),
       body: xmlBody,
       headers: _headers(spec, action),
+      requestTimeout: requestTimeout,
     );
     return Future.value(outputConvertor(resp.data));
   }
 
   /// Invoke a service action, and returns a map
   Future<Map<String, String>> invokeMap(
-          String action, Map<String, String> input) async =>
+          String action, Map<String, String> input, {Duration requestTimeout = const Duration(seconds: 8)}) async =>
       invoke<Map<String, String>, Map<String, String>>(
         action,
         input,
         (Map<String, String> m) => m,
         (Map<String, String> m) => m,
+        requestTimeout: requestTimeout,
       );
 
   String _buildXml(String action, Map<String, String> arguments) {
