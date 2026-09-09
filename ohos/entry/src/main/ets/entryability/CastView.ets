@@ -24,14 +24,27 @@ interface CastStatus {
 @Component
 struct ButtonComponent {
   @Prop params: Params;
-  @State castView: CastView = this.params.platformView as CastView;
+  private castView: CastView = this.params.platformView as CastView;
+  @State ready: boolean = false;
+  @State sessionType: string = 'video';
+  private unsubscribe: (() => void) | undefined = undefined;
+  aboutToAppear(): void {
+    this.unsubscribe = this.castView.subscribePicker((ready: boolean, sessionType: string) => {
+      this.ready = ready;
+      this.sessionType = sessionType;
+    });
+  }
+  aboutToDisappear(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
+  }
   @Builder
   pickerContent() {
     Row({ space: 10 }) {
       Image($r('app.media.cast_picker'))
         .width(24)
         .height(24)
-      Text(this.castView.ready ? '选择投播设备' : '正在准备投播…')
+      Text(this.ready ? '选择投播设备' : '正在准备投播…')
         .fontSize(16)
         .fontColor(Color.White)
         .fontWeight(FontWeight.Medium)
@@ -39,15 +52,15 @@ struct ButtonComponent {
     .width('100%')
     .height(48)
     .justifyContent(FlexAlign.Center)
-    .backgroundColor(this.castView.ready ? '#175CD3' : '#667085')
+    .backgroundColor(this.ready ? '#175CD3' : '#667085')
     .borderRadius(12)
   }
   build() {
     AVCastPicker({
-      sessionType: this.castView.sessionType,
+      sessionType: this.sessionType,
       customPicker: () => this.pickerContent()
     })
-      .enabled(this.castView.ready)
+      .enabled(this.ready)
       .width('100%')
       .height('100%')
   }
@@ -66,6 +79,19 @@ export class CastView extends PlatformView implements MethodCallHandler {
   private static operations: Promise<void> = Promise.resolve();
   ready: boolean = false;
   sessionType: string = 'video';
+  private pickerListener: ((ready: boolean, sessionType: string) => void) | undefined = undefined;
+  subscribePicker(listener: (ready: boolean, sessionType: string) => void): () => void {
+    this.pickerListener = listener;
+    // Replay the snapshot: native initialization may finish before the view
+    // appears. Subsequent channel callbacks explicitly update primitive @State.
+    listener(this.ready, this.sessionType);
+    return () => {
+      if (this.pickerListener === listener) this.pickerListener = undefined;
+    };
+  }
+  private updatePicker(): void {
+    this.pickerListener?.(this.ready, this.sessionType);
+  }
   private readonly context: common.Context;
   private readonly channel: MethodChannel;
   private session: avSession.AVSession | undefined;
@@ -113,6 +139,7 @@ export class CastView extends PlatformView implements MethodCallHandler {
         await this.session?.setExtras({ requireAbilityList: ['url-cast'] });
         await this.setMetadata();
         this.ready = true;
+        this.updatePicker();
         if (this.controller) await this.startMedia();
         else this.emit('READY');
       } else if (call.method === 'stopCasting') {
@@ -239,6 +266,8 @@ export class CastView extends PlatformView implements MethodCallHandler {
   getView(): WrappedBuilder<[Params]> { return new WrappedBuilder(ButtonBuilder); }
   dispose(): void {
     this.disposed = true; this.ready = false; this.connectionRevision++;
+    this.updatePicker();
+    this.pickerListener = undefined;
     this.channel.setMethodCallHandler(null);
     this.enqueue(async () => {
       this.detachController();
