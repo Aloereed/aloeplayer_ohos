@@ -13,6 +13,24 @@ if (-not (Test-Path $binary)) { throw 'Extract the official Emby Windows archive
 $blockingRules = @(Get-NetFirewallApplicationFilter -Program $binary | Get-NetFirewallRule |
     Where-Object { $_.Action -eq 'Block' -and $_.Direction -eq 'Inbound' -and $_.Enabled -eq 'True' })
 if ($blockingRules.Count -lt 2) { throw 'Fixture requires its existing TCP/UDP inbound block rules; do not expose this server to the LAN.' }
+# This portable version ignores the legacy dlna.xml switch. Keep its optional
+# discovery plugin outside both plugin search paths in our fixture only.
+$disabledPlugins = Join-Path $fixtureRoot 'disabled-plugins'
+New-Item -ItemType Directory -Path $disabledPlugins -Force | Out-Null
+foreach ($plugin in @(
+    @{source=(Join-Path $fixtureRoot 'emby-4.10-bin/system/plugins/Emby.Dlna.dll');name='system-Emby.Dlna.dll'},
+    @{source=(Join-Path $runtime 'plugins/Emby.Dlna.dll');name='runtime-Emby.Dlna.dll'}
+)) {
+    $sourcePath = [IO.Path]::GetFullPath($plugin.source)
+    $destinationPath = [IO.Path]::GetFullPath((Join-Path $disabledPlugins $plugin.name))
+    $allowedPrefix = [IO.Path]::GetFullPath($fixtureRoot).TrimEnd('\') + '\'
+    if (-not $sourcePath.StartsWith($allowedPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+        -not $destinationPath.StartsWith($allowedPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Plugin path escaped fixture.' }
+    if (Test-Path -LiteralPath $sourcePath) {
+        if (Test-Path -LiteralPath $destinationPath) { throw 'Disabled plugin backup already exists; inspect before replacing it.' }
+        Move-Item -LiteralPath $sourcePath -Destination $destinationPath
+    }
+}
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
 $listener.Start()
 $fixturePort = $listener.LocalEndpoint.Port

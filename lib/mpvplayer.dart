@@ -242,8 +242,10 @@ class MPVPlayer extends StatefulWidget {
   final List<PlaybackMedia>? mediaQueue;
   final int? initialPositionMs;
   final Future<void> Function(PlaybackMedia media, int positionMs, bool stopped, bool playing)? onPlayback;
+  final Future<PlaybackMedia?> Function(PlaybackMedia current, bool forward)? onAdjacentMedia;
+  final Future<void> Function(PlaybackMedia media)? onDiscardMedia;
 
-  const MPVPlayer({Key? key, required this.filePath, this.privateMode = false, this.mediaQueue, this.onPlayback, this.initialPositionMs}) : super(key: key);
+  const MPVPlayer({Key? key, required this.filePath, this.privateMode = false, this.mediaQueue, this.onPlayback, this.initialPositionMs, this.onAdjacentMedia, this.onDiscardMedia}) : super(key: key);
 
   @override
   _MPVPlayerState createState() => _MPVPlayerState();
@@ -277,7 +279,11 @@ class _MPVPlayerState extends State<MPVPlayer>
   DateTime _lastCheckpoint = DateTime(1970);
   DateTime _lastUiUpdate = DateTime(1970);
   int? _resumePosition;
-  PlaybackMedia? _mediaFor(String url) => widget.mediaQueue?.where((m) => m.url == url).firstOrNull;
+  PlaybackMedia? _activeServerMedia;
+  bool _serverTransitioning = false, _autoNextEpisode = true;
+  bool _completionHandled = false, _sleepPreventAdvance = false;
+  int? _nextInitialPositionMs;
+  PlaybackMedia? _mediaFor(String url) => _activeServerMedia?.url == url ? _activeServerMedia : widget.mediaQueue?.where((m) => m.url == url).firstOrNull;
   String _mediaTitle(String url) => _mediaFor(url)?.title ?? mediaDisplayName(url);
 
   Future<void> _initializeMedia() async {
@@ -527,7 +533,9 @@ class _MPVPlayerState extends State<MPVPlayer>
         setState(() {});
         _updatePlaybackState();
       }
-      if (player.state.duration > Duration.zero && position >= player.state.duration - const Duration(milliseconds: 100)) PlaybackSleepTimer.instance.consumeEnd(this);
+      if (player.state.duration > Duration.zero && position >= player.state.duration - const Duration(milliseconds: 100)) {
+        if (PlaybackSleepTimer.instance.consumeEnd(this)) _sleepPreventAdvance = true;
+      }
       _checkABLoop(position);
       // 更新播放位置到历史记录
       _updatePlaybackPosition(position);
@@ -542,6 +550,17 @@ class _MPVPlayerState extends State<MPVPlayer>
       // 同步到 Audio Service
       _updatePlaybackState();
       _updateMediaItem();
+    }));
+
+    _subscriptions.add(player.stream.completed.listen((completed) {
+      if (!completed) { _completionHandled = false; return; }
+      if (_completionHandled || _disposing || !mounted || _openingMedia || _serverTransitioning) return;
+      _completionHandled = true;
+      if (PlaybackSleepTimer.instance.consumeEnd(this)) _sleepPreventAdvance = true;
+      if (widget.onAdjacentMedia != null && _autoNextEpisode && !_sleepPreventAdvance &&
+          _loopMode == PlaylistMode.none && _playbackError == null) {
+        unawaited(_advanceServerMedia(true, automatic: true));
+      }
     }));
 
     // 监听缓冲状态
@@ -1249,8 +1268,9 @@ class _MPVPlayerState extends State<MPVPlayer>
     final media = _mediaFor(url);
     _historyId = media?.id ?? PlaybackMedia.localId(url);
     final previous = await _historyService.getHistoryByPath(_historyId);
-    _resumePosition = !_initialSeekConsumed && widget.initialPositionMs != null ? widget.initialPositionMs
-      : _useSeekToLatest ? (previous?.lastPosition ?? media?.startPositionMs) : null;
+    _resumePosition = _nextInitialPositionMs ?? (!_initialSeekConsumed && widget.initialPositionMs != null ? widget.initialPositionMs
+      : _useSeekToLatest ? (previous?.lastPosition ?? media?.startPositionMs) : null);
+    _nextInitialPositionMs = null;
     _initialSeekConsumed = true;
     _hasRestoredPosition = false;
     _lastPosition = Duration.zero;
@@ -1354,7 +1374,53 @@ class _MPVPlayerState extends State<MPVPlayer>
     });
   }
 
+  Future<void> _advanceServerMedia(bool forward, {bool automatic = false}) async {
+    final current = _mediaFor(_currentFilePath);
+    if (current == null || widget.onAdjacentMedia == null || _serverTransitioning ||
+        _openingMedia || _disposing || !mounted || _pipController != null) return;
+    setState(() => _serverTransitioning = true);
+    PlaybackMedia? prepared;
+    var adopted = false;
+    try {
+      prepared = await widget.onAdjacentMedia!(current, forward);
+      if (!mounted || _disposing) return;
+      if (prepared == null) {
+        if (!automatic) ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(forward ? '已经是最后一集' : '已经是第一集')));
+        return;
+      }
+      final oldPosition = _lastPosition.inMilliseconds;
+      await player.pause();
+      await _flushPosition();
+      await player.stop();
+      if (!mounted || _disposing) return;
+      if (widget.onPlayback != null) {
+        unawaited(widget.onPlayback!(current, oldPosition, true, false).catchError((_) {}));
+      }
+      _activeServerMedia = prepared;
+      _playlist = [File(prepared.url)];
+      _originalPlaylist = List.from(_playlist);
+      _nextInitialPositionMs = forward ? 0 : (prepared.startPositionMs ?? 0);
+      _sleepPreventAdvance = false;
+      _completionHandled = false;
+      _pointA = null;
+      _pointB = null;
+      adopted = true;
+      await _openMedia(prepared.url);
+    } catch (_) {
+      if (mounted && !_disposing) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('切集失败，请检查网络后点击上一集或下一集重试')));
+    } finally {
+      if (prepared != null && !adopted) {
+        try { await widget.onDiscardMedia?.call(prepared); } catch (_) {}
+      }
+      _serverTransitioning = false;
+      if (mounted && !_disposing) setState(() {});
+    }
+  }
+
   void _playNext() {
+    if (widget.onAdjacentMedia != null) { unawaited(_advanceServerMedia(true)); return; }
     if (_pipController != null) return;
     if (_playlist.isEmpty) return;
     _currentIndex = (_currentIndex + 1) % _playlist.length;
@@ -1362,6 +1428,7 @@ class _MPVPlayerState extends State<MPVPlayer>
   }
 
   void _playPrevious() {
+    if (widget.onAdjacentMedia != null) { unawaited(_advanceServerMedia(false)); return; }
     if (_pipController != null) return;
     if (_playlist.isEmpty) return;
     _currentIndex = (_currentIndex - 1 + _playlist.length) % _playlist.length;
@@ -2083,7 +2150,7 @@ class _MPVPlayerState extends State<MPVPlayer>
                 if (_seeking && _seekPosition != null) _buildSeekIndicator(),
 
                 // 缓冲指示器
-                if (_isBuffering && _playbackError == null) _buildBufferingIndicator(),
+                if ((_isBuffering || _serverTransitioning) && _playbackError == null) _buildBufferingIndicator(),
                 if (_playbackError != null) PlaybackFailure(
                   message: _playbackError!,
                   onRetry: _openingMedia ? null : () => _openMedia(_currentFilePath.isEmpty ? widget.filePath : _currentFilePath),
@@ -2848,6 +2915,10 @@ class _MPVPlayerState extends State<MPVPlayer>
                         ),
                         ListTile(leading: const Icon(Icons.tune, color: Colors.white), title: const Text('字幕同步、书签与章节', style: TextStyle(color: Colors.white)), onTap: _showPlaybackTools),
                         ListTile(leading: const Icon(Icons.bedtime_outlined, color: Colors.white), title: const Text('定时停止', style: TextStyle(color: Colors.white)), onTap: () => showSleepTimer(context)),
+                        if (widget.onAdjacentMedia != null) SwitchListTile(
+                          title: const Text('连续播放下一集', style: TextStyle(color: Colors.white)),
+                          value: _autoNextEpisode,
+                          onChanged: (value) => setState(() => _autoNextEpisode = value)),
                         _buildSettingItem(
                           title: '循环模式',
                           child: SegmentedButton<PlaylistMode>(

@@ -301,6 +301,14 @@ class MediaServerClient {
     return MediaServerItem.fromJson(result.data!);
   }
 
+  /// Release a prepared stream that never entered playback without recording a
+  /// spurious zero-position viewing session on the server.
+  Future<void> discardPlayback(PlaybackMedia media) async {
+    final session = _sessions.remove(media.url);
+    _reporters.remove(media.url);
+    await session?.close();
+  }
+
   Future<void> report(
       PlaybackMedia media, int positionMs, bool stopped, bool playing) {
     final session = _sessions[media.url];

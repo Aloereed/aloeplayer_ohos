@@ -7,6 +7,7 @@ import '../services/media_server_catalog.dart';
 import '../widgets/media_server_poster.dart';
 import '../widgets/media_server_playback_dialog.dart';
 import '../services/media_server_playback.dart';
+import '../services/media_server_sequence.dart';
 
 class MediaServerDetailPage extends StatefulWidget {
   final MediaServerConnection connection;
@@ -24,6 +25,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
   final _lifetime = CancelToken();
   CancelToken? _detailCancel;
   CancelToken? _childrenCancel;
+  CancelToken? _playbackCancel;
   int _generation = 0, _nextStart = 0;
   bool _loading = true, _childrenBusy = false, _more = false, _acting = false;
   String? _error, _childrenError, _actionError;
@@ -41,6 +43,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
     _lifetime.cancel('Detail closed');
     _detailCancel?.cancel();
     _childrenCancel?.cancel();
+    _playbackCancel?.cancel('Detail closed');
     if (widget.client == null) unawaited(_client.close());
     super.dispose();
   }
@@ -154,10 +157,20 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
       _acting = true;
       _actionError = null;
     });
+    final playbackLifetime = _playbackCancel = CancelToken();
     try {
       final media = await _client.playback(_item,
-          cancelToken: _lifetime, options: _playOptions);
-      if (!mounted) return;
+          cancelToken: playbackLifetime, options: _playOptions);
+      if (!mounted) {
+        await _client.discardPlayback(media);
+        return;
+      }
+      final sequence = MediaServerSequence(
+          client: _client,
+          cancelToken: playbackLifetime,
+          item: _item,
+          media: media,
+          options: _playOptions);
       await Navigator.push(
           context,
           MaterialPageRoute(
@@ -165,11 +178,17 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
                   filePath: media.url,
                   mediaQueue: [media],
                   initialPositionMs: fromStart ? 0 : _item.resumeMs,
-                  onPlayback: _client.report)));
+                  onPlayback: _client.report,
+                  onDiscardMedia: sequence.discard,
+                  onAdjacentMedia:
+                      sequence.enabled ? sequence.adjacent : null)));
+      playbackLifetime.cancel('Player closed');
       if (mounted) await _load();
     } catch (_) {
       if (mounted) setState(() => _actionError = '播放准备失败，请检查服务器媒体源或重新登录');
     } finally {
+      playbackLifetime.cancel('Player closed');
+      if (_playbackCancel == playbackLifetime) _playbackCancel = null;
       if (mounted) setState(() => _acting = false);
     }
   }

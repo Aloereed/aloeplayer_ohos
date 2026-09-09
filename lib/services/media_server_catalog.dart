@@ -146,6 +146,53 @@ extension MediaServerCatalog on MediaServerClient {
         method: value ? 'POST' : 'DELETE');
   }
 
+  Future<MediaServerItem?> adjacentEpisode(MediaServerItem current,
+      {required bool forward, CancelToken? cancelToken}) async {
+    final series = current.seriesId;
+    if (current.type != 'Episode' || series == null) return null;
+    final route = 'Shows/${Uri.encodeComponent(series)}/Episodes';
+    final nearby = await catalogRequest(route, route,
+        cancelToken: cancelToken,
+        query: {
+          'AdjacentTo': current.id,
+          'Limit': 3,
+          'Fields': 'Overview',
+          'IsMissing': false
+        });
+    final neighbours = _page(nearby.data, 0, 3).items;
+    final index = neighbours.indexWhere((item) => item.id == current.id);
+    final target = index + (forward ? 1 : -1);
+    if (index >= 0 &&
+        target >= 0 &&
+        target < neighbours.length &&
+        neighbours[target].type == 'Episode') {
+      return neighbours[target];
+    }
+    // Older servers can ignore AdjacentTo. Scan pages only when the nearby
+    // result cannot prove a neighbour; do not wrap the last episode to the first.
+    final seen = <String>{};
+    MediaServerItem? previous;
+    var found = false, start = 0;
+    while (true) {
+      final page = await episodes(series,
+          start: start, limit: 200, cancelToken: cancelToken);
+      var added = 0;
+      for (final item in page.items) {
+        if (!seen.add(item.id)) continue;
+        added++;
+        if (item.type != 'Episode') continue;
+        if (found && forward) return item;
+        if (item.id == current.id) {
+          if (!forward) return previous;
+          found = true;
+        }
+        previous = item;
+      }
+      if (!page.hasMore || added == 0 || page.nextStart <= start) return null;
+      start = page.nextStart;
+    }
+  }
+
   Future<void> setPlayed(String id, bool value) async {
     // Stable on both implementations; current Jellyfin still supports this route.
     final route = 'Users/$_user/PlayedItems/${Uri.encodeComponent(id)}';

@@ -144,6 +144,19 @@ void main() {
             seasonId: seasons.items.single.id, start: 2, limit: 2);
         expect(last.items, hasLength(1));
         expect(last.hasMore, isFalse);
+        expect(
+            (await client.adjacentEpisode(episodes.items.first, forward: true))
+                ?.id,
+            episodes.items[1].id);
+        expect(
+            await client.adjacentEpisode(episodes.items.first, forward: false),
+            isNull);
+        expect(
+            (await client.adjacentEpisode(last.items.single, forward: false))
+                ?.id,
+            episodes.items[1].id);
+        expect(await client.adjacentEpisode(last.items.single, forward: true),
+            isNull);
         await client.setPlayed(episodes.items.first.id, true);
         expect((await client.details(episodes.items.first.id)).played, isTrue);
         // Emby's NextUp also needs actual playback history (LastPlayedDate),
