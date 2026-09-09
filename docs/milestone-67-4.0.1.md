@@ -1,6 +1,6 @@
 # 里程碑 67：4.0.1、反馈入口与无声 HDR 定时
 
-版本 **4.0.1+220**。归档目录 `build/milestones/67-4.0.1-hdr-timing-feedback/`；源码提交、包版本、时间戳和 SHA-256 见归档 manifest.json。
+版本 **4.0.1+220**。归档目录 `build/milestones/67-hdr-timing-feedback/`；源码提交、包版本、时间戳和 SHA-256 见归档 manifest.json。
 
 ## 用户可见变化
 
@@ -22,7 +22,7 @@
 | 修复后 SHA-256 | `7438FCC2AAC0E0BBF2F7ED7F04C286EFD2A06BC5BCB8C2212A3123FCA1F1DFF5` |
 | 文件偏移 | `0x26922dc`、`0x2693144`，各 `0x14 → 0x04` |
 
-原生测试通过 ELF RELA 重定位按驱动名称及描述独立定位 caps，确认纹理驱动未改；还检查精确字节差异、幂等、未修复库验证失败及未知库拒绝。打包后将包内 `libs/arm64-v8a/libmpv.so.2` 与修复后的库逐字节核验。
+原生测试通过 ELF RELA 重定位按驱动名称及描述独立定位 caps，确认纹理驱动未改；还检查精确字节差异、幂等、未修复库验证失败及未知库拒绝。打包后将包内 `libs/arm64-v8a/libmpv.so.2` 的所有运行时 SHF_ALLOC 段与修复后的库逐字节核验；允许 Hvigor 删除非运行时的调试/符号信息。
 
 ## 验证和部署
 
@@ -32,3 +32,5 @@
 - 构建：`./build.ps1 hap debug -Offline -Locked -NoVersionBump`。规范未签名 HAP 路径及时间戳由构建脚本检查。
 - 没有访问鸿蒙设备。真机请重点验证无音轨 HDR、不支持音频格式的 HDR、正常有声 HDR，以及暂停/恢复、拖动、倍速和直出/纹理切换。QQ 拉起也需已安装 QQ 的设备验证。
 - 最新包有问题时可按 [安装包索引](../build/milestones/README.md) 回退 66；旧归档包未被改写。
+
+构建源码提交：`dab78d6`；规范未签名 HAP 时间戳：`2026-09-09T08:44:38.9411542+08:00`。签名 HAP 构建成功，包内运行时段与修复库核验通过。

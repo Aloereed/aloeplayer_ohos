@@ -58,6 +58,19 @@ def driver_caps(data):
     return result
 
 
+def loaded_sections(data):
+    # Hvigor strips debug/symbol tables. Compare every runtime SHF_ALLOC section
+    # instead of the whole file so stripping is allowed, code/data changes aren't.
+    shoff = struct.unpack_from('<Q', data, 40)[0]
+    count = struct.unpack_from('<H', data, 60)[0]
+    result = {}
+    for i in range(count):
+        s = struct.unpack_from('<IIQQQQIIQQ', data, shoff + i * 64)
+        if s[2] & 2:
+            result[(s[3], s[1], s[5])] = b'' if s[1] == 8 else data[s[4]:s[4] + s[5]]
+    return result
+
+
 def main():
     repaired = LIB.read_bytes()
     assert hashlib.sha256(repaired).hexdigest() == REPAIRED
@@ -90,9 +103,9 @@ def main():
     if len(sys.argv) > 1:
         with zipfile.ZipFile(sys.argv[1]) as hap:
             packaged = hap.read('libs/arm64-v8a/libmpv.so.2')
-        assert packaged == repaired, 'HAP must contain the repaired library'
-        assert driver_caps(packaged)['ohcodec'] == 4
-        print('PASS: HAP contains the exact repaired OHCodec library')
+        assert loaded_sections(packaged) == loaded_sections(repaired), 'HAP runtime code/data must match the repaired library'
+        assert driver_caps(packaged) == driver_caps(repaired)
+        print('PASS: HAP runtime sections match the repaired library; stripping only non-runtime data is allowed')
 
 
 if __name__ == '__main__':

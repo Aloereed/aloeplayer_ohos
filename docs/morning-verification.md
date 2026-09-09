@@ -1,6 +1,6 @@
 # 明早部署与验收
 
-**2026-09-09 最新：66-ipv6-network-compatibility / 4.0.0+219 / b64c1a8**。本轮 WebDAV / SMB 改进与验收请先读 [网络媒体库交付说明](network-library-handoff.md)。下方 IAP 等内容为历史专项记录。
+**2026-09-09 最新：67-hdr-timing-feedback / 4.0.1+220 / dab78d6**。新增 QQ 反馈、测试直链及无声 HDR 定时修复，见 [4.0.1 说明](milestone-67-4.0.1.md)。WebDAV / SMB 的专项验收见 [网络媒体库交付说明](network-library-handoff.md)。下方 IAP 等内容为历史专项记录。
 
 先打开 [安装包索引](../build/milestones/README.md)，从第一行的签名 HAP 开始。最新版本正常，就保留最新版本。所有版本都没有真机验证记录。
 
