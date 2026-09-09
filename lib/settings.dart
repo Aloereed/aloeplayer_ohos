@@ -2365,6 +2365,29 @@ class _SettingsTabState extends State<SettingsTab> {
         Card(
           elevation: 0,
           child: ListTile(
+            leading: const Icon(Icons.forum_outlined, color: Colors.lightBlue),
+            title: const Text('进群吐槽'),
+            subtitle: const Text('打开 QQ，和大家聊聊使用体验'),
+            trailing: const Icon(Icons.open_in_new, color: Colors.grey),
+            onTap: () async {
+              var opened = false;
+              try {
+                opened = await launchUrl(
+                  Uri.parse('mqqapi://card/show_pslcard?src_type=internal&version=1&uin=936959829&card_type=group&source=qrcode'),
+                  mode: LaunchMode.externalApplication,
+                );
+              } catch (_) {}
+              if (!opened && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('暂时无法打开 QQ，请确认已安装 QQ 后重试。'),
+                ));
+              }
+            },
+          ),
+        ),
+        Card(
+          elevation: 0,
+          child: ListTile(
             leading: const Icon(Icons.feedback_outlined, color: Colors.lightBlue),
             title: const Text('用户反馈'),
             subtitle: const Text('反馈问题或建议，无需登录'),

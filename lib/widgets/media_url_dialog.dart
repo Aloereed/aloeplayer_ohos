@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/media_url.dart';
 
+// Public sample used by the official Alibaba Cloud player documentation.
+const sampleMediaUrl = 'https://player.alicdn.com/video/aliyunmedia.mp4';
+
 Future<String?> showMediaUrlDialog(BuildContext context) => showDialog<String>(
   context: context, builder: (_) => const _MediaUrlDialog());
 
@@ -47,6 +50,14 @@ class _MediaUrlDialogState extends State<_MediaUrlDialog> {
         mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(mediaUrlHint, style: TextStyle(fontWeight: FontWeight.w600)),
+          TextButton(
+            onPressed: _busy ? null : () => setState(() {
+              _text.text = sampleMediaUrl;
+              _selected = null;
+              _error = null;
+            }),
+            child: const Text('测试链接', style: TextStyle(decoration: TextDecoration.underline)),
+          ),
           const SizedBox(height: 16),
           TextField(controller: _text, enabled: !_busy, minLines: 2, maxLines: 4,
             decoration: const InputDecoration(labelText: '链接或分享文本', border: OutlineInputBorder()),

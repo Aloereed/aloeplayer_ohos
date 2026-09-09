@@ -160,6 +160,7 @@ try {
     # localize paths before Hvigor consumes that generated file.
     Write-Host "阶段 2/3: 准备 OHOS 插件路径" -ForegroundColor Cyan
     & $preparePluginsScript -ProjectRoot $projectRoot
+    & (Join-Path $projectRoot 'tool\repair_mpv_timing.ps1') -ProjectRoot $projectRoot
 
     # --no-pub is intentional only in this second phase: dependencies were
     # refreshed immediately above, and another implicit pub get would overwrite
