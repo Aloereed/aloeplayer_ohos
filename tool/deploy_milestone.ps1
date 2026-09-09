@@ -9,10 +9,10 @@ $project = Split-Path -Parent $PSScriptRoot
 $root = Join-Path $project 'build\milestones'
 if ($Name -eq 'latest') {
     $Name = (Get-ChildItem -LiteralPath $root -Directory | Where-Object {
-        $_.Name -match '^\d{2}-' -and (Get-Content (Join-Path $_.FullName 'manifest.json') -Raw | ConvertFrom-Json).deployable -ne $false
-    } | Sort-Object Name -Descending | Select-Object -First 1).Name
+        $_.Name -match '^\d{2,}-' -and (Get-Content (Join-Path $_.FullName 'manifest.json') -Raw | ConvertFrom-Json).deployable -ne $false
+    } | Sort-Object { [int]($_.Name.Split('-')[0]) } -Descending | Select-Object -First 1).Name
 }
-if ($Name -notmatch '^\d{2}-[a-zA-Z0-9_-]+$') { throw 'Invalid milestone name.' }
+if ($Name -notmatch '^\d{2,}-[a-zA-Z0-9_-]+$') { throw 'Invalid milestone name.' }
 if ($Target -and $Target -notmatch '^[a-zA-Z0-9_.:-]+$') { throw 'Invalid HDC target.' }
 $directory = Join-Path $root $Name
 $manifest = Get-Content -LiteralPath (Join-Path $directory 'manifest.json') -Raw | ConvertFrom-Json

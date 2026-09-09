@@ -322,6 +322,11 @@ class OhosVideoController extends PlatformVideoController {
           'force-window': 'yes',
           'sub-use-margins': 'no',
           'sub-scale-with-window': 'no',
+          // SRT has no embedded fonts/styles. Load system fonts explicitly:
+          // OHOS mpv builds may not have a usable fontconfig configuration.
+          // osd-font alone does not configure libass's plain-text subtitles.
+          'sub-fonts-dir': '/system/fonts',
+          'sub-font': 'HarmonyOS Sans SC',
           'osd-font': 'HarmonyOS Sans SC',
         },
       );

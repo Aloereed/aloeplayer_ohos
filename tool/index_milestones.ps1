@@ -5,7 +5,7 @@ $root = Join-Path $project 'build\milestones'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $rows = @()
 $verified = 0
-$orderedMilestones = @(Get-ChildItem -LiteralPath $root -Directory | Where-Object { $_.Name -match '^\d{2}-' } | Sort-Object Name -Descending)
+$orderedMilestones = @(Get-ChildItem -LiteralPath $root -Directory | Where-Object { $_.Name -match '^\d{2,}-' } | Sort-Object { [int]($_.Name.Split('-')[0]) } -Descending)
 $deployableMilestones = @($orderedMilestones | Where-Object { (Get-Content (Join-Path $_.FullName 'manifest.json') -Raw | ConvertFrom-Json).deployable -ne $false })
 $rollbackExample = if ($deployableMilestones.Count -gt 1) { $deployableMilestones[1].Name } else { $deployableMilestones[0].Name }
 foreach ($directory in $orderedMilestones) {

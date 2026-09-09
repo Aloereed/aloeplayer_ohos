@@ -178,6 +178,9 @@ class OhosVideoController extends PlatformVideoController {
         'force-window': 'yes',
         'sub-use-margins': 'no',
         'sub-scale-with-window': 'no',
+        // Plain-text subtitles need their own font, independent of OSD.
+        'sub-fonts-dir': '/system/fonts',
+        'sub-font': 'HarmonyOS Sans SC',
         'osd-font': 'HarmonyOS Sans SC',
       },
     );
