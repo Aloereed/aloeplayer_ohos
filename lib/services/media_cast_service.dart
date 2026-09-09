@@ -6,6 +6,7 @@ import 'package:mime/mime.dart';
 import 'package:xml/xml.dart';
 import '../models/cast_device.dart';
 import 'cast_media_relay.dart';
+import 'cast_network_address.dart';
 import 'http_service.dart';
 
 class MediaCastService extends ChangeNotifier {
@@ -139,13 +140,16 @@ class MediaCastService extends ChangeNotifier {
     }
     if (activeDevice != null) {
       final destination = Uri.parse(activeDevice!.device.client.LOCATION);
-      final socket = await Socket.connect(destination.host, destination.port,
-          timeout: const Duration(seconds: 4));
-      try {
-        return socket.address.address;
-      } finally {
-        socket.destroy();
-      }
+      final interfaces = await localInterfaces();
+      // Prefer Wi-Fi, but verify each candidate by binding the outgoing probe
+      // to it. The receiver must be given our address, never its own address.
+      final wifi = RegExp(r'wlan|wi-?fi|^en0$', caseSensitive: false);
+      final ordered = [
+        ...interfaces.where((i) => wifi.hasMatch(i.name)),
+        ...interfaces.where((i) => !wifi.hasMatch(i.name)),
+      ];
+      return selectCastSourceAddress(
+          destination, ordered.expand((i) => i.addresses));
     }
     final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
