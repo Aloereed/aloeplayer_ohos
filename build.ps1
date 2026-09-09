@@ -166,7 +166,7 @@ try {
         if ($BuildType -ne 'hap' -or $Config -ne 'debug') {
             throw 'Comparison MPV libraries are allowed only for debug HAP signing.'
         }
-        $comparisonLibrary = Join-Path $projectRoot 'ohos\entry\src\main\cpp\thirdparty\mpv\arm64-v8a\lib\libmpv.so.2'
+        $comparisonLibrary = Join-Path $projectRoot 'ohos\entry\src\main\cpp\thirdparty\mpv\arm64-v8a\lib\libmpv.so'
         if ((Get-FileHash -LiteralPath $comparisonLibrary -Algorithm SHA256).Hash -ne $ComparisonMpvSha256) {
             throw 'Comparison MPV library does not match the explicitly requested SHA256.'
         }

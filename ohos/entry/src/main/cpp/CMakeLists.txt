@@ -233,7 +233,7 @@ target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libxe
 target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libxml2/arm64-v8a/lib/libxml2.so)
 target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libzip/arm64-v8a/lib/libzip.so.5)
 target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/lilv/arm64-v8a/lib/liblilv-0.so.0)
-target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/mpv/arm64-v8a/lib/libmpv.so.2)
+target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/mpv/arm64-v8a/lib/libmpv.so)
 target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/openal-soft/arm64-v8a/lib/libopenal.so.1)
 target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/openjpeg/arm64-v8a/lib/libopenjp2.so.7)
 target_link_libraries(entry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/openssl3/arm64-v8a/lib/libssl.a)

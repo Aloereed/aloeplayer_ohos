@@ -237,7 +237,8 @@ Future<void> _initializeAfterFirstFrame(ThemeProvider themeProvider) async {
 
   // 每一项独立失败，避免某个插件阻塞其余初始化或首屏。
   await runStep('theme settings', themeProvider.initialize);
-  await runStep('MediaKit', MediaKit.ensureInitialized);
+  await runStep('MediaKit', () => MediaKit.ensureInitialized(
+      libmpv: Platform.operatingSystem == 'ohos' ? 'libmpv.so' : null));
   await runStep('Wakelock', () async {
     await Wakelock.enable();
   });
@@ -337,7 +338,8 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
-    MediaKit.ensureInitialized();
+    MediaKit.ensureInitialized(
+        libmpv: Platform.operatingSystem == 'ohos' ? 'libmpv.so' : null);
 
     // 延迟加载字体，避免阻塞 UI 初始化
     WidgetsBinding.instance.addPostFrameCallback((_) {

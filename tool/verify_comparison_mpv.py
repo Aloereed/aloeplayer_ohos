@@ -12,12 +12,13 @@ def main():
     parser.add_argument('library', type=Path)
     parser.add_argument('hap', type=Path)
     parser.add_argument('--sha256', required=True)
+    parser.add_argument('--entry', default='libs/arm64-v8a/libmpv.so.2')
     args = parser.parse_args()
     original = args.library.read_bytes()
     if hashlib.sha256(original).hexdigest() != args.sha256.lower():
         raise SystemExit('FAIL: original library SHA256 mismatch')
     with zipfile.ZipFile(args.hap) as hap:
-        packaged = hap.read('libs/arm64-v8a/libmpv.so.2')
+        packaged = hap.read(args.entry)
     for data in (original, packaged):
         if data[:6] != b'\x7fELF\x02\x01' or data[18:20] != b'\xb7\x00':
             raise SystemExit('FAIL: expected little-endian AArch64 ELF64')
