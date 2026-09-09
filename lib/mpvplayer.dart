@@ -1,3 +1,5 @@
+import 'widgets/playback_failure.dart';
+import 'services/shortcut_source.dart';
 import 'screens/cast_screen_page.dart' show CastScreenPage;
 import 'widgets/native_ass_overlay.dart';
 import 'services/mpv_output_policy.dart';
@@ -93,37 +95,8 @@ class BrightnessSliderTimer {
   }
 }
 
-// Helper function to resolve .lnk files
-Future<String> resolveLnkFile(String filePath) async {
-  try {
-    final file = File(filePath);
-
-    // Check if file has .lnk extension (case insensitive)
-    if (file.path.toLowerCase().endsWith('.lnk')) {
-      // Read .lnk file as text
-      final content = await file.readAsString(encoding: utf8);
-
-      // Trim whitespace and return the real path
-      final realPath = content.trim();
-
-      // If the content is empty or just whitespace, return original path
-      if (realPath.isEmpty) {
-        print('Warning: .lnk file is empty: $filePath');
-        return filePath;
-      }
-
-      print('Resolved .lnk file: $filePath -> $realPath');
-      return realPath;
-    }
-
-    // Not a .lnk file, return original path
-    return filePath;
-  } catch (e) {
-    print('Error resolving .lnk file $filePath: $e');
-    // Return original path if there's an error
-    return filePath;
-  }
-}
+// Metadata lookups resolve the same URI encoding as playback, without granting access.
+Future<String> resolveLnkFile(String filePath) => resolveMediaShortcut(filePath, activate: false, checkReadable: false);
 
 // 解析弹幕XML文件的函数
 List<Map<String, dynamic>> parseDanmakuXml(String xmlString) {
@@ -414,6 +387,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
   // 缓冲相关
   bool _isBuffering = false;
+  String? _playbackError;
   // removed _isPcModeEnabled per user request to fetch fresh every time
 
   // Audio Service 相关
@@ -503,10 +477,11 @@ class _MPVPlayerState extends State<MPVPlayer>
         _nativeFailed = true;
         _outputNotice('直出遇到兼容性问题，已自动切回纹理播放');
         unawaited(_updateOutput());
+        return;
       }
-      if (mounted && widget.filePath.startsWith('http')) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(mediaUrlFailure), duration: Duration(seconds: 10)));
+      if (mounted && !_disposing && (!_nativeHdr || _nativeFailed)) {
+        final guidance = isMediaShortcut(_currentFilePath) ? shortcutAccessMessage : '请检查文件是否仍可访问，或尝试其他解码方式。';
+        _showPlaybackError(_currentFilePath.startsWith('http') ? mediaUrlFailure : '播放失败：$error\n$guidance');
       }
     }));
     _subscriptions.add(player.stream.videoParams.listen((video) {
@@ -569,7 +544,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     _subscriptions.add(player.stream.buffering.listen((buffering) {
       if (mounted) {
         setState(() {
-          _isBuffering = buffering;
+          _isBuffering = buffering && _playbackError == null;
         });
       }
     }));
@@ -1082,59 +1057,35 @@ class _MPVPlayerState extends State<MPVPlayer>
   Future<void> _openMedia(String filePath) async {
     if (_openingMedia || !mounted || _disposing) return;
     _openingMedia = true;
+    setState(() { _playbackError = null; _isBuffering = true; });
     try {
     await _flushPosition();
-    // 检查是否为HTTP/HTTPS URL
-    final isHttpUrl =
-        filePath.startsWith('http://') || filePath.startsWith('https://');
-
+    final isHttpUrl = filePath.startsWith('http://') || filePath.startsWith('https://');
     final isFileUrl = filePath.startsWith('file://');
-
-    // 根据是否为HTTP URL选择不同的处理方式
-    String resolvedPath;
-    if (isHttpUrl) {
-      // HTTP URL直接使用，不需要解析.lnk
-      resolvedPath = filePath;
-    } else if (isFileUrl) {
-      // 处理file:// URI
-      filePath = convertUriToPath(filePath);
-      resolvedPath = await resolveLnkFile(filePath);
-    } else {
-      // 本地文件需要解析.lnk
-      resolvedPath = await resolveLnkFile(filePath);
-    }
-
     if (!mounted || _disposing) return;
-    // 更新当前播放文件路径
-    setState(() {
-      _currentFilePath = filePath;
-    });
+    setState(() { _currentFilePath = filePath; });
+    final resolvedPath = filePath.startsWith('file://media/') && !isMediaShortcut(filePath)
+        ? convertUriToPath(filePath) : await resolveMediaShortcut(filePath);
+    if (!mounted || _disposing) return;
 
-    // 创建播放列表
-    final List<Media> mediaList = [];
-    if (widget.mediaQueue != null) {
-      for (final file in _playlist) { mediaList.add(Media(file.path, httpHeaders: _mediaFor(file.path)?.httpHeaders)); }
-      _currentIndex = _playlist.indexWhere((f) => f.path == filePath);
-      if (_currentIndex < 0) _currentIndex = 0;
-    } else if (isHttpUrl || isFileUrl) {
-      // HTTP URL直接创建单个媒体项
-      mediaList.add(Media(resolvedPath));
-    } else {
-      // 本地文件从播放列表创建
-      for (final file in _playlist) {
-        final path = await resolveLnkFile(file.path);
-        mediaList.add(Media(path));
+    final mediaList = <Media>[];
+    final openedPaths = <String>[];
+    final candidates = (widget.mediaQueue != null || (!isHttpUrl && !isFileUrl))
+        ? _playlist.map((file) => file.path).toList() : <String>[filePath];
+    if (!candidates.contains(filePath)) candidates.add(filePath);
+    for (final candidate in candidates) {
+      try {
+        final source = candidate == filePath ? resolvedPath : await resolveMediaShortcut(candidate);
+        mediaList.add(Media(source, httpHeaders: _mediaFor(candidate)?.httpHeaders));
+        openedPaths.add(candidate);
+      } catch (_) {
+        if (candidate == filePath) rethrow;
+        // A revoked or deleted neighbouring shortcut must not block this movie.
       }
     }
-
-    if (mediaList.isEmpty) mediaList.add(Media(resolvedPath));
-    _openedPaths = (widget.mediaQueue != null || (!isHttpUrl && !isFileUrl)) && _playlist.isNotEmpty
-        ? _playlist.map((f) => f.path).toList() : [filePath];
-    // A file picked outside the current folder must not open the first queue item.
-    if (!_openedPaths.contains(filePath)) {
-      mediaList.add(Media(resolvedPath, httpHeaders: _mediaFor(filePath)?.httpHeaders));
-      _openedPaths.add(filePath);
-    }
+    _openedPaths = openedPaths;
+    _currentIndex = _playlist.indexWhere((f) => f.path == filePath);
+    if (_currentIndex < 0) _currentIndex = 0;
     final selected = _openedPaths.indexOf(filePath);
     final playlist = Playlist(mediaList, index: selected < 0 ? 0 : selected);
     await _beginHistory(filePath);
@@ -1147,7 +1098,7 @@ class _MPVPlayerState extends State<MPVPlayer>
 
     // 打开播放列表
     PlaybackSleepTimer.instance.attach(this, () => player.pause());
-    await player.open(playlist);
+    await player.open(playlist).timeout(const Duration(seconds: 20));
     _readyForRestore = true;
     player.setPlaylistMode(_loopMode);
     _tryRestorePosition();
@@ -1164,8 +1115,14 @@ class _MPVPlayerState extends State<MPVPlayer>
     }
 
       } catch (e) {
-      if (mounted && !_disposing) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('播放失败: $e')));
-    } finally { _openingMedia = false; }
+      if (mounted && !_disposing) {
+        _showPlaybackError('播放失败：$e');
+        unawaited(player.stop().catchError((_) {}));
+      }
+    } finally {
+      _openingMedia = false;
+      if (mounted && !_disposing) setState(() {});
+    }
   }
 
   Future<void> _loadRemoteSubtitle(String url, List<String> candidates) async {
@@ -2090,7 +2047,11 @@ class _MPVPlayerState extends State<MPVPlayer>
                 if (_seeking && _seekPosition != null) _buildSeekIndicator(),
 
                 // 缓冲指示器
-                if (_isBuffering) _buildBufferingIndicator(),
+                if (_isBuffering && _playbackError == null) _buildBufferingIndicator(),
+                if (_playbackError != null) PlaybackFailure(
+                  message: _playbackError!,
+                  onRetry: _openingMedia ? null : () => _openMedia(_currentFilePath.isEmpty ? widget.filePath : _currentFilePath),
+                  onBack: () => Navigator.maybePop(context)),
 
                 // 设置面板背景遮罩（用于点击关闭）
                 if (_showSettings)
@@ -3661,6 +3622,11 @@ class _MPVPlayerState extends State<MPVPlayer>
       return '$hours:$minutes:$seconds';
     }
     return '$minutes:$seconds';
+  }
+
+  void _showPlaybackError(String message) {
+    if (!mounted || _disposing) return;
+    setState(() { _playbackError = message; _isBuffering = false; });
   }
 
   Widget _buildBufferingIndicator() {

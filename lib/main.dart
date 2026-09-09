@@ -1,3 +1,4 @@
+import 'services/shortcut_source.dart';
 import 'services/anime4k_shaders.dart';
 import 'services/member_access.dart';
 import 'services/ohos_iap_service.dart';
@@ -635,6 +636,14 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void startPlayerPage(BuildContext context, {bool forceHdr = false}) async {
+    final selectedFile = _openfile;
+    try {
+      if (isMediaShortcut(selectedFile)) await resolveMediaShortcut(selectedFile);
+    } catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+      return;
+    }
+    if (!context.mounted) return;
     // 检查是否需要显示播放器选择弹窗
     final shouldShowPlayerSelection = await _shouldShowPlayerSelectionDialog();
     if (shouldShowPlayerSelection) {
@@ -659,13 +668,13 @@ class _HomeScreenState extends State<HomeScreen>
     bool isHdr = false;
     if (useFfmpegForPlay != 2 && useFfmpegForPlay != 4 && !forceHdr && hdrForHdr) {
       try {
-        isHdr = await _getHdr(File(_openfile));
+        isHdr = await _getHdr(File(selectedFile));
       } catch (_) {}
     }
     if (!context.mounted) return;
     if (useFfmpegForPlay == 2 || useFfmpegForPlay == 4 || forceHdr || (isHdr && hdrForHdr)) {
       Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => MPVPlayer(filePath: _openfile),
+        builder: (_) => MPVPlayer(filePath: selectedFile),
       ));
       return;
     }
@@ -677,11 +686,11 @@ class _HomeScreenState extends State<HomeScreen>
             opacity: animation,
             // 使用 PlayerTab 本身负责显示加载状态
             child: PlayerTab(
-              key: ValueKey(_openfile),
+              key: ValueKey(selectedFile),
               toggleFullScreen: _toggleFullScreen,
               isFullScreen: _isFullScreen,
               getopenfile: _getopenfile,
-              openfile: _openfile,
+              openfile: selectedFile,
               setHomeWH: setHomeWH,
             ),
           ),

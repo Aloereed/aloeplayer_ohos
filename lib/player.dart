@@ -1,3 +1,4 @@
+import 'services/shortcut_source.dart';
 import 'widgets/media_url_dialog.dart';
 import 'screens/cast_screen_page.dart' show CastScreenPage;
 import 'services/sleep_timer.dart';
@@ -2112,17 +2113,14 @@ class _PlayerTabState extends State<PlayerTab>
       }
       String originalUri = uri;
       // 检查file是否是".lnk"文件
-      if (uri.endsWith('.lnk')) {
-        // 读取文件内容
-        File lnkFile = File(uri);
-        uri = await lnkFile.readAsString();
-        // widget.openfile = uri;
-        String uri2 = uri;
-        if (!uri.contains(':')) {
-          uri2 = "file://docs" + uri;
-          uri2 = Uri.parse(uri2).toString();
+      if (isMediaShortcut(uri)) {
+        try { uri = await resolveMediaShortcut(uri); }
+        catch (error) {
+          if (mounted) await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+            title: const Text('无法打开快捷方式'), content: Text('$error'),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('知道了'))]));
+          return;
         }
-        await _settingsService.activatePersistPermission(uri2);
       }
       _videoController = VideoPlayerController.file(File(uri),
           videoPlayerOptions:

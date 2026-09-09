@@ -1,3 +1,4 @@
+import 'services/shortcut_source.dart';
 import 'widgets/media_url_dialog.dart';
 import 'widgets/library_toolbar_title.dart';
 import 'widgets/video_library_tile.dart';
@@ -364,7 +365,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, int> _fileSizes = {};
   final Map<String, Future<void>> _permissionRequests = {};
-  final Set<String> _activeShortcutUris = {};
+
   int _loadGeneration = 0;
   String? _libraryError;
   bool _isSearchFocused = false;
@@ -665,16 +666,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 //       }
 //     });
 //   }
-  String pathToUri(String path) {
-    if (path.contains(':')) {
-      return Uri.parse(path).toString();
-    } else if (path.startsWith('/Photos')) {
-      return Uri.parse("file://media" + path).toString();
-    } else {
-      return Uri.parse("file://docs" + path).toString();
-    }
-    return path;
-  }
+  String pathToUri(String path) => shortcutPermissionUri(path);
 
   Future<void> _loadItems() async {
     final generation = ++_loadGeneration;
@@ -716,8 +708,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     if (!file.path.endsWith('.lnk')) return Future.value();
     return _permissionRequests.putIfAbsent(file.path, () => (() async {
       final source = (await file.readAsString()).trim();
-      final uri = pathToUri(source);
-      if (!_activeShortcutUris.contains(uri) && await _settingsService.activatePersistPermission(uri)) _activeShortcutUris.add(uri);
+      await activateShortcutSource(source);
     })().whenComplete(() { _permissionRequests.remove(file.path); }));
   }
 
@@ -843,14 +834,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
 
       // 处理每个URI
       for (String uri in uris) {
-        String processedUri = uri;
-        if (processedUri.startsWith('file://docs')) {
-          // 删除file://docs并解析unicode码
-          processedUri = Uri.decodeFull(processedUri.substring(11));
-        }
-
-        // 为每个选中的文件创建链接
-        await _createLinkFile(processedUri);
+        await _createLinkFile(uri);
       }
     } else {
       // 用户取消了选择
@@ -887,7 +871,9 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
     )) ?? false;
 
   Future<void> _createLinkFile(String uri) async {
-    final fileName = path.basename(uri + ".lnk");
+    final parsed = Uri.tryParse(uri);
+    final displayName = parsed?.hasScheme == true ? parsed!.pathSegments.last : path.basename(uri);
+    final fileName = '${path.basename(displayName)}.lnk';
     final destinationPath = path.join(_currentPath, fileName);
     final destinationFile = File(destinationPath);
     bool deleteIfError = true;

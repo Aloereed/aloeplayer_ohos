@@ -3,29 +3,11 @@ import 'package:path/path.dart' as path;
 import '../history_service.dart';
 import '../models/catalog_item.dart';
 import '../models/playback_media.dart';
-import '../settings.dart';
+import 'shortcut_source.dart';
 
 Future<String> catalogSource(CatalogItem item, {bool activate = false}) async {
-  if (!item.filePath.endsWith('.lnk')) return item.filePath;
-  var source = (await File(item.filePath).readAsString()).trim();
-  if (source.isEmpty) throw const FileSystemException('快捷方式为空');
-  if (activate) {
-    final uri = Uri.tryParse(source);
-    final permissionUri = uri?.hasScheme == true
-        ? source
-        : Uri(
-                scheme: 'file',
-                host: source.startsWith('/Photos') ? 'media' : 'docs',
-                path: source)
-            .toString();
-    await SettingsService().activatePersistPermission(permissionUri);
-  }
-  final uri = Uri.tryParse(source);
-  if (uri?.scheme == 'file' && uri?.host == 'docs') source = uri!.path;
-  if (uri?.scheme == 'file' && uri?.host.isEmpty == true) {
-    source = uri!.toFilePath();
-  }
-  return source;
+  return resolveMediaShortcut(item.filePath,
+      activate: activate, checkReadable: activate);
 }
 
 Future<List<PlaybackMedia>> catalogQueue(
