@@ -9,6 +9,16 @@ import 'media_server_client.dart';
 import 'media_server_playback.dart';
 import 'cast_media_relay.dart';
 
+String mediaServerDownloadError(Object error) {
+  if (error is StateError) return error.message.toString();
+  if (error is FileSystemException) return '无法写入文件，请检查存储空间和访问权限';
+  if (error is DioException && error.response?.statusCode == 401)
+    return '登录已失效，请重新登录后继续下载';
+  if (error is DioException && error.response?.statusCode == 403)
+    return '服务器未允许此账号下载媒体';
+  return '下载连接失败，请检查服务器后重试';
+}
+
 class MediaServerDownloadFile implements RevisionFileItem {
   @override
   final String name, path;
@@ -66,6 +76,12 @@ class MediaServerDownloadSource
   Future<MediaServerDownloadFile> prepare(MediaServerItem item,
       {String? sourceId}) async {
     if (_closed) throw StateError('下载连接已关闭');
+    final user = await client.dio.get<Map<String, dynamic>>(
+        'Users/${Uri.encodeComponent(client.connection.userId)}',
+        cancelToken: _cancel);
+    if (user.data?['Policy']?['EnableContentDownloading'] == false) {
+      throw StateError('服务器管理员未允许此账号下载媒体');
+    }
     if (!['Movie', 'Episode', 'Video', 'MusicVideo', 'Audio']
             .contains(item.type) ||
         item.metadata['CanDownload'] == false) throw StateError('此媒体不支持下载原文件');

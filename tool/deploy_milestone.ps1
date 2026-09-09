@@ -8,12 +8,15 @@ $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
 $root = Join-Path $project 'build\milestones'
 if ($Name -eq 'latest') {
-    $Name = (Get-ChildItem -LiteralPath $root -Directory | Where-Object { $_.Name -match '^\d{2}-' } | Sort-Object Name -Descending | Select-Object -First 1).Name
+    $Name = (Get-ChildItem -LiteralPath $root -Directory | Where-Object {
+        $_.Name -match '^\d{2}-' -and (Get-Content (Join-Path $_.FullName 'manifest.json') -Raw | ConvertFrom-Json).deployable -ne $false
+    } | Sort-Object Name -Descending | Select-Object -First 1).Name
 }
 if ($Name -notmatch '^\d{2}-[a-zA-Z0-9_-]+$') { throw 'Invalid milestone name.' }
 if ($Target -and $Target -notmatch '^[a-zA-Z0-9_.:-]+$') { throw 'Invalid HDC target.' }
 $directory = Join-Path $root $Name
 $manifest = Get-Content -LiteralPath (Join-Path $directory 'manifest.json') -Raw | ConvertFrom-Json
+if ($manifest.deployable -eq $false) { throw 'This milestone is an internal candidate. Choose a newer deployable milestone.' }
 $signed = $manifest.artifacts | Where-Object { $_.name -eq 'entry-debug-signed.hap' } | Select-Object -First 1
 if (-not $signed) {
     $signed = $manifest.artifacts | Where-Object { $_.name -eq 'entry-default-signed.hap' } | Select-Object -First 1

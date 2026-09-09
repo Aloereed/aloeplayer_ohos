@@ -14,6 +14,8 @@ void main() {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     var mode = 'correct';
     var headSupported = true;
+    var downloadsAllowed = true;
+    var playbackInfoRequests = 0;
     final conditionals = <String?>[];
     final body = [1, 2, 3, 4, 5, 6];
     server.listen((request) async {
@@ -22,11 +24,17 @@ void main() {
       expect(request.uri.queryParameters.containsKey('api_key'), isFalse);
       final response = request.response;
       if (request.uri.path.endsWith('/PlaybackInfo')) {
+        playbackInfoRequests++;
         response.headers.contentType = ContentType.json;
         response.write(jsonEncode({
           'MediaSources': [
             {'Id': 'version', 'Container': 'mkv'}
           ]
+        }));
+      } else if (request.uri.path.endsWith('/Users/u')) {
+        response.headers.contentType = ContentType.json;
+        response.write(jsonEncode({
+          'Policy': {'EnableContentDownloading': downloadsAllowed}
         }));
       } else if (request.uri.path.endsWith('/Items/item')) {
         response.headers.contentType = ContentType.json;
@@ -72,6 +80,11 @@ void main() {
         await Directory.systemTemp.createTemp('aloe-server-download-');
     try {
       var file = await source.prepare(item);
+      final beforeDenied = playbackInfoRequests;
+      downloadsAllowed = false;
+      await expectLater(source.prepare(item), throwsStateError);
+      expect(playbackInfoRequests, beforeDenied);
+      downloadsAllowed = true;
       expect(
           await (await source.getFileStreamForRevision(file))
               .expand((bytes) => bytes)

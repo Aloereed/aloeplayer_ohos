@@ -230,7 +230,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
                     MaterialPageRoute(
                         builder: (_) => const DownloadsPage())))));
     } catch (error) {
-      if (mounted) setState(() => _actionError = '下载准备失败：$error');
+      if (mounted) setState(() => _actionError = mediaServerDownloadError(error));
     } finally {
       await source.disconnect();
       if (_downloadSource == source) _downloadSource = null;

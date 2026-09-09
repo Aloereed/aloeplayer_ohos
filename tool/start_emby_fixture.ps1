@@ -67,4 +67,13 @@ $state = @{processId=$fixtureProcess.Id;port=$fixturePort;url="http://127.0.0.1:
     archiveSource='https://github.com/MediaBrowser/Emby.Releases/releases/download/4.10.0.40/embyserver-win-x64-4.10.0.40.7z';
     archiveSha256='974F595F536A442DE28145337818E36423611C5F00910C5ABD1488ECB4DB3B32'}
 $state | ConvertTo-Json | Set-Content $stateFile -Encoding utf8
+$ready = $false
+for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    try {
+        Invoke-RestMethod -Uri "$($state.url)/Users/Public" -TimeoutSec 2 | Out-Null
+        $ready = $true
+        break
+    } catch { Start-Sleep -Milliseconds 500 }
+}
+if (-not $ready) { throw 'Fixture is still starting; inspect the recorded live process before retrying tests. Do not restart it blindly.' }
 $state | ConvertTo-Json

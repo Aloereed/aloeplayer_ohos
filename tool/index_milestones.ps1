@@ -6,7 +6,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $rows = @()
 $verified = 0
 $orderedMilestones = @(Get-ChildItem -LiteralPath $root -Directory | Where-Object { $_.Name -match '^\d{2}-' } | Sort-Object Name -Descending)
-$rollbackExample = if ($orderedMilestones.Count -gt 1) { $orderedMilestones[1].Name } else { $orderedMilestones[0].Name }
+$deployableMilestones = @($orderedMilestones | Where-Object { (Get-Content (Join-Path $_.FullName 'manifest.json') -Raw | ConvertFrom-Json).deployable -ne $false })
+$rollbackExample = if ($deployableMilestones.Count -gt 1) { $deployableMilestones[1].Name } else { $deployableMilestones[0].Name }
 foreach ($directory in $orderedMilestones) {
     $manifest = Get-Content -LiteralPath (Join-Path $directory.FullName 'manifest.json') -Raw | ConvertFrom-Json
     foreach ($artifact in $manifest.artifacts) {
@@ -44,13 +45,14 @@ foreach ($directory in $orderedMilestones) {
         $signedLink += " / [Release APP $($releaseApp.version)]($($directory.Name)/$($releaseApp.name))"
     }
     $unsignedLink = if ($unsigned) { "[未签名 HAP]($($directory.Name)/$($unsigned.name))" } else { '无' }
+    if ($manifest.deployable -eq $false) { $signedLink = '内部候选，不用于部署'; $unsignedLink = '内部候选' }
     $commit = $manifest.commit.Substring(0, 7)
     $rows += "| $($directory.Name) | $version | $commit | $signedLink | $unsignedLink | [来源清单]($($directory.Name)/manifest.json) |"
 }
 $lines = @(
     '# AloePlayer 鸿蒙版：里程碑安装包', '',
     '按下表从新到旧测试。每个包独立保留，SHA-256、构建时间和源码提交见来源清单。00 是工作开始前已有产物，来源不能视为本轮重建验证。', '',
-    '建议先安装第一行；最新版本正常即可停在最新版本。部署脚本支持 API 23+ 的调试签名降级安装，不执行卸载或清空数据。', '',
+    '建议先安装最上方可部署版本，跳过内部候选；最新版本正常即可停在最新版本。部署脚本支持 API 23+ 的调试签名降级安装，不执行卸载或清空数据。', '',
     ('在仓库根目录运行：`./tool/deploy_milestone.ps1`。指定上一版：`./tool/deploy_milestone.ps1 -Name ' + $rollbackExample + '`。只查看操作：加 `-DryRun`。'), '',
     'WebDAV / SMB 本轮交付：[部署与验证](../../docs/network-library-handoff.md)；[里程碑](../../docs/network-library-milestones.md)；[测试复现](../../docs/network-library-tests.md)。', '',
     '验收说明：[部署检查清单](../../docs/morning-verification.md)；[第三轮中文标题与鸿蒙设计](../../docs/round3-design.md)；[第二轮实现与局限](../../docs/round2-milestones.md)；[第一轮记录](../../docs/overnight-milestones.md)；[界面预览](../ui-review/index.html)。', '',

@@ -104,6 +104,17 @@ void main() {
         expect(path.isWithin('${fixture.path}/library', original), isTrue);
         final download = MediaServerDownloadSource(connection);
         try {
+          final userRoute = 'Users/${Uri.encodeComponent(connection.userId)}';
+          final user = await client.dio.get<Map<String, dynamic>>(userRoute);
+          final policy = Map<String, dynamic>.from(user.data!['Policy'] as Map);
+          try {
+            await client.dio.post('$userRoute/Policy',
+                data: {...policy, 'EnableContentDownloading': false});
+            await expectLater(
+                download.prepare(movie, sourceId: source.id), throwsStateError);
+          } finally {
+            await client.dio.post('$userRoute/Policy', data: policy);
+          }
           final file = await download.prepare(movie, sourceId: source.id);
           expect(file.size, await File(original).length());
           final full = await download.getFileStreamForRevision(file);

@@ -440,7 +440,10 @@ class DownloadManager extends ChangeNotifier {
     } catch (e) {
       if (task.status == DownloadStatus.downloading) {
         task.status = DownloadStatus.failed;
-        task.error = e.toString();
+        task.error =
+            task.serverId.startsWith(MediaServerDownloadSource.serverPrefix)
+                ? mediaServerDownloadError(e)
+                : e.toString();
       }
     } finally {
       try {
