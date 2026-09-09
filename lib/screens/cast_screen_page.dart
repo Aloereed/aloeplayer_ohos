@@ -59,12 +59,14 @@ class _CastScreenPageState extends State<CastScreenPage> {
     setState(() => _connecting = true);
     try {
       if (!await service.connectToDevice(device)) return;
-      if (await service.castMedia(widget.mediaPath,
+      await service.castMedia(widget.mediaPath,
           headers: widget.httpHeaders,
           title: widget.title,
           relayNetwork: _relayNetwork,
           isAudio: widget.isAudio,
-          startPosition: widget.initialPosition)) widget.onCastStarted?.call();
+          mediaDuration: widget.mediaDuration,
+          onPlaybackStarted: widget.onCastStarted,
+          startPosition: widget.initialPosition);
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
@@ -202,36 +204,6 @@ class _CastScreenPageState extends State<CastScreenPage> {
                                 label: const Text('复制错误详情')),
                           ]))),
             if (busy) const LinearProgressIndicator(),
-            Card(
-                child: ExpansionTile(title: const Text('投屏网络设置'), children: [
-              SwitchListTile(
-                  title: const Text('通过本机转发网络媒体'),
-                  subtitle: const Text(
-                      '帮助仅支持 HTTP 的电视读取 HTTPS、鉴权和 HLS 地址。关闭后，普通网络直链由电视直接读取。'),
-                  value: _relayNetwork,
-                  onChanged: busy || _systemPicker != null
-                      ? null
-                      : (value) => setState(() => _relayNetwork = value)),
-              ListTile(
-                  title: Text(service.preferredInterfaceAddress ?? '自动选择投屏网络'),
-                  subtitle:
-                      const Text('连接多个网络或 VPN 时，可手动选择 Wi-Fi 地址。更改将在下次投送时生效。'),
-                  trailing: PopupMenuButton<String>(
-                      tooltip: '选择投屏网络',
-                      enabled: !busy && _systemPicker == null,
-                      onSelected: (value) => setState(() =>
-                          service.preferredInterfaceAddress =
-                              value.isEmpty ? null : value),
-                      itemBuilder: (_) => [
-                            const PopupMenuItem(value: '', child: Text('自动选择')),
-                            for (final interface in _interfaces)
-                              for (final address in interface.addresses)
-                                PopupMenuItem(
-                                    value: address.address,
-                                    child: Text(
-                                        '${interface.name} · ${address.address}')),
-                          ])),
-            ])),
             if (active != null)
               Card(
                   child: Padding(
@@ -241,10 +213,17 @@ class _CastScreenPageState extends State<CastScreenPage> {
                           children: [
                             Text('已连接：${active.name}',
                                 style: Theme.of(context).textTheme.titleMedium),
-                            Text(active.isPlaying ? '正在投屏' : '已暂停或停止'),
+                            Text(service.awaitingPlayback
+                                ? '已发送，等待接收端开始播放…'
+                                : (active.isPlaying ? '正在投屏' : '已暂停或停止')),
+                            if (service.currentMediaTitle != null)
+                              Text(service.currentMediaTitle!,
+                                  maxLines: 2, overflow: TextOverflow.ellipsis),
+                            if (service.statusWarning != null)
+                              Text(service.statusWarning!),
                             if (service.relayRequests > 0)
                               Text(
-                                  '接收端已读取 ${(service.relayedBytes / 1048576).toStringAsFixed(1)} MB'),
+                                  '已转发 ${(service.relayedBytes / 1048576).toStringAsFixed(1)} MB'),
                             if (service.duration > Duration.zero) ...[
                               Slider(
                                   value: (_drag ??
@@ -275,7 +254,9 @@ class _CastScreenPageState extends State<CastScreenPage> {
                                       ? null
                                       : (active.isPlaying
                                           ? service.pauseMedia
-                                          : service.resumeMedia),
+                                          : () => service.resumeMedia(
+                                              onPlaybackStarted:
+                                                  widget.onCastStarted)),
                                   icon: Icon(active.isPlaying
                                       ? Icons.pause
                                       : Icons.play_arrow),
@@ -335,6 +316,36 @@ class _CastScreenPageState extends State<CastScreenPage> {
                       onTap: busy || _systemPicker != null
                           ? null
                           : () => _cast(device))),
+            Card(
+                child: ExpansionTile(title: const Text('投屏网络设置'), children: [
+              SwitchListTile(
+                  title: const Text('通过本机转发网络媒体'),
+                  subtitle: const Text(
+                      '帮助仅支持 HTTP 的电视读取 HTTPS、鉴权和 HLS 地址。关闭后，普通网络直链由电视直接读取。'),
+                  value: _relayNetwork,
+                  onChanged: busy || _systemPicker != null
+                      ? null
+                      : (value) => setState(() => _relayNetwork = value)),
+              ListTile(
+                  title: Text(service.preferredInterfaceAddress ?? '自动选择投屏网络'),
+                  subtitle:
+                      const Text('连接多个网络或 VPN 时，可手动选择 Wi-Fi 地址。更改将在下次投送时生效。'),
+                  trailing: PopupMenuButton<String>(
+                      tooltip: '选择投屏网络',
+                      enabled: !busy && _systemPicker == null,
+                      onSelected: (value) => setState(() =>
+                          service.preferredInterfaceAddress =
+                              value.isEmpty ? null : value),
+                      itemBuilder: (_) => [
+                            const PopupMenuItem(value: '', child: Text('自动选择')),
+                            for (final interface in _interfaces)
+                              for (final address in interface.addresses)
+                                PopupMenuItem(
+                                    value: address.address,
+                                    child: Text(
+                                        '${interface.name} · ${address.address}')),
+                          ])),
+            ])),
             if (Platform.operatingSystem == 'ohos') ...[
               const Divider(height: 32),
               OutlinedButton.icon(

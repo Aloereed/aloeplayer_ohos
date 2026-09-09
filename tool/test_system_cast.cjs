@@ -24,7 +24,7 @@ class Session extends Events {
   async activate() {}
   async setExtras() {}
   async setAVMetadata(data) { this.metadata.push(data); }
-  async getController() { return { getAVMetadata: async () => ({ assetId: 'local', title: 'Local music' }) }; }
+  async getController() { return { getAVMetadata: async () => this.metadata.at(-1) || ({ assetId: 'local', title: 'Local music' }) }; }
   async getAVCastController() { return this.receiver; }
   async stopCasting() { this.stopped++; }
   async destroy() { this.destroyed++; }
@@ -86,6 +86,12 @@ const connected = { devices: [{ castCategory: 1 }] };
   assert.equal(shared.metadata.at(-1).title, 'Local music');
   assert.equal(shared.listeners.get('outputDeviceChange').size, 0);
   assert.equal(f.channels[0].handler, null);
+  const changing = new Session();
+  const changed = fixture(changing);
+  await changed.call('getMessageFromFlutterView', payload());
+  await changing.setAVMetadata({ assetId: 'new-local-track', title: 'New local track' });
+  changed.view.dispose(); await changed.drain();
+  assert.equal(changing.metadata.at(-1).title, 'New local track', 'cleanup must preserve newer local playback metadata');
   // Closing while session creation is unresolved cleans up the late session.
   let release;
   const created = new Session();

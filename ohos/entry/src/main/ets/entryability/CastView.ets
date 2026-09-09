@@ -47,6 +47,7 @@ export class CastView extends PlatformView implements MethodCallHandler {
   private readonly channel: MethodChannel;
   private session: avSession.AVSession | undefined;
   private ownsSession: boolean = false;
+  private castAssetId: string = '';
   private originalMetadata: avSession.AVMetadata | undefined;
   private controller: avSession.AVCastController | undefined;
   private disposed: boolean = false;
@@ -154,6 +155,7 @@ export class CastView extends PlatformView implements MethodCallHandler {
     };
     if (this.media.durationMs > 0) metadata.duration = this.media.durationMs;
     await this.session?.setAVMetadata(metadata);
+    this.castAssetId = metadata.assetId;
   }
   private outputChanged = (state: avSession.ConnectionState, output: avSession.OutputDeviceInfo): void => {
     if (this.disposed) return;
@@ -223,7 +225,10 @@ export class CastView extends PlatformView implements MethodCallHandler {
       try { session.off('outputDeviceChange', this.outputChanged); } catch (_) {}
       try { await session.stopCasting(); } catch (_) {}
       if (this.ownsSession) await session.destroy();
-      else if (this.originalMetadata) await session.setAVMetadata(this.originalMetadata);
+      else if (this.originalMetadata && this.castAssetId) {
+        const current = await (await session.getController()).getAVMetadata();
+        if (current.assetId === this.castAssetId) await session.setAVMetadata(this.originalMetadata);
+      }
     }).catch((error: BusinessError) => { console.warn(`Cast cleanup: ${error.code}`); });
   }
 }

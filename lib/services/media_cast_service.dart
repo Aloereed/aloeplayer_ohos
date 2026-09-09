@@ -29,6 +29,13 @@ class MediaCastService extends ChangeNotifier {
   List<CastDevice> devices = [];
   CastDevice? activeDevice;
   String? currentMediaPath;
+  String? currentMediaTitle;
+  String? statusWarning;
+  bool awaitingPlayback = false;
+  bool _transportSupported = true;
+  bool _positionSupported = true;
+  int _statusFailures = 0;
+  VoidCallback? _onPlaybackStarted;
   String? lastError;
   bool scanning = false;
   bool busy = false;
@@ -221,6 +228,18 @@ class MediaCastService extends ChangeNotifier {
           activeDevice!.isPlaying = false;
           await _closeRelay();
         }
+        if (activeDevice != device) {
+          _onPlaybackStarted = null;
+          statusWarning = null;
+          _transportSupported = true;
+          _positionSupported = true;
+          _statusFailures = 0;
+          awaitingPlayback = false;
+          currentMediaPath = null;
+          currentMediaTitle = null;
+          position = Duration.zero;
+          duration = Duration.zero;
+        }
         activeDevice = device;
         device.isConnected = true;
       });
@@ -230,11 +249,15 @@ class MediaCastService extends ChangeNotifier {
           String? title,
           Duration startPosition = Duration.zero,
           bool relayNetwork = false,
-          bool isAudio = false}) =>
+          bool isAudio = false,
+          Duration mediaDuration = Duration.zero,
+          VoidCallback? onPlaybackStarted}) =>
       _command(() async {
         final device = activeDevice;
         if (device == null) throw StateError('请先选择播放设备');
+        final operationRevision = _revision;
         final previous = _relay;
+        var uriAccepted = false;
         _relay = null;
         try {
           final url = await startLocalServer(mediaPath,
@@ -280,13 +303,22 @@ class MediaCastService extends ChangeNotifier {
               rethrow;
             }
           }
+          uriAccepted = true;
           device.isPlaying = false;
           await _whenReady(() => device.device.play(const PlayInput()));
           if (_disposed) throw StateError('投屏服务已关闭');
           await previous?.close();
-          duration = Duration.zero;
+          duration = mediaDuration;
           currentMediaPath = mediaPath;
-          device.isPlaying = true;
+          currentMediaTitle = title ??
+              Uri.tryParse(mediaPath)?.pathSegments.lastOrNull ??
+              'AloePlayer';
+          awaitingPlayback = true;
+          statusWarning = null;
+          _statusFailures = 0;
+          _transportSupported = true;
+          _positionSupported = true;
+          _onPlaybackStarted = onPlaybackStarted;
           position = Duration.zero;
           if (startPosition > Duration.zero) {
             try {
@@ -295,10 +327,13 @@ class MediaCastService extends ChangeNotifier {
               lastError = '已开始投屏，但设备不支持从当前位置续播';
             }
           }
-          _poll?.cancel();
-          _poll = Timer.periodic(
-              const Duration(seconds: 2), (_) => refreshStatus());
+          await _initialStatus(device, operationRevision);
+          _startPolling();
         } catch (_) {
+          if (uriAccepted) {
+            awaitingPlayback = false;
+            _onPlaybackStarted = null;
+          }
           await _closeRelay();
           if (_disposed)
             await previous?.close();
@@ -329,14 +364,24 @@ class MediaCastService extends ChangeNotifier {
   Future<bool> pauseMedia() => _command(() async {
         await _connected().device.pause(const PauseInput());
         activeDevice!.isPlaying = false;
+        awaitingPlayback = false;
+        _onPlaybackStarted = null;
       });
-  Future<bool> resumeMedia() => _command(() async {
-        await _connected().device.play(const PlayInput());
-        activeDevice!.isPlaying = true;
+  Future<bool> resumeMedia({VoidCallback? onPlaybackStarted}) =>
+      _command(() async {
+        final device = _connected();
+        final revision = _revision;
+        await _whenReady(() => device.device.play(const PlayInput()));
+        awaitingPlayback = true;
+        _onPlaybackStarted = onPlaybackStarted ?? _onPlaybackStarted;
+        await _initialStatus(device, revision);
+        _startPolling();
       });
   Future<bool> stopMedia() => _command(() async {
         await _connected().device.stop(const StopInput());
         activeDevice!.isPlaying = false;
+        awaitingPlayback = false;
+        _onPlaybackStarted = null;
         _poll?.cancel();
       });
   Future<bool> seek(Duration value) => _command(() => _seek(value));
@@ -363,12 +408,73 @@ class MediaCastService extends ChangeNotifier {
   static Duration parseTime(String? value) {
     final parts = value?.split(':') ?? [];
     if (parts.length != 3) return Duration.zero;
-    return Duration(
-        milliseconds: (((double.tryParse(parts[0]) ?? 0) * 3600 +
-                    (double.tryParse(parts[1]) ?? 0) * 60 +
-                    (double.tryParse(parts[2]) ?? 0)) *
-                1000)
-            .round());
+    final numbers = parts.map(double.tryParse).toList();
+    if (numbers.any((n) => n == null || !n.isFinite || n < 0) ||
+        numbers[1]! >= 60 ||
+        numbers[2]! >= 60) return Duration.zero;
+    final ms = (numbers[0]! * 3600 + numbers[1]! * 60 + numbers[2]!) * 1000;
+    return ms.isFinite && ms < 1e15
+        ? Duration(milliseconds: ms.round())
+        : Duration.zero;
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    if (!_disposed)
+      _poll =
+          Timer.periodic(const Duration(seconds: 2), (_) => refreshStatus());
+  }
+
+  Future<String?> _readTransport(CastDevice device) async {
+    if (!_transportSupported) return null;
+    try {
+      final response = await device.device.avTransportService!.invokeMap(
+          'GetTransportInfo', {'InstanceID': '0'},
+          requestTimeout: const Duration(seconds: 2));
+      final value = response['CurrentTransportState']?.trim().toUpperCase();
+      if (value == null || value.isEmpty)
+        throw const CastProtocolException('接收端未返回播放状态');
+      _statusFailures = 0;
+      statusWarning = null;
+      return value;
+    } catch (error) {
+      _statusFailures++;
+      if (error is CastProtocolException && error.upnpCode == 401) {
+        _transportSupported = false;
+        statusWarning = '接收端不提供播放状态。请在电视确认画面后手动暂停本机。';
+      } else if (_statusFailures >= 3) {
+        statusWarning = '暂时无法读取接收端状态，请检查电视；媒体转发仍保持运行。';
+      }
+      return null;
+    }
+  }
+
+  void _applyTransport(CastDevice device, String state) {
+    device.isPlaying = state == 'PLAYING';
+    // With a relay, PLAYING before the first media byte may describe the old
+    // item or just accepted loading. Wait until the receiver actually reads.
+    if (device.isPlaying && (_relay == null || relayedBytes > 0)) {
+      awaitingPlayback = false;
+      final callback = _onPlaybackStarted;
+      _onPlaybackStarted = null;
+      try {
+        callback?.call();
+      } catch (_) {
+        lastError = '电视已开始播放，但本机暂停失败，请手动暂停本机。';
+      }
+    }
+  }
+
+  Future<void> _initialStatus(CastDevice device, int revision) async {
+    if (_disposed || _pendingCommands > 1 || revision != _revision) return;
+    final state = await _readTransport(device);
+    if (!_disposed &&
+        _pendingCommands == 1 &&
+        revision == _revision &&
+        activeDevice == device &&
+        state != null) {
+      _applyTransport(device, state);
+    }
   }
 
   Future<void> refreshStatus() {
@@ -387,24 +493,30 @@ class MediaCastService extends ChangeNotifier {
         return;
       }
       try {
-        final info = await device.device.avTransportService!.invokeMap(
-            'GetPositionInfo', {'InstanceID': '0'},
-            requestTimeout: const Duration(seconds: 2));
+        Map<String, String>? info;
+        if (_positionSupported) {
+          try {
+            info = await device.device.avTransportService!.invokeMap(
+                'GetPositionInfo', {'InstanceID': '0'},
+                requestTimeout: const Duration(seconds: 2));
+          } on CastProtocolException catch (error) {
+            if (error.upnpCode == 401) _positionSupported = false;
+          } catch (_) {}
+        }
         if (_disposed || busy || revision != _revision) return;
-        final state = await device.device.avTransportService!.invokeMap(
-            'GetTransportInfo', {'InstanceID': '0'},
-            requestTimeout: const Duration(seconds: 2));
+        final state = await _readTransport(device);
         if (activeDevice == device &&
             !_disposed &&
             !busy &&
             revision == _revision) {
-          position = parseTime(info['RelTime']);
-          duration = parseTime(info['TrackDuration']);
-          device.isPlaying = state['CurrentTransportState'] == 'PLAYING';
+          if (info != null) {
+            position = parseTime(info['RelTime']);
+            final remoteDuration = parseTime(info['TrackDuration']);
+            if (remoteDuration > Duration.zero) duration = remoteDuration;
+          }
+          if (state != null) _applyTransport(device, state);
           _notify();
         }
-      } catch (_) {
-        /* Optional status reads never interrupt media delivery. */
       } finally {
         _polling = false;
       }
@@ -424,6 +536,10 @@ class MediaCastService extends ChangeNotifier {
           }
           activeDevice = null;
           currentMediaPath = null;
+          currentMediaTitle = null;
+          awaitingPlayback = false;
+          _onPlaybackStarted = null;
+          statusWarning = null;
           position = Duration.zero;
           duration = Duration.zero;
           await _closeRelay();
@@ -435,6 +551,7 @@ class MediaCastService extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _onPlaybackStarted = null;
     _scanId++;
     _revision++;
     _poll?.cancel();

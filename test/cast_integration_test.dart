@@ -12,6 +12,7 @@ void main() {
   late String base;
   final actions = <String>[];
   var fault = false;
+  var transportState = 'PLAYING';
   var receivedUri = '';
   final commandFaults = <String, List<int>>{};
   final metadataSent = <String>[];
@@ -20,6 +21,7 @@ void main() {
   setUp(() async {
     actions.clear();
     fault = false;
+    transportState = 'PLAYING';
     receivedUri = '';
     commandFaults.clear();
     metadataSent.clear();
@@ -72,7 +74,7 @@ void main() {
         } else if (action.name.local.startsWith('Get')) {
           final values = action.name.local == 'GetPositionInfo'
               ? '<RelTime>00:01:03.500</RelTime><TrackDuration>01:20:00</TrackDuration>'
-              : '<CurrentTransportState>PLAYING</CurrentTransportState>';
+              : '<CurrentTransportState>$transportState</CurrentTransportState>';
           request.response.write(
               '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><different:${action.name.local}Response xmlns:different="${action.name.namespaceUri}">$values</different:${action.name.local}Response></s:Body></s:Envelope>');
         } else {
@@ -280,5 +282,92 @@ void main() {
     service.dispose();
     service.dispose();
     expect(await service.resumeMedia(), isFalse);
+  });
+  test('handover waits for playback even when position queries are unsupported',
+      () async {
+    final service = MediaCastService.forTesting();
+    addTearDown(service.dispose);
+    await service.connectToDevice(CastDevice(
+        device: await CastScreen.fetchDevice('$base/desc/device.xml')));
+    transportState = 'TRANSITIONING';
+    var started = 0;
+    expect(
+        await service.castMedia('https://example.com/a.mp4',
+            mediaDuration: const Duration(minutes: 5),
+            onPlaybackStarted: () => started++),
+        isTrue);
+    expect(started, 0);
+    expect(service.awaitingPlayback, isTrue);
+    commandFaults['GetPositionInfo'] = [401];
+    transportState = 'PLAYING';
+    await service.refreshStatus();
+    expect(started, 1);
+    expect(service.awaitingPlayback, isFalse);
+    expect(service.duration, const Duration(minutes: 5));
+    await service.refreshStatus();
+    expect(started, 1);
+    expect(actions.where((a) => a == 'GetPositionInfo').length, 1);
+    await service.stopMedia();
+    transportState = 'TRANSITIONING';
+    await service.resumeMedia(onPlaybackStarted: () => started++);
+    transportState = 'PLAYING';
+    await Future<void>.delayed(const Duration(milliseconds: 2300));
+    expect(started, 2, reason: 'resume restarts polling after stop');
+  });
+
+  test('relay handover requires media bytes as well as PLAYING', () async {
+    final service = MediaCastService.forTesting(advertisedHost: '127.0.0.1');
+    addTearDown(service.dispose);
+    final temp = await Directory.systemTemp.createTemp('cast-confirm-');
+    addTearDown(() => temp.delete(recursive: true));
+    final file =
+        await File('${temp.path}/sample.mp4').writeAsBytes([1, 2, 3, 4]);
+    await service.connectToDevice(CastDevice(
+        device: await CastScreen.fetchDevice('$base/desc/device.xml')));
+    var started = 0;
+    await service.castMedia(file.path, onPlaybackStarted: () => started++);
+    expect(started, 0);
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    await (await (await client.getUrl(Uri.parse(receivedUri))).close())
+        .drain<void>();
+    await service.refreshStatus();
+    expect(started, 1);
+    await service.refreshStatus();
+    expect(started, 1);
+    await service.disconnectFromDevice();
+  });
+
+  test('unsupported transport status does not falsely pause local playback',
+      () async {
+    final service = MediaCastService.forTesting();
+    addTearDown(service.dispose);
+    await service.connectToDevice(CastDevice(
+        device: await CastScreen.fetchDevice('$base/desc/device.xml')));
+    commandFaults['GetTransportInfo'] = [401];
+    var started = 0;
+    expect(
+        await service.castMedia('https://example.com/a.mp4',
+            onPlaybackStarted: () => started++),
+        isTrue);
+    await service.refreshStatus();
+    expect(started, 0);
+    expect(service.statusWarning, contains('手动暂停'));
+    expect(actions.where((a) => a == 'GetTransportInfo').length, 1);
+  });
+
+  test('malformed receiver time is bounded and fractional seconds survive', () {
+    for (final time in [
+      '00:00:NaN',
+      'Infinity:00:00',
+      '-1:00:00',
+      '00:60:00',
+      '00:00:60',
+      'NOT_IMPLEMENTED'
+    ]) {
+      expect(MediaCastService.parseTime(time), Duration.zero);
+    }
+    expect(MediaCastService.parseTime('01:02:03.456'),
+        const Duration(milliseconds: 3723456));
   });
 }

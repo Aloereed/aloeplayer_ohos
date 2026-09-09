@@ -61,3 +61,14 @@
 - 64 MiB 本机单次 SHA-256 观测：原站 114 MiB/s，本地文件转发 131 MiB/s，网络转发 122 MiB/s；三个哈希完全相同，进程峰值约 282–286 MiB。JIT/缓存会影响单次结果，此数据不证明转发加速，也不代表手机/Wi-Fi 性能。复现：`dart tool/benchmark_cast_relay.dart`。
 
 复现：常规 `flutter test --no-pub`；真实 SMB 测试按 `docs/network-library-tests.md` 开启回环服务，再执行带 `SMB_LOOPBACK_TEST=true` 的 `test/smb_loopback_test.dart`。原生系统会话另跑 `node tool/test_system_cast.cjs`。后续继续完善播放状态确认、接收端边界和页面可观测性。
+
+
+## 71 — 播放确认与真实解码验证（4.0.1+224）
+
+- DLNA 的 Play 命令成功仅表示命令已接受：等待接收端报告 PLAYING 后再暂停本机；使用转发时还要求接收端实际读取媒体字节。状态回调只触发一次，加载中或不支持状态查询不会误暂停本机。
+- 不支持 GetPositionInfo 的设备仍查询播放状态，并保留本机已知媒体时长。不支持 GetTransportInfo 时显示手动确认提示；连续查询失败保留媒体服务并提示检查接收端。停止后继续会重新启动状态轮询。
+- 修正异常/非有限时间值解析；保留毫秒。投屏控制区显示当前媒体和等待状态，网络高级设置移至设备列表之后；320px、1.3 倍字体的控制和设置回归通过。
+- 系统投播关闭时，仅当 AVSession 元数据仍属于当前投播才恢复原信息，避免覆盖期间新播放的本地曲目。使用实际生产代码的原生会话模拟验证通过。
+- 新增可复现的真实解码验证：生成 4 秒 H.264/AAC、AES-128 加密、多级 HLS，经带 Basic 认证的源站和生产媒体转发服务，由 FFmpeg 实际解码；完整播放及 1.25 秒跳转的视频/音频 SHA-256 均与直接解码一致。仅使用本机回环，不访问设备。
+- 测试工具依赖固定为 imageio-ffmpeg 0.6.0 Windows wheel 并校验 SHA-256；仅安装在测试虚拟环境，不打入 APP、不改变手机解码器。复现：测试环境安装 tool/cast-test-requirements.txt 后执行 tool/test_cast_decoder.py。
+- 全量回归 231 项通过、3 项 SMB 回环默认跳过；随后新增的窄屏活动控制区测试与原界面测试 2 项通过。debug 签名 HAP 先独立归档，再构建 release APP；无用户设备/真实电视验收。
