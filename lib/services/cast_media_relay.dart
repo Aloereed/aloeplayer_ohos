@@ -40,6 +40,7 @@ class CastMediaRelay {
 
   static Future<CastMediaRelay> start(String mediaPath,
       {required String host,
+      InternetAddress? bindAddress,
       Map<String, String> headers = const {},
       void Function(String)? onError,
       Uri? Function(Uri, String)? resolveReference,
@@ -61,7 +62,7 @@ class CastMediaRelay {
     }
     final v6 = InternetAddress.tryParse(host)?.type == InternetAddressType.IPv6;
     relay._server = await HttpServer.bind(
-        v6 ? InternetAddress.anyIPv6 : InternetAddress.anyIPv4, 0);
+        bindAddress ?? (v6 ? InternetAddress.anyIPv6 : InternetAddress.anyIPv4), 0);
     relay._server.idleTimeout = const Duration(seconds: 30);
     try {
       final forwarded = _cleanHeaders(headers);
@@ -95,6 +96,13 @@ class CastMediaRelay {
           ].contains(entry.key.toLowerCase()))
             entry.key: entry.value,
       };
+  /// Grant a companion HTTP resource (for example a selected external subtitle).
+  String grantRemote(Uri source, {Map<String, String> headers = const {}}) {
+    if (_closed || !['http', 'https'].contains(source.scheme)) {
+      throw StateError('媒体服务已关闭或资源协议不受支持');
+    }
+    return _grant(source, _cleanHeaders(headers));
+  }
   static Map<String, String> _headersFor(
           Uri from, Uri to, Map<String, String> headers) =>
       {

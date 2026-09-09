@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/playback_media.dart';
 import 'credential_store.dart';
+import 'media_server_playback.dart';
 
 class MediaServerConnection {
   final String id, name, url, userId, username, token, kind;
@@ -153,8 +154,7 @@ class MediaServerPage {
 class MediaServerClient {
   final MediaServerConnection connection;
   final Dio dio;
-  final Map<String, String> _sessions = {};
-  final Set<String> _started = {};
+  final Map<String, MediaServerPlaybackSession> _sessions = {};
   Future<void> _reports = Future.value();
   MediaServerClient(this.connection, {Dio? client}) : dio = client ?? Dio() {
     dio.options = BaseOptions(
@@ -165,7 +165,7 @@ class MediaServerClient {
   }
   Map<String, String> get headers => {
         'X-Emby-Authorization':
-            'MediaBrowser Client="AloePlayer", Device="HarmonyOS", DeviceId="${connection.id}", Version="3.1.1"',
+            'MediaBrowser Client="AloePlayer", Device="HarmonyOS", DeviceId="${connection.id}", Version="4.0.1"',
         if (connection.token.isNotEmpty) 'X-Emby-Token': connection.token,
       };
   static Future<MediaServerConnection> login(
@@ -245,42 +245,35 @@ class MediaServerClient {
 
   String imageUrl(String id) =>
       '${connection.url}/Items/${Uri.encodeComponent(id)}/Images/Primary?maxWidth=360&quality=80';
-  Future<PlaybackMedia> playback(MediaServerItem item,
+  Future<List<MediaServerSource>> playbackSources(MediaServerItem item,
       {CancelToken? cancelToken}) async {
-    final response = await dio.post<Map<String, dynamic>>(
-        'Items/${Uri.encodeComponent(item.id)}/PlaybackInfo',
-        cancelToken: cancelToken,
-        queryParameters: {
-          'UserId': connection.userId
-        },
-        data: {
-          'UserId': connection.userId,
-          'IsPlayback': true,
-          'AutoOpenLiveStream': false
-        });
-    final sources = response.data?['MediaSources'] as List? ?? [];
-    if (sources.isEmpty) throw StateError('服务器没有可播放的媒体源');
-    final source = sources.first as Map;
-    if (source['IsRemote'] == true || source['RequiresOpening'] == true)
-      throw StateError('此媒体源需要转码或直播会话，暂不支持直接播放');
-    final session = response.data?['PlaySessionId'] as String? ??
-        const Uuid().v4().replaceAll('-', '');
-    _sessions[item.id] = session;
-    final endpoint = item.type == 'Audio' ? 'Audio' : 'Videos';
-    final url = Uri.parse('${connection.url}/$endpoint/${item.id}/stream')
-        .replace(queryParameters: {
-      'static': 'true',
-      'MediaSourceId': '${source['Id']}',
-      'PlaySessionId': session,
-      'DeviceId': connection.id
-    }).toString();
-    return PlaybackMedia(
-        id: Uri(scheme: 'aloe-server', host: connection.id, path: '/${item.id}')
-            .toString(),
-        url: url,
+    final response = await requestPlaybackInfo(
+        dio, item.id, connection.userId, const MediaServerPlaybackOptions(),
+        playing: false, cancelToken: cancelToken);
+    return (response['MediaSources'] as List? ?? [])
+        .whereType<Map>()
+        .map((m) => MediaServerSource(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  Future<PlaybackMedia> playback(MediaServerItem item,
+      {CancelToken? cancelToken,
+      MediaServerPlaybackOptions options =
+          const MediaServerPlaybackOptions()}) async {
+    final session = await prepareServerPlayback(
+        dio: dio,
+        baseUrl: connection.url,
+        userId: connection.userId,
+        deviceId: connection.id,
+        headers: headers,
+        itemId: item.id,
+        itemType: item.type,
         title: item.name,
-        httpHeaders: headers,
-        startPositionMs: item.resumeMs);
+        resumeMs: item.resumeMs,
+        options: options,
+        cancelToken: cancelToken);
+    _sessions[session.media.url] = session;
+    return session.media;
   }
 
   Future<MediaServerItem> item(String id) async {
@@ -291,32 +284,48 @@ class MediaServerClient {
 
   Future<void> report(
       PlaybackMedia media, int positionMs, bool stopped, bool playing) {
-    final id = Uri.parse(media.id).pathSegments.last;
+    final session = _sessions[media.url];
+    if (session == null || session.closed) return Future.value();
     _reports = _reports.catchError((_) {}).then((_) async {
+      if (session.closed) return;
       final payload = {
-        'ItemId': id,
-        'PositionTicks': positionMs * 10000,
-        'PlaySessionId': _sessions[id],
-        'PlayMethod': 'DirectStream',
+        'ItemId': session.itemId,
+        'PositionTicks': positionMs.clamp(0, 900719925474) * 10000,
+        'PlaySessionId': session.sessionId,
+        'MediaSourceId': session.sourceId,
+        if (session.liveStreamId != null) 'LiveStreamId': session.liveStreamId,
+        if (session.audioIndex != null) 'AudioStreamIndex': session.audioIndex,
+        if (session.subtitleIndex != null)
+          'SubtitleStreamIndex': session.subtitleIndex,
+        'PlayMethod': session.playMethod,
         'IsPaused': !playing,
-        'CanSeek': true
+        'CanSeek': session.canSeek,
       };
-      if (!_started.contains(id)) {
-        await dio.post('Sessions/Playing', data: payload);
-        _started.add(id);
+      try {
+        if (!session.started) {
+          await dio.post('Sessions/Playing', data: payload);
+          session.started = true;
+        }
+        await dio.post(
+            stopped ? 'Sessions/Playing/Stopped' : 'Sessions/Playing/Progress',
+            data: payload);
+      } finally {
+        if (stopped) {
+          await session.close();
+          _sessions.remove(media.url);
+        }
       }
-      await dio.post(
-          stopped ? 'Sessions/Playing/Stopped' : 'Sessions/Playing/Progress',
-          data: payload);
-      if (stopped) _started.remove(id);
     });
     return _reports;
   }
 
   Future<void> close() async {
     try {
-      await _reports;
+      await _reports.timeout(const Duration(seconds: 5));
     } catch (_) {}
-    dio.close();
+    await Future.wait(
+        _sessions.values.toList().map((session) => session.close()));
+    _sessions.clear();
+    dio.close(force: true);
   }
 }

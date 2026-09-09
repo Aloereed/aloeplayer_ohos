@@ -5,6 +5,8 @@ import '../mpvplayer.dart';
 import '../services/media_server_client.dart';
 import '../services/media_server_catalog.dart';
 import '../widgets/media_server_poster.dart';
+import '../widgets/media_server_playback_dialog.dart';
+import '../services/media_server_playback.dart';
 
 class MediaServerDetailPage extends StatefulWidget {
   final MediaServerConnection connection;
@@ -27,6 +29,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
   String? _error, _childrenError, _actionError;
   List<MediaServerItem> _seasons = [], _episodes = [];
   String? _seasonId;
+  MediaServerPlaybackOptions _playOptions = const MediaServerPlaybackOptions();
   @override
   void initState() {
     super.initState();
@@ -152,7 +155,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
       _actionError = null;
     });
     try {
-      final media = await _client.playback(_item, cancelToken: _lifetime);
+      final media = await _client.playback(_item,
+          cancelToken: _lifetime, options: _playOptions);
       if (!mounted) return;
       await Navigator.push(
           context,
@@ -178,6 +182,29 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
       if (data['OfficialRating'] != null) '${data['OfficialRating']}',
       if (data['CommunityRating'] != null) '评分 ${data['CommunityRating']}'
     ].join(' · ');
+  }
+
+  Future<void> _choosePlayback() async {
+    if (_acting) return;
+    setState(() {
+      _acting = true;
+      _actionError = null;
+    });
+    try {
+      final sources =
+          await _client.playbackSources(_item, cancelToken: _lifetime);
+      if (!mounted) return;
+      if (sources.isEmpty) throw StateError('No sources');
+      final options = await showDialog<MediaServerPlaybackOptions>(
+          context: context,
+          builder: (_) => MediaServerPlaybackDialog(
+              sources: sources, initial: _playOptions));
+      if (mounted && options != null) setState(() => _playOptions = options);
+    } catch (_) {
+      if (mounted) setState(() => _actionError = '无法获取媒体版本和轨道，请检查服务器后重试');
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
   }
 
   @override
@@ -208,6 +235,11 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(_summary)),
         Wrap(spacing: 8, runSpacing: 8, children: [
+          if (_item.playable)
+            OutlinedButton.icon(
+                onPressed: _acting ? null : _choosePlayback,
+                icon: const Icon(Icons.tune),
+                label: const Text('播放设置')),
           if (_item.playable)
             FilledButton.icon(
                 onPressed: _acting ? null : _play,

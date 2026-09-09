@@ -1117,6 +1117,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     final remoteSubtitles = _mediaFor(filePath)?.subtitles ?? [];
     if (remoteSubtitles.isNotEmpty) await _loadRemoteSubtitle(filePath, remoteSubtitles);
     if (!widget.privateMode) await applyPlaybackPreferences(player, _historyId);
+    await _applyServerTrackSelection(filePath);
 
     // 更新 Audio Service 的媒体信息
     _updateMediaItem();
@@ -1134,6 +1135,20 @@ class _MPVPlayerState extends State<MPVPlayer>
     } finally {
       _openingMedia = false;
       if (mounted && !_disposing) setState(() {});
+    }
+  }
+
+  Future<void> _applyServerTrackSelection(String url) async {
+    final media = _mediaFor(url);
+    if (media == null || _disposing || !mounted) return;
+    if (media.preferredAudioTrack != null) {
+      await player.setAudioTrack(AudioTrack(media.preferredAudioTrack!, null, null));
+    }
+    final subtitle = media.preferredSubtitleTrack;
+    if (subtitle == 'external' && media.subtitles.isNotEmpty) {
+      await player.setSubtitleTrack(SubtitleTrack.uri(media.subtitles.first));
+    } else if (subtitle != null) {
+      await player.setSubtitleTrack(SubtitleTrack(subtitle, null, null));
     }
   }
 
@@ -1170,6 +1185,7 @@ class _MPVPlayerState extends State<MPVPlayer>
       final subtitles = _mediaFor(url)?.subtitles ?? [];
       if (subtitles.isNotEmpty) await _loadRemoteSubtitle(url, subtitles);
       if (!widget.privateMode) await applyPlaybackPreferences(player, _historyId);
+      await _applyServerTrackSelection(url);
       _updateMediaItem();
     } catch (_) {}
   }

@@ -87,6 +87,10 @@ void main() {
         };
       } else {
         expect(request.headers.value('X-Emby-Token'), 'test-token');
+        if (route.endsWith('/stream')) {
+          expect(request.uri.queryParameters['Static'], 'true');
+          expect(request.uri.queryParameters['MediaSourceId'], 'source');
+        }
         if (route.endsWith('/Items')) {
           expect(route, '/jellyfin/Items');
           expect(request.uri.queryParameters['UserId'], 'user');
@@ -128,10 +132,19 @@ void main() {
       final items = await client.items();
       expect(items.single.resumeMs, 12000);
       final media = await client.playback(items.single);
-      expect(Uri.parse(media.url).queryParameters['static'], 'true');
+      expect(Uri.parse(media.url).host, '127.0.0.1');
       expect(
           Uri.parse(media.url).queryParameters.containsKey('api_key'), isFalse);
-      expect(media.httpHeaders['X-Emby-Token'], 'test-token');
+      expect(media.httpHeaders, isEmpty);
+      final reader = HttpClient();
+      try {
+        final response =
+            await (await reader.getUrl(Uri.parse(media.url))).close();
+        expect(response.statusCode, 200);
+        await response.drain<void>();
+      } finally {
+        reader.close(force: true);
+      }
       await client.report(media, 15000, false, true);
       await client.report(media, 18000, true, false);
       expect(positions, [150000000, 150000000, 180000000]);
