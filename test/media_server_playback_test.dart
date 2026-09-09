@@ -6,6 +6,56 @@ import 'package:aloeplayer/services/media_server_playback.dart';
 
 void main() {
   test(
+      'stop is delivered and relay released even when start acknowledgement fails',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final events = <String>[];
+    server.listen((request) async {
+      await request.drain<void>();
+      request.response.headers.contentType = ContentType.json;
+      final route = request.uri.path;
+      if (route.endsWith('/PlaybackInfo')) {
+        request.response.write(jsonEncode({
+          'PlaySessionId': 'session',
+          'MediaSources': [
+            {'Id': 'source', 'SupportsDirectPlay': true}
+          ]
+        }));
+      } else {
+        events.add(route);
+        if (route == '/Sessions/Playing') request.response.statusCode = 503;
+        request.response.write('{}');
+      }
+      await request.response.close();
+    });
+    final client = MediaServerClient(MediaServerConnection(
+        id: 'device',
+        name: 'Test',
+        url: 'http://127.0.0.1:${server.port}',
+        userId: 'u',
+        username: 'u',
+        token: 'secret',
+        kind: 'Emby'));
+    try {
+      final media = await client.playback(
+          const MediaServerItem(id: 'movie', name: 'Movie', type: 'Movie'));
+      await client.report(media, 7000, true, false);
+      expect(events, ['/Sessions/Playing', '/Sessions/Playing/Stopped']);
+      await client.report(media, 100, false, true);
+      expect(events.length, 2);
+      final reader = HttpClient();
+      try {
+        await expectLater(reader.getUrl(Uri.parse(media.url)),
+            throwsA(isA<SocketException>()));
+      } finally {
+        reader.close(force: true);
+      }
+    } finally {
+      await client.close();
+      await server.close(force: true);
+    }
+  });
+  test(
       'live source opens explicitly when needed and releases its exact ID on stop',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

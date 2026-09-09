@@ -1,11 +1,13 @@
 import 'member_access.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/playback_media.dart';
 import 'credential_store.dart';
 import 'media_server_playback.dart';
+import 'playback_report_queue.dart';
 
 class MediaServerConnection {
   final String id, name, url, userId, username, token, kind;
@@ -155,7 +157,11 @@ class MediaServerClient {
   final MediaServerConnection connection;
   final Dio dio;
   final Map<String, MediaServerPlaybackSession> _sessions = {};
-  Future<void> _reports = Future.value();
+  final Map<String, PlaybackReportQueue> _reporters = {};
+  final Set<CancelToken> _reportRequests = {};
+  Future<void>? _closeFuture;
+  bool _closing = false;
+  bool _reportsCancelled = false;
   MediaServerClient(this.connection, {Dio? client}) : dio = client ?? Dio() {
     dio.options = BaseOptions(
         baseUrl: '${connection.url}/',
@@ -268,6 +274,7 @@ class MediaServerClient {
       {CancelToken? cancelToken,
       MediaServerPlaybackOptions options =
           const MediaServerPlaybackOptions()}) async {
+    if (_closing) throw StateError('Media server client is closed');
     final session = await prepareServerPlayback(
         dio: dio,
         baseUrl: connection.url,
@@ -280,6 +287,10 @@ class MediaServerClient {
         resumeMs: item.resumeMs,
         options: options,
         cancelToken: cancelToken);
+    if (_closing) {
+      await session.close();
+      throw StateError('Media server client is closed');
+    }
     _sessions[session.media.url] = session;
     return session.media;
   }
@@ -293,47 +304,83 @@ class MediaServerClient {
   Future<void> report(
       PlaybackMedia media, int positionMs, bool stopped, bool playing) {
     final session = _sessions[media.url];
-    if (session == null || session.closed) return Future.value();
-    _reports = _reports.catchError((_) {}).then((_) async {
-      if (session.closed) return;
-      final payload = {
-        'ItemId': session.itemId,
-        'PositionTicks': positionMs.clamp(0, 900719925474) * 10000,
-        'PlaySessionId': session.sessionId,
-        'MediaSourceId': session.sourceId,
-        if (session.liveStreamId != null) 'LiveStreamId': session.liveStreamId,
-        if (session.audioIndex != null) 'AudioStreamIndex': session.audioIndex,
-        if (session.subtitleIndex != null)
-          'SubtitleStreamIndex': session.subtitleIndex,
-        'PlayMethod': session.playMethod,
-        'IsPaused': !playing,
-        'CanSeek': session.canSeek,
-      };
-      try {
-        if (!session.started) {
-          await dio.post('Sessions/Playing', data: payload);
-          session.started = true;
-        }
-        await dio.post(
-            stopped ? 'Sessions/Playing/Stopped' : 'Sessions/Playing/Progress',
-            data: payload);
-      } finally {
-        if (stopped) {
-          await session.close();
-          _sessions.remove(media.url);
-        }
-      }
-    });
-    return _reports;
+    if (_closing || session == null || session.closed) return Future.value();
+    final reporter = _reporters.putIfAbsent(
+        media.url,
+        () => PlaybackReportQueue((report) async {
+              if (session.closed) return;
+              final payload = {
+                'ItemId': session.itemId,
+                'PositionTicks':
+                    report.positionMs.clamp(0, 900719925474) * 10000,
+                'PlaySessionId': session.sessionId,
+                'MediaSourceId': session.sourceId,
+                if (session.liveStreamId != null)
+                  'LiveStreamId': session.liveStreamId,
+                if (session.audioIndex != null)
+                  'AudioStreamIndex': session.audioIndex,
+                if (session.subtitleIndex != null)
+                  'SubtitleStreamIndex': session.subtitleIndex,
+                'PlayMethod': session.playMethod,
+                'IsPaused': !report.playing,
+                'CanSeek': session.canSeek,
+              };
+              try {
+                if (!session.started) {
+                  try {
+                    await _postReport('Sessions/Playing', payload);
+                    session.started = true;
+                  } catch (_) {
+                    // Stop is still useful if the start response was lost in transit.
+                    if (!report.stopped) rethrow;
+                  }
+                }
+                await _postReport(
+                    report.stopped
+                        ? 'Sessions/Playing/Stopped'
+                        : 'Sessions/Playing/Progress',
+                    payload);
+              } finally {
+                if (report.stopped) {
+                  await session.close();
+                  _sessions.remove(media.url);
+                  _reporters.remove(media.url);
+                }
+              }
+            }));
+    return reporter.add(PlaybackReport(positionMs, stopped, playing));
   }
 
-  Future<void> close() async {
+  Future<void> _postReport(String route, Map<String, dynamic> payload) async {
+    if (_reportsCancelled) throw StateError('Playback reporting closed');
+    final cancel = CancelToken();
+    _reportRequests.add(cancel);
+    final deadline = Timer(const Duration(seconds: 6),
+        () => cancel.cancel('Playback report timed out'));
     try {
-      await _reports.timeout(const Duration(seconds: 5));
+      await dio.post(route, data: payload, cancelToken: cancel);
+    } finally {
+      deadline.cancel();
+      _reportRequests.remove(cancel);
+    }
+  }
+
+  Future<void> close() => _closeFuture ??= _close();
+
+  Future<void> _close() async {
+    _closing = true;
+    try {
+      await Future.wait(_reporters.values.map((r) => r.drained))
+          .timeout(const Duration(seconds: 5));
     } catch (_) {}
+    _reportsCancelled = true;
+    for (final request in _reportRequests.toList()) {
+      request.cancel('Media server client closed');
+    }
     await Future.wait(
         _sessions.values.toList().map((session) => session.close()));
     _sessions.clear();
+    _reporters.clear();
     dio.close(force: true);
   }
 }
