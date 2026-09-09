@@ -131,4 +131,32 @@ void main() {
     await expectLater(failed.configure('123456'), throwsStateError);
     expect(failed.unlocked, isFalse);
   });
+  test('locking during file operations preserves unrelated private entries',
+      () async {
+    await space.configure('123456');
+    final source = await File('${temp.path}/first.mp4').writeAsBytes([1, 2, 3]);
+    await space.importFile(source.path);
+    await space.importFile(source.path, name: 'second.mp4');
+    final removal = space.delete(space.items.first);
+    await Future<void>.delayed(Duration.zero);
+    space.lock();
+    await removal;
+    expect(space.items, isEmpty);
+    expect(await space.unlock('123456'), isTrue);
+    expect(space.items.single.name, 'second.mp4');
+    final large = await File('${temp.path}/large.mp4')
+        .writeAsBytes(List.filled(4 * 1024 * 1024, 7));
+    final importing = space.importFile(large.path);
+    final check = expectLater(importing, throwsStateError);
+    await Future<void>.delayed(Duration.zero);
+    space.lock();
+    await check;
+    expect(await space.unlock('123456'), isTrue);
+    expect(space.items.single.name, 'second.mp4');
+    expect(await large.exists(), isTrue);
+    expect(
+        (await Directory('${temp.path}/vault').list().toList())
+            .where((file) => file.path.endsWith('.pending')),
+        isEmpty);
+  });
 }

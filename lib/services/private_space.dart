@@ -162,7 +162,7 @@ class PrivateSpace extends ChangeNotifier {
         jsonEncode(next.map((item) => item.toJson()).toList()),
         flush: true);
     await temp.rename(p.join(_root!.path, 'index.json'));
-    items = next;
+    items = unlocked ? next : [];
     notifyListeners();
   }
 
@@ -170,6 +170,7 @@ class PrivateSpace extends ChangeNotifier {
       _serial(() async {
         _requireOpen();
         final generation = _epoch;
+        final existing = List<PrivateMedia>.of(items);
         final input = File(source);
         final title = name ?? p.basename(source);
         final extension =
@@ -195,7 +196,9 @@ class PrivateSpace extends ChangeNotifier {
           await pending.rename(destination.path);
           final item = PrivateMedia(id, title, p.basename(destination.path),
               await destination.length());
-          await _saveIndex([...items, item]);
+          if (!unlocked || generation != _epoch)
+            throw StateError('隐私空间已锁定，请解锁后重新导入');
+          await _saveIndex([...existing, item]);
           return item;
         } catch (_) {
           if (await pending.exists()) await pending.delete();
@@ -212,7 +215,8 @@ class PrivateSpace extends ChangeNotifier {
 
   Future<void> delete(PrivateMedia item) => _serial(() async {
         final source = sourceFor(item);
+        final next = items.where((entry) => entry.id != item.id).toList();
         if (await File(source).exists()) await File(source).delete();
-        await _saveIndex(items.where((entry) => entry.id != item.id).toList());
+        await _saveIndex(next);
       });
 }
