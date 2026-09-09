@@ -9,9 +9,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 import '../models/download_task.dart';
+import '../models/playback_media.dart';
 import '../models/server_config.dart';
 import 'file_service.dart';
 import 'server_config_service.dart';
+import 'media_server_download.dart';
 
 String downloadBackgroundFailure(Object error) {
   if (error is TimeoutException) return '后台下载服务响应超时，请保持应用在前台；中断后可继续';
@@ -118,10 +120,42 @@ class DownloadManager extends ChangeNotifier {
     return (added: added, skipped: skipped, failed: failed);
   }
 
-  Future<void> add(ServerConfig config, FileItem file) async {
+  Future<void> add(ServerConfig config, FileItem file) => _add(config.id, file);
+
+  Future<void> addMediaServer(String serverId, MediaServerDownloadFile file) =>
+      _add(MediaServerDownloadSource.taskServerId(serverId), file);
+
+  Future<PlaybackMedia?> offlineMedia(String mediaId) async {
+    final uri = Uri.tryParse(mediaId);
+    if (uri == null ||
+        uri.scheme != 'aloe-server' ||
+        uri.pathSegments.length != 1) return null;
+    await initialize();
+    final serverId = MediaServerDownloadSource.taskServerId(uri.host);
+    for (final task in tasks.reversed) {
+      if (task.serverId != serverId || task.status != DownloadStatus.completed)
+        continue;
+      final parts = Uri.tryParse(task.remotePath)?.pathSegments;
+      if (parts == null ||
+          parts.length != 3 ||
+          parts.first != uri.pathSegments.single) continue;
+      try {
+        final file = File(task.destination);
+        if (await file.exists() && await file.length() == task.size) {
+          return PlaybackMedia(
+              id: mediaId, url: task.destination, title: task.name);
+        }
+      } on FileSystemException {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _add(String serverId, FileItem file) async {
     await initialize();
     if (tasks.any((t) =>
-        t.serverId == config.id &&
+        t.serverId == serverId &&
         t.remotePath == file.path &&
         t.status != DownloadStatus.canceled &&
         t.status != DownloadStatus.completed)) {
@@ -167,7 +201,7 @@ class DownloadManager extends ChangeNotifier {
           '${path.basenameWithoutExtension(safeName)}-${id.substring(0, 8)}${path.extension(safeName)}');
     }
     if (tasks.any((t) =>
-        t.serverId == config.id &&
+        t.serverId == serverId &&
         t.remotePath == file.path &&
         t.status != DownloadStatus.canceled &&
         t.status != DownloadStatus.completed)) {
@@ -175,7 +209,7 @@ class DownloadManager extends ChangeNotifier {
     }
     tasks.add(DownloadTask(
         id: id,
-        serverId: config.id,
+        serverId: serverId,
         remotePath: file.path,
         name: file.name,
         destination: destination,
@@ -331,6 +365,10 @@ class DownloadManager extends ChangeNotifier {
       notifyListeners();
       if (_openSourceOverride != null) {
         files = await _openSourceOverride!(task.serverId);
+        _activeSource = files;
+      } else if (task.serverId
+          .startsWith(MediaServerDownloadSource.serverPrefix)) {
+        files = await MediaServerDownloadSource.restore(task.serverId);
         _activeSource = files;
       } else {
         final config = await ServerConfigService().getConfig(task.serverId);

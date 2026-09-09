@@ -5,6 +5,8 @@ import 'package:path/path.dart' as path;
 import 'package:aloeplayer/services/media_server_client.dart';
 import 'package:aloeplayer/services/media_server_catalog.dart';
 import 'package:aloeplayer/services/media_server_playback.dart';
+import 'package:aloeplayer/services/media_server_download.dart';
+import 'package:crypto/crypto.dart';
 
 void main() {
   for (final kind in ['Jellyfin', 'Emby']) {
@@ -100,6 +102,22 @@ void main() {
         final original =
             await File(source.data['Path'] as String).resolveSymbolicLinks();
         expect(path.isWithin('${fixture.path}/library', original), isTrue);
+        final download = MediaServerDownloadSource(connection);
+        try {
+          final file = await download.prepare(movie, sourceId: source.id);
+          expect(file.size, await File(original).length());
+          final full = await download.getFileStreamForRevision(file);
+          expect((await sha256.bind(full).first).toString(),
+              (await sha256.bind(File(original).openRead()).first).toString());
+          final resumedDownload =
+              await download.getFileStreamForRevision(file, start: 4096);
+          expect(
+              (await sha256.bind(resumedDownload).first).toString(),
+              (await sha256.bind(File(original).openRead(4096)).first)
+                  .toString());
+        } finally {
+          await download.disconnect();
+        }
         final expected = await decode(original, audio: 1);
         final actual = await decode(direct.url, audio: 1);
         expect(actual, expected);

@@ -1,6 +1,7 @@
 import '../services/media_server_client.dart';
 import '../services/media_server_catalog.dart';
 import '../services/media_server_sequence.dart';
+import '../services/download_manager.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
@@ -39,6 +40,17 @@ class _RemotePlaybackPageState extends State<RemotePlaybackPage> {
     try {
       final uri = Uri.parse(widget.mediaId);
       if (uri.scheme == 'aloe-server') {
+        final offline = await DownloadManager.instance
+            .offlineMedia(widget.mediaId)
+            .catchError((_) => null);
+        if (!mounted) return;
+        if (offline != null) {
+          setState(() {
+            _queue = [offline];
+            _url = offline.url;
+          });
+          return;
+        }
         final connection = (await MediaServerStore.load())
             .where((c) => c.id == uri.host)
             .firstOrNull;

@@ -24,7 +24,7 @@ class _DownloadsPageState extends State<DownloadsPage> {
   @override
   Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('下载任务'), actions: [IconButton(tooltip: '清理已结束记录（保留文件）', onPressed: () => _action(manager.removeFinished), icon: const Icon(Icons.cleaning_services_outlined))]),
     body: ListenableBuilder(listenable: manager, builder: (_, __) => _error != null ? Center(child: Text(_error!)) : manager.tasks.isEmpty
-      ? const Center(child: Text('在网络文件的更多菜单中选择“下载到本地”'))
+      ? const Center(child: Text('从网络文件菜单或媒体服务器详情下载，完成后可离线观看'))
       : ListView.builder(itemCount: manager.tasks.length, itemBuilder: (_, index) {
         final task = manager.tasks[manager.tasks.length - 1 - index];
         return Card(margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

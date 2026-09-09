@@ -273,7 +273,7 @@ class CastMediaRelay {
         headers.forEach((key, value) => upstream.headers.set(key, value));
         upstream.headers.set('Accept-Encoding', 'identity');
         if (!knownManifest && !fullManifest) {
-          for (final name in ['range', 'if-range']) {
+          for (final name in ['range', 'if-range', 'if-match', 'if-unmodified-since']) {
             final value = incoming.headers.value(name);
             if (value != null) upstream.headers.set(name, value);
           }

@@ -6,6 +6,7 @@ import '../services/media_server_catalog.dart';
 import '../widgets/media_server_poster.dart';
 import 'media_server_detail_page.dart';
 import 'media_servers_page.dart';
+import 'downloads_page.dart';
 
 String shelfTitle(MediaServerShelf shelf) => switch (shelf) {
       MediaServerShelf.libraries => '媒体库',
@@ -82,6 +83,11 @@ class _MediaServerHomePageState extends State<MediaServerHomePage> {
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: Text(widget.connection.name), actions: [
+        IconButton(
+            tooltip: '下载与离线观看',
+            icon: const Icon(Icons.download_for_offline_outlined),
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const DownloadsPage()))),
         IconButton(
             tooltip: '搜索与浏览全部媒体',
             icon: const Icon(Icons.search),

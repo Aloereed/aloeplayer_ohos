@@ -8,6 +8,9 @@ import '../widgets/media_server_poster.dart';
 import '../widgets/media_server_playback_dialog.dart';
 import '../services/media_server_playback.dart';
 import '../services/media_server_sequence.dart';
+import '../services/media_server_download.dart';
+import '../services/download_manager.dart';
+import 'downloads_page.dart';
 
 class MediaServerDetailPage extends StatefulWidget {
   final MediaServerConnection connection;
@@ -26,6 +29,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
   CancelToken? _detailCancel;
   CancelToken? _childrenCancel;
   CancelToken? _playbackCancel;
+  MediaServerDownloadSource? _downloadSource;
   int _generation = 0, _nextStart = 0;
   bool _loading = true, _childrenBusy = false, _more = false, _acting = false;
   String? _error, _childrenError, _actionError;
@@ -44,6 +48,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
     _detailCancel?.cancel();
     _childrenCancel?.cancel();
     _playbackCancel?.cancel('Detail closed');
+    unawaited(_downloadSource?.disconnect());
     if (widget.client == null) unawaited(_client.close());
     super.dispose();
   }
@@ -203,6 +208,36 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
     ].join(' · ');
   }
 
+  Future<void> _download() async {
+    if (_acting) return;
+    setState(() {
+      _acting = true;
+      _actionError = null;
+    });
+    final source =
+        _downloadSource = MediaServerDownloadSource(widget.connection);
+    try {
+      final file = await source.prepare(_item, sourceId: _playOptions.sourceId);
+      if (!mounted) return;
+      await DownloadManager.instance.addMediaServer(widget.connection.id, file);
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('已加入原文件下载队列'),
+            action: SnackBarAction(
+                label: '查看',
+                onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DownloadsPage())))));
+    } catch (error) {
+      if (mounted) setState(() => _actionError = '下载准备失败：$error');
+    } finally {
+      await source.disconnect();
+      if (_downloadSource == source) _downloadSource = null;
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
   Future<void> _choosePlayback() async {
     if (_acting) return;
     setState(() {
@@ -270,6 +305,13 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> {
             OutlinedButton(
                 onPressed: _acting ? null : () => _play(fromStart: true),
                 child: const Text('从头播放')),
+          if (_item.playable &&
+              _item.type != 'TvChannel' &&
+              _item.metadata['CanDownload'] != false)
+            OutlinedButton.icon(
+                onPressed: _acting ? null : _download,
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('下载原文件')),
           FilterChip(
               selected: _item.favorite,
               label: const Text('收藏'),

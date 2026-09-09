@@ -80,8 +80,15 @@ abstract class IndependentFileService {
 
 bool hasKnownFileSize(FileItem file) =>
     file.size >= 0 && (file is! WebDavFileItem || file.webdavFile.sizeKnown);
-String? fileEtag(FileItem file) =>
-    file is WebDavFileItem ? file.webdavFile.etag : null;
+String? fileEtag(FileItem file) => file is WebDavFileItem
+    ? file.webdavFile.etag
+    : file is RevisionFileItem
+        ? file.etag
+        : null;
+
+abstract class RevisionFileItem implements FileItem {
+  String? get etag;
+}
 
 Future<FileItem> resolveFileSize(FileService service, FileItem file) async {
   if (hasKnownFileSize(file)) return file;
@@ -157,11 +164,13 @@ class SmbFileService implements FileService, IndependentFileService {
   // 获取底层SMB服务（用于HTTP服务）
   SmbService get smbService => _smbService;
   @override
-  Future<FileService> independent() async => SmbFileService(service: await _smbService.independent());
+  Future<FileService> independent() async =>
+      SmbFileService(service: await _smbService.independent());
 }
 
 // WebDAV文件服务实现
-class WebDavFileService implements FileService, RevisionAwareFileService, IndependentFileService {
+class WebDavFileService
+    implements FileService, RevisionAwareFileService, IndependentFileService {
   final WebDavService _webdavService;
   WebDavFileService({WebDavService? service})
       : _webdavService = service ?? WebDavService();
@@ -219,7 +228,8 @@ class WebDavFileService implements FileService, RevisionAwareFileService, Indepe
   // 获取底层WebDAV服务（用于HTTP服务）
   WebDavService get webdavService => _webdavService;
   @override
-  Future<FileService> independent() async => WebDavFileService(service: await _webdavService.independent());
+  Future<FileService> independent() async =>
+      WebDavFileService(service: await _webdavService.independent());
 }
 
 // 文件服务工厂
