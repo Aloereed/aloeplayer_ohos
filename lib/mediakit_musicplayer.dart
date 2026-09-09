@@ -804,6 +804,7 @@ class _MediaKitMusicPlayerPageState extends State<MediaKitMusicPlayerPage>
           IconButton(tooltip: '投屏', icon: const Icon(Icons.cast, color: Colors.white),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CastScreenPage(
               mediaPath: widget.filePath, initialPosition: _player.state.position,
+              mediaDuration: _player.state.duration, isAudio: true,
               onCastStarted: () { if (mounted) _player.pause(); },
             )))),
           BlurredIconButton(

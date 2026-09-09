@@ -1,4 +1,5 @@
 import 'widgets/media_url_dialog.dart';
+import 'screens/cast_screen_page.dart' show CastScreenPage;
 import 'services/sleep_timer.dart';
 import 'widgets/sleep_timer_button.dart';
 import 'dart:convert';
@@ -1151,6 +1152,7 @@ class _PlayerTabState extends State<PlayerTab>
       },
       additionalOptions: (context) {
         return <OptionItem>[
+          OptionItem(onTap: _openCastScreen, iconData: Icons.cast, title: '投屏'),
           // OptionItem(
           //   onTap: _openFile,
           //   iconData: Icons.open_in_browser,
@@ -1477,6 +1479,24 @@ class _PlayerTabState extends State<PlayerTab>
     // print("ffmpegcontroller is null?: ${this._ffmpegController == null}");
     // this._ffmpegController?.sendMessageToOhosView(
     //     "getMessageFromFlutterView", convertPathToOhosUri(this.widget.openfile));
+  }
+
+  Future<void> _openCastScreen() async {
+    final nativePosition = _useFfmpegForPlay == 2
+        ? _hdrExample?.controller?.currentPosition
+        : _ffmpegExample?.controller?.currentPosition;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CastScreenPage(
+      mediaPath: widget.openfile,
+      initialPosition: nativePosition != null && _useFfmpegForPlay != 0
+          ? Duration(milliseconds: nativePosition) : _currentPosition,
+      mediaDuration: _videoController?.value.duration ?? Duration.zero,
+      onCastStarted: () {
+        if (!mounted) return;
+        _videoController?.pause();
+        _ffmpegExample?.controller?.sendMessageToOhosView('pause', '');
+        _hdrExample?.controller?.sendMessageToOhosView('pause', '');
+      },
+    )));
   }
 
   /// 重新读取字幕文件

@@ -2439,6 +2439,7 @@ class _MPVPlayerState extends State<MPVPlayer>
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CastScreenPage(
       mediaPath: source, httpHeaders: _mediaFor(source)?.httpHeaders ?? const {},
       initialPosition: player.state.position,
+      mediaDuration: player.state.duration,
       onCastStarted: () { if (!_disposing) player.pause(); },
     )));
   }

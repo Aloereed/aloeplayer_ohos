@@ -1,5 +1,6 @@
 import 'widgets/sleep_timer_button.dart';
 import 'dart:async';
+import 'screens/cast_screen_page.dart' show CastScreenPage;
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -1604,6 +1605,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
             },
           ),
           const SleepTimerButton(color: Colors.white),
+          IconButton(tooltip: '投屏', icon: const Icon(Icons.cast, color: Colors.white),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CastScreenPage(
+              mediaPath: widget.filePath, title: _title, initialPosition: _position,
+              mediaDuration: _duration, isAudio: true,
+              onCastStarted: () { if (mounted) _pause(); },
+            )))),
           _buildOptionButton(
             icon: Icons.more_horiz,
             onPressed: () {

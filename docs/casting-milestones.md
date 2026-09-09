@@ -35,3 +35,13 @@
 安装包：`build/milestones/68-casting-first-release/`；release 签名 APP 和对应 HAP、源码 commit、哈希、构建时间见 manifest.json。
 
 补充：68 的首批 APP 构建只保留了 release 签名 HAP。10:07 从同一源码提交补建 `entry-debug-signed.hap` 和 `entry-debug-unsigned.hap`，保留所有原产物及其哈希。这里 debug 指项目调试签名配置，Flutter 编译仍为 release。部署脚本优先选择独立 debug 签名 HAP；已通过 `-DryRun` 核验，未连接设备。后续里程碑同样分别保留 debug 签名 HAP 和 release APP。
+
+## 69 — 系统投播会话与播放页覆盖（4.0.1+222）
+
+- 实际 SDK 声明每个 Ability 只能有一个 AVSession。投播复用已有音频/视频会话，只有会话不存在才创建；选择器明确使用实际 sessionType，修复默认 audio 与新建 video 不匹配。借用会话不会被投播页面销毁。
+- 使用构造时传入的 Context；跨视图串行处理创建、命令和释放，忽略断开后返回的旧控制器及关闭后的回调。相同设备重复连接通知不会重播媒体。
+- 通过 JSON 传递媒体 URL、标题、音视频类型、实际时长和播放位置；删除写死的 100 秒时长/1000 字节大小、重复封面探测及泄漏的文件描述符。
+- 原生命令真正等待完成并向 Flutter 反馈错误。仅接收端 PLAYING 状态触发本机暂停；支持状态显示、暂停/继续、拖动、断开、重试和复制错误。系统投播页面关闭时结束其投播；DLNA 仍由服务保活。
+- 补全旧视频播放器菜单与旧音乐播放器投屏按钮，主播放器传递实际时长；系统投播打开时禁用 DLNA 切换，避免两个链路争用同一媒体服务。
+- `tool/test_system_cast.cjs` 运行生产 CastView 逻辑（只替换 OHOS API、剥离 ArkUI 组件），覆盖会话借用/恢复、命令失败、真实元数据、新媒体、晚到创建和断开竞态。实际 ArkTS/UI 由 Hvigor HAP 编译检查；不将模拟 API 当成设备验证。
+- 投屏 HTTP/UDP、320px 页面及桥接测试合计 7 项通过；修改页面分析无 error。后续阶段继续处理 HLS、网络选择和转发边界。
