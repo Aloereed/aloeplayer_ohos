@@ -17,6 +17,30 @@ AppGalleryProductDetails product({bool? eligible = true, int mode = 2, String ra
 }
 
 void main() {
+  test('no introductory offer uses live regular price regardless of eligibility', () {
+    for (final eligibility in [null, false, true]) {
+      for (final explicitNull in [false, true]) {
+        final item = product(raw: jsonEncode({'subscriptionInfo': {
+          'periodUnit': 2, 'periodCount': 1,
+          if (eligibility != null) 'hasEligibilityForIntroOffer': eligibility,
+          if (explicitNull) 'introductoryOffer': null,
+        }}));
+        final quote = IapPrice.forProduct(item);
+        expect(quote.canPurchase, isTrue);
+        expect(quote.displayPrice, item.price);
+        expect(quote.explanation, isNull);
+      }
+    }
+  });
+  test('an empty or malformed offer is not treated as no offer', () {
+    for (final offer in [<String, Object>{}, 'invalid']) {
+      final quote = IapPrice.forProduct(product(raw: jsonEncode({'subscriptionInfo': {
+        'periodUnit': 2, 'periodCount': 1,
+        'hasEligibilityForIntroOffer': true, 'introductoryOffer': offer,
+      }})));
+      expect(quote.canPurchase, isFalse);
+    }
+  });
   test('eligible introductory price includes duration and renewal price', () {
     final price = IapPrice.forProduct(product());
     expect(price.displayPrice, '¥1.00');

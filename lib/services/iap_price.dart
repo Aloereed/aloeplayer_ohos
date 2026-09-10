@@ -36,10 +36,14 @@ class IapPrice {
       final info = data is Map ? data['subscriptionInfo'] : null;
       if (info is! Map) return unavailable;
       if (_period(info['periodUnit'], info['periodCount']) == null) return unavailable;
+      // Both fields are optional when the store has no introductory offer.
+      // An absent offer uses the store's regular price; an existing but
+      // incomplete offer must still be checked below.
+      final offer = info['introductoryOffer'];
+      if (offer == null) return regular;
       if (info['hasEligibilityForIntroOffer'] == false) return regular;
       final eligible = info['hasEligibilityForIntroOffer'] == true;
       if (!eligible) return unavailable;
-      final offer = info['introductoryOffer'];
       if (offer is! Map) return unavailable;
       final duration = _period(offer['periodUnit'], offer['periodCount']);
       final renewal = _period(info['periodUnit'], info['periodCount']);

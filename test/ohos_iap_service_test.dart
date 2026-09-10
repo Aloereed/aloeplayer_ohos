@@ -1,4 +1,4 @@
-import 'iap_price_test.dart' show annualProduct;
+import 'iap_price_test.dart' show annualProduct, product;
 import 'package:in_app_purchase_ohos/in_app_purchase_ohos.dart';
 import 'package:in_app_purchase_ohos/iap_kit_wrappers.dart';
 import 'package:flutter/foundation.dart';
@@ -66,6 +66,17 @@ void main() {
     await service.purchase();
     expect(store.launches, 0);
     expect(service.message, contains('重新加载'));
+  });
+  test('monthly subscription without an offer can reach checkout', () async {
+    service = OhosIapService(configuration: () async => {
+      'product_ids': ['premium_monthly'], 'account_binding': 'bound-account'});
+    await service.load();
+    final monthly = product(raw: '{"subscriptionInfo":{"periodUnit":2,"periodCount":1}}');
+    service.products..clear()..add(monthly);
+    service.product = monthly;
+    await service.purchase();
+    expect(store.launches, 1);
+    expect(store.selectedId, 'premium_monthly');
   });
   test('only verified delivery completes purchase and launch alone never grants', () async {
     final verification = Completer<void>();
