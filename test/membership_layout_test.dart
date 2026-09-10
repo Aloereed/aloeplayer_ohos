@@ -1,3 +1,4 @@
+import 'iap_price_test.dart' show annualProduct;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
@@ -19,18 +20,23 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     for (final scenario in [(const Size(320, 640), 1.0), (const Size(320, 640), 1.6), (const Size(640, 360), 1.0)]) {
+      for (final product in [
+        ProductDetails(id: 'premium_monthly', title: '月会员', description: '详细商品介绍', price: '¥12.00', rawPrice: 12, currencyCode: 'CNY'),
+        annualProduct(), annualProduct(raw: '{}'),
+      ]) {
       tester.view.physicalSize = scenario.$1;
       await tester.pumpWidget(MaterialApp(
         builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scenario.$2)), child: child!),
         home: Scaffold(body: MembershipDetailsDialog(membershipService: MembershipService())),
       ));
       await tester.pumpAndSettle();
-      final product = ProductDetails(id: 'premium_monthly', title: '月会员', description: '详细商品介绍', price: '¥12.00', rawPrice: 12, currencyCode: 'CNY');
       iap.products..clear()..add(product);
       iap.serverReady = true;
-      iap.selectProduct(product.id);
+      iap.product = product;
+      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+      iap.notifyListeners();
       await tester.pumpAndSettle();
-      final button = find.widgetWithText(FilledButton, '开通月会员');
+      final button = find.widgetWithText(FilledButton, product.id == 'premium_1year' ? '开通年会员' : '开通月会员');
       final before = tester.getRect(button);
       expect(before.top, greaterThanOrEqualTo(0));
       expect(before.bottom, lessThanOrEqualTo(scenario.$1.height));
@@ -43,6 +49,7 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
+    }
     }
     iap.dispose();
     await store.updates.close();

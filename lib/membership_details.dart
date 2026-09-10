@@ -135,6 +135,9 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
       actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
       actions: [SizedBox(width: double.infinity, child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.30),
+            child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min, children: [
           if (price != null) ...[
             Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
               Text('${_planName(product!.id)} · ${price.displayPrice}',
@@ -146,11 +149,18 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
           ],
           const SizedBox(height: 6),
           Text(product == null ? '价格加载后可购买' : '每${product.id == 'premium_1year' ? '年' : '月'}自动续费 ${product.price}，可在“管理订阅”取消。', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+          ]))),
           const SizedBox(height: 10),
           FilledButton(
             onPressed: _iap.busy || product == null || !_iap.serverReady || _iap.pendingVerification ? null : () async {
-              final selected = product;
-              final summary = '${_planName(selected.id)}：开通时 ${price!.displayPrice}。${price.explanation ?? ''}\n后续每${selected.id == 'premium_1year' ? '年' : '月'}自动续费 ${selected.price}。';
+              final id = product.id;
+              await _iap.load();
+              if (!mounted || !_iap.serverReady || _iap.pendingVerification) return;
+              _iap.selectProduct(id);
+              final selected = _iap.product;
+              if (selected == null || selected.id != id) return;
+              final quote = IapPrice.forProduct(selected);
+              final summary = '${_planName(selected.id)}：${quote.explanation ?? '开通时 ${quote.displayPrice}，后续每${selected.id == 'premium_1year' ? '年' : '月'}自动续费 ${selected.price}。'}';
               if (!await confirmSubscription(context, summary) || !mounted) return;
               if (_iap.product != selected || _iap.busy) return;
               await _iap.purchase();

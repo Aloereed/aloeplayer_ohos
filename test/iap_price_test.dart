@@ -23,11 +23,38 @@ void main() {
     expect(price.explanation, contains('3个月'));
     expect(price.explanation, contains('之后每1个月续费¥6.00'));
   });
-  test('ineligible and unknown eligibility never advertise introductory price', () {
-    for (final eligible in [false, null]) {
-      final price = IapPrice.forProduct(product(eligible: eligible));
-      expect(price.displayPrice, '¥6.00'); expect(price.explanation, isNull);
+  test('ineligible account shows regular price', () {
+    final price = IapPrice.forProduct(product(eligible: false));
+    expect(price.displayPrice, '¥6.00'); expect(price.explanation, isNull);
+  });
+  test('unknown eligibility discloses both prices and the condition', () {
+    final price = IapPrice.forProduct(product(eligible: null));
+    expect(price.displayPrice, '¥1.00 / ¥6.00');
+    expect(price.explanation, contains('符合首购优惠条件'));
+    expect(price.explanation, contains('不符合条件按¥6.00开通'));
+  });
+  test('reviewed annual offer states first year and subsequent annual charge', () {
+    final price = IapPrice.forProduct(annualProduct());
+    expect(price.displayPrice, '¥36.00');
+    expect(price.explanation, '首年优惠¥36.00，第二年起每年自动续费¥72.00');
+  });
+  test('missing annual fields disclose reviewed offer without promising eligibility', () {
+    for (final raw in ['{}', '{invalid']) {
+      final price = IapPrice.forProduct(annualProduct(raw: raw));
+      expect(price.explanation, contains('符合首年优惠条件：首年¥36'));
+      expect(price.explanation, contains('不符合条件按¥72.00开通'));
     }
+    expect(IapPrice.forProduct(annualProduct(eligible: false)).displayPrice, '¥72.00');
+  });
+  test('live store price overrides the reviewed fallback', () {
+    expect(IapPrice.forProduct(annualProduct(offerPrice: '¥40.00', offerAmount: 40000000)).displayPrice, '¥40.00');
+    expect(IapPrice.forProduct(annualProduct(raw: '{}', regularAmount: 80000000)).explanation, isNull);
+  });
+  test('SDK original JSON retains live offer information', () {
+    final native = annualProduct(offerPrice: '¥40.00', offerAmount: 40000000).skProduct.jsonRepresentation;
+    final price = IapPrice.forProduct(annualProduct(raw: jsonEncode({'jsonRepresentation': native})));
+    expect(price.displayPrice, '¥40.00');
+    expect(price.explanation, contains('首年优惠¥40.00'));
   });
   test('free trial explains later charge', () {
     final price = IapPrice.forProduct(product(mode: 1, amount: 0));
@@ -42,3 +69,15 @@ void main() {
     }
   });
 }
+
+AppGalleryProductDetails annualProduct({bool? eligible = true, String? raw,
+  String offerPrice = '¥36.00', int offerAmount = 36000000, int regularAmount = 72000000}) =>
+    AppGalleryProductDetails.fromIKProduct(IKProductWrapper.fromJson({
+      'id': 'premium_1year', 'type': 2, 'name': '年会员', 'description': '',
+      'localPrice': '¥${(regularAmount / 1000000).toStringAsFixed(2)}', 'microPrice': regularAmount,
+      'originalLocalPrice': '¥72.00', 'originalMicroPrice': 72000000, 'currency': 'CNY',
+      'jsonRepresentation': raw ?? jsonEncode({'subscriptionInfo': {
+        'periodUnit': 3, 'periodCount': 1, 'hasEligibilityForIntroOffer': eligible,
+        'introductoryOffer': {'paymentMode': 3, 'periodUnit': 3, 'periodCount': 1,
+          'localPrice': offerPrice, 'microPrice': offerAmount}}}),
+    }));

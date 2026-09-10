@@ -774,7 +774,11 @@ class FfmpegApi {
   }
 
   setTitle(filename: string, title: string, result: MethodResult) {
-    libAddon.setTitle(filename, title).then(() => {
+    libAddon.setTitle(filename, title).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setTitle end");
       result.success(null);
     }).catch((error: Error) => {
@@ -795,7 +799,11 @@ class FfmpegApi {
 
   setArtist(filename: string, artist: string, result: MethodResult) {
     console.log("setArtist start");
-    libAddon.setArtist(filename, artist).then(() => {
+    libAddon.setArtist(filename, artist).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setArtist end");
       result.success(null);
     }).catch((error: Error) => {
@@ -815,7 +823,11 @@ class FfmpegApi {
 
   setAlbum(filename: string, album: string, result: MethodResult) {
     console.log("setAlbum start");
-    libAddon.setAlbum(filename, album).then(() => {
+    libAddon.setAlbum(filename, album).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setAlbum end");
       result.success(null);
     }).catch((error: Error) => {
@@ -835,7 +847,11 @@ class FfmpegApi {
 
   setYear(filename: string, year: number, result: MethodResult) {
     console.log("setYear start");
-    libAddon.setYear(filename, year).then(() => {
+    libAddon.setYear(filename, year).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setYear end");
       result.success(null);
     }).catch((error: Error) => {
@@ -855,7 +871,11 @@ class FfmpegApi {
 
   setTrack(filename: string, track: number, result: MethodResult) {
     console.log("setTrack start");
-    libAddon.setTrack(filename, track).then(() => {
+    libAddon.setTrack(filename, track).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setTrack end");
       result.success(null);
     }).catch((error: Error) => {
@@ -875,7 +895,11 @@ class FfmpegApi {
 
   setDisc(filename: string, disc: number, result: MethodResult) {
     console.log("setDisc start");
-    libAddon.setDisc(filename, disc).then(() => {
+    libAddon.setDisc(filename, disc).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setDisc end");
       result.success(null);
     }).catch((error: Error) => {
@@ -895,7 +919,11 @@ class FfmpegApi {
 
   setGenre(filename: string, genre: string, result: MethodResult) {
     console.log("setGenre start");
-    libAddon.setGenre(filename, genre).then(() => {
+    libAddon.setGenre(filename, genre).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setGenre end");
       result.success(null);
     }).catch((error: Error) => {
@@ -915,7 +943,11 @@ class FfmpegApi {
 
   setAlbumArtist(filename: string, albumArtist: string, result: MethodResult) {
     console.log("setAlbumArtist start");
-    libAddon.setAlbumArtist(filename, albumArtist).then(() => {
+    libAddon.setAlbumArtist(filename, albumArtist).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setAlbumArtist end");
       result.success(null);
     }).catch((error: Error) => {
@@ -935,7 +967,11 @@ class FfmpegApi {
 
   setComposer(filename: string, composer: string, result: MethodResult) {
     console.log("setComposer start");
-    libAddon.setComposer(filename, composer).then(() => {
+    libAddon.setComposer(filename, composer).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setComposer end");
       result.success(null);
     }).catch((error: Error) => {
@@ -955,7 +991,11 @@ class FfmpegApi {
 
   setLyricist(filename: string, lyricist: string, result: MethodResult) {
     console.log("setLyricist start");
-    libAddon.setLyricist(filename, lyricist).then(() => {
+    libAddon.setLyricist(filename, lyricist).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setLyricist end");
       result.success(null);
     }).catch((error: Error) => {
@@ -975,7 +1015,11 @@ class FfmpegApi {
 
   setComment(filename: string, comment: string, result: MethodResult) {
     console.log("setComment start");
-    libAddon.setComment(filename, comment).then(() => {
+    libAddon.setComment(filename, comment).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setComment end");
       result.success(null);
     }).catch((error: Error) => {
@@ -995,7 +1039,11 @@ class FfmpegApi {
 
   setLyrics(filename: string, lyrics: string, result: MethodResult) {
     console.log("setLyrics start");
-    libAddon.setLyrics(filename, lyrics).then(() => {
+    libAddon.setLyrics(filename, lyrics).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setLyrics end");
       result.success(null);
     }).catch((error: Error) => {
@@ -1015,7 +1063,11 @@ class FfmpegApi {
 
   setCover(filename: string, coverBase64: string, result: MethodResult) {
     console.log("setCover start");
-    libAddon.setCover(filename, coverBase64).then(() => {
+    libAddon.setCover(filename, coverBase64).then((saved: boolean) => {
+      if (!saved) {
+        result.error("TAG_WRITE_FAILED", "音频标签不支持写入或保存失败", null);
+        return;
+      }
       console.log("setCover end");
       result.success(null);
     }).catch((error: Error) => {

@@ -1,3 +1,4 @@
+import 'widgets/audio_artwork_builder.dart';
 import 'widgets/library_toolbar_title.dart';
 import 'services/audio_scan_service.dart';
 import 'services/work_queue.dart';
@@ -93,9 +94,22 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
     _loadMetadata();
   }
 
+  late final Future<Uint8List?> _coverFuture = _getAudioThumbnail(File(widget.filePath));
+  bool _loadingMetadata = true;
+
+  @override
+  void dispose() {
+    for (final controller in [_titleController, _artistController, _albumController,
+      _yearController, _trackController, _discController, _genreController,
+      _albumArtistController, _composerController, _lyricistController,
+      _commentController, _lyricsController]) { controller.dispose(); }
+    super.dispose();
+  }
+
   Future<void> _loadMetadata() async {
     final filename = widget.filePath;
 
+    try {
     final values = await Future.wait<String>([
       (() async => await AudioMetadata.getTitle(filename))(),
       (() async => await AudioMetadata.getArtist(filename))(),
@@ -124,40 +138,47 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
       _lyricistController.text = values[9];
       _commentController.text = values[10];
       _lyricsController.text = values[11];
+      _loadingMetadata = false;
 
     });
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('元信息读取失败，请返回后重试')));
+    }
   }
 
   bool _savingMetadata = false;
   Future<void> _saveMetadata() async {
-    if (_savingMetadata) return;
+    if (_savingMetadata || _loadingMetadata) return;
     int? number(String value) => value.trim().isEmpty ? 0 : int.tryParse(value.trim());
     final year = number(_yearController.text), track = number(_trackController.text), disc = number(_discController.text);
-    if (year == null || track == null || disc == null || year < 0 || track < 0 || disc < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('年份、音轨和碟号请填写非负整数，或留空')));
+    if (year == null || track == null || disc == null || year < 0 || track < 0 || disc < 0 || year > 2147483647 || track > 2147483647 || disc > 2147483647) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('年份、音轨和碟号请填写0至2147483647的整数，或留空')));
       return;
     }
-    _savingMetadata = true;
+    final values = [_titleController.text, _artistController.text, _albumController.text,
+      _genreController.text, _albumArtistController.text, _composerController.text,
+      _lyricistController.text, _commentController.text, _lyricsController.text];
+    setState(() => _savingMetadata = true);
     try {
     final filename = widget.filePath;
 
-    await AudioMetadata.setTitle(filename, _titleController.text);
-    await AudioMetadata.setArtist(filename, _artistController.text);
-    await AudioMetadata.setAlbum(filename, _albumController.text);
+    await AudioMetadata.setTitle(filename, values[0]);
+    await AudioMetadata.setArtist(filename, values[1]);
+    await AudioMetadata.setAlbum(filename, values[2]);
     await AudioMetadata.setYear(filename, year);
     await AudioMetadata.setTrack(filename, track);
     await AudioMetadata.setDisc(filename, disc);
-    await AudioMetadata.setGenre(filename, _genreController.text);
-    await AudioMetadata.setAlbumArtist(filename, _albumArtistController.text);
-    await AudioMetadata.setComposer(filename, _composerController.text);
-    await AudioMetadata.setLyricist(filename, _lyricistController.text);
-    await AudioMetadata.setComment(filename, _commentController.text);
-    await AudioMetadata.setLyrics(filename, _lyricsController.text);
+    await AudioMetadata.setGenre(filename, values[3]);
+    await AudioMetadata.setAlbumArtist(filename, values[4]);
+    await AudioMetadata.setComposer(filename, values[5]);
+    await AudioMetadata.setLyricist(filename, values[6]);
+    await AudioMetadata.setComment(filename, values[7]);
+    await AudioMetadata.setLyrics(filename, values[8]);
 
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('元信息保存成功')));
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('元信息保存失败，部分字段可能已写入，请重新打开检查')));
-    } finally { _savingMetadata = false; }
+    } finally { if (mounted) setState(() => _savingMetadata = false); }
   }
 
 // 获取音频缩略图
@@ -173,9 +194,8 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
 
   @override
   Widget build(BuildContext context) {
-    File file = File(widget.filePath);
     return FutureBuilder<Uint8List?>(
-      future: _getAudioThumbnail(file),
+      future: _coverFuture,
       builder: (context, snapshot) {
         final coverArt = snapshot.data;
 
@@ -190,8 +210,8 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
             actions: [
               TextButton.icon(
                 icon: Icon(Icons.save_rounded, color: Colors.white),
-                label: Text('保存', style: TextStyle(color: Colors.white)),
-                onPressed: _saveMetadata,
+                label: Text(_loadingMetadata ? '读取中…' : _savingMetadata ? '保存中…' : '保存', style: TextStyle(color: Colors.white)),
+                onPressed: _savingMetadata || _loadingMetadata ? null : _saveMetadata,
               ),
             ],
           ),
@@ -199,20 +219,12 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
             children: [
               // 背景层 - 专辑封面和模糊效果
               if (coverArt != null)
-                Container(
-                  decoration: BoxDecoration(
-                    image: DecorationImage(
-                      image: MemoryImage(coverArt),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                    child: Container(
-                      color: Colors.black.withOpacity(0.3),
-                    ),
-                  ),
-                )
+                Positioned.fill(child: RepaintBoundary(child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Image.memory(coverArt, cacheWidth: 256, fit: BoxFit.cover,
+                    color: Colors.black.withOpacity(0.3), colorBlendMode: BlendMode.darken,
+                    errorBuilder: (_, __, ___) => Container(color: Colors.indigo.shade800)),
+                )))
               else
                 Container(
                   decoration: BoxDecoration(
@@ -256,6 +268,8 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
                               child: coverArt != null
                                   ? Image.memory(
                                       coverArt,
+                                      cacheWidth: 512,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.music_note),
                                       fit: BoxFit.cover,
                                     )
                                   : Container(
@@ -458,6 +472,7 @@ class _AudioInfoEditorState extends State<AudioInfoEditor> {
           ),
           child: TextField(
             controller: controller,
+            enabled: !_loadingMetadata && !_savingMetadata,
             keyboardType: keyboardType,
             style: TextStyle(color: textColor),
             decoration: InputDecoration(
@@ -539,6 +554,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   final AudioScanService _audioScanner = AudioScanService();
   final WorkQueue _artworkQueue = WorkQueue();
   final Map<String, Future<Uint8List?>> _pendingArtwork = {};
+  final Map<String, Future<String>> _fileSizes = {};
   int _loadGeneration = 0;
   Map<String, Duration?> _durationCache = {};
   // For metadata sorted view
@@ -596,6 +612,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   Future<void> _loadItems() async {
     if (!mounted) return;
     final generation = ++_loadGeneration;
+    _pendingArtwork.clear();
+    _fileSizes.clear();
+    _durationCache.clear();
     setState(() => _isLoading = true);
     try {
       await _loadDirectoriesAndFiles(generation);
@@ -1059,7 +1078,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   }
 
   // 获取音频缩略图
-  Future<Uint8List?> _getAudioThumbnail(File file) => _pendingArtwork.putIfAbsent(file.path,
+  Future<Uint8List?> _getAudioThumbnail(File file) {
+    return _pendingArtwork.putIfAbsent(file.path,
     () => _artworkQueue.run(() async {
       try {
         final key = await ThumbnailCache.fileKey(file.path);
@@ -1072,11 +1092,12 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
         return bytes;
       } catch (_) { return null; }
     }).whenComplete(() { _pendingArtwork.remove(file.path); }));
+  }
 
   Widget _audioCover(String? source, {IconData icon = Icons.album}) {
     final placeholder = Icon(icon, color: Theme.of(context).colorScheme.primary, size: 36);
     if (source == null) return placeholder;
-    return FutureBuilder<Uint8List?>(future: _getAudioThumbnail(File(source)), builder: (context, snapshot) {
+    return AudioArtworkBuilder(key: ValueKey('$source:$_loadGeneration'), source: source, load: () => _getAudioThumbnail(File(source)), builder: (context, snapshot) {
       final bytes = snapshot.data;
       return bytes == null ? placeholder : Image.memory(bytes, fit: BoxFit.cover, cacheWidth: 256, errorBuilder: (_, __, ___) => placeholder);
     });
@@ -1103,8 +1124,9 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
   }
 
   // 获取文件大小
-  String _getFileSize(File file) {
-    final sizeInBytes = file.lengthSync();
+  Future<String> _getFileSize(File file) => _fileSizes.putIfAbsent(file.path, () async {
+    final sizeInBytes = (await file.stat()).size;
+    if (sizeInBytes < 0) return '--';
     if (sizeInBytes < 1024) {
       return '$sizeInBytes B';
     } else if (sizeInBytes < 1024 * 1024) {
@@ -1112,7 +1134,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
     } else {
       return '${(sizeInBytes / (1024 * 1024)).toStringAsFixed(2)} MB';
     }
-  }
+  });
 
   Future<void> _createNewFolder(BuildContext context) async {
     String? folderName = await showDialog<String>(
@@ -2642,8 +2664,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
         borderRadius: BorderRadius.circular(16),
         child: ListTile(
           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          leading: FutureBuilder<Uint8List?>(
-            future: _getAudioThumbnail(file),
+          leading: AudioArtworkBuilder(key: ValueKey('${file.path}:$_loadGeneration'), source: file.path,
+            load: () => _getAudioThumbnail(file),
             builder: (context, snapshot) {
               return Container(
                 width: 64,
@@ -2683,7 +2705,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                       : snapshot.hasError || snapshot.data == null
                           ? Icon(Icons.music_note,
                               size: 32, color: Colors.white)
-                          : Image.memory(snapshot.data!, fit: BoxFit.cover),
+                          : Image.memory(snapshot.data!, fit: BoxFit.cover, cacheWidth: 256, errorBuilder: (_, __, ___) => const Icon(Icons.music_note)),
                 ),
               );
             },
@@ -2729,12 +2751,12 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                       color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
                     ),
                     SizedBox(width: 4),
-                    Text(
-                      _getFileSize(file),
+                    FutureBuilder<String>(future: _getFileSize(file), builder: (context, size) => Text(
+                      size.data ?? '--',
                       style: TextStyle(
                         fontSize: 13,
                         color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                      ),
+                      )),
                     ),
                   ],
                 ),
@@ -2790,8 +2812,8 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
           children: [
             Expanded(
               flex: 3,
-              child: FutureBuilder<Uint8List?>(
-                future: _getAudioThumbnail(file),
+              child: AudioArtworkBuilder(key: ValueKey('${file.path}:$_loadGeneration'), source: file.path,
+                load: () => _getAudioThumbnail(file),
                 builder: (context, snapshot) {
                   return Container(
                     decoration: BoxDecoration(
@@ -2819,7 +2841,7 @@ class _AudioLibraryTabState extends State<AudioLibraryTab>
                                 fit: StackFit.expand,
                                 children: [
                                   Image.memory(snapshot.data!,
-                                      fit: BoxFit.cover),
+                                      cacheWidth: 384, errorBuilder: (_, __, ___) => const Icon(Icons.music_note), fit: BoxFit.cover),
                                   Container(
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
