@@ -1,3 +1,4 @@
+import 'iap_price.dart';
 import 'package:in_app_purchase_ohos/in_app_purchase_ohos.dart' show AppGalleryProductDetails;
 import 'package:in_app_purchase_ohos/iap_kit_wrappers.dart' show ProductType;
 import 'dart:async';
@@ -158,6 +159,11 @@ class OhosIapService extends ChangeNotifier {
   Future<void> purchase() async {
     if (busy || _restoring || product == null || !serverReady || pendingVerification) return;
     final selected = product!;
+    if (!IapPrice.forProduct(selected).canPurchase) {
+      message = '价格或优惠资格信息不完整，请重新加载后再购买';
+      notifyListeners();
+      return;
+    }
     busy = true; message = '正在打开华为支付'; notifyListeners();
     try {
       // Recheck server and account immediately before opening checkout.

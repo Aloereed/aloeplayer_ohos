@@ -1,3 +1,4 @@
+import 'package:in_app_purchase_ohos/in_app_purchase_ohos.dart';
 import 'iap_price_test.dart' show annualProduct;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,6 +47,10 @@ void main() {
       final after = tester.getRect(button);
       expect(after.bottom, lessThanOrEqualTo(scenario.$1.height));
       expect(button.hitTestable(), findsOneWidget);
+      if (product is AppGalleryProductDetails && product.skProduct.jsonRepresentation == '{}') {
+        expect(tester.widget<FilledButton>(button).onPressed, isNull);
+        expect(find.textContaining('华为商品价格或优惠资格信息不完整'), findsOneWidget);
+      }
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();

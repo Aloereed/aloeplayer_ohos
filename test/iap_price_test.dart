@@ -27,28 +27,28 @@ void main() {
     final price = IapPrice.forProduct(product(eligible: false));
     expect(price.displayPrice, '¥6.00'); expect(price.explanation, isNull);
   });
-  test('unknown eligibility discloses both prices and the condition', () {
+  test('unknown eligibility blocks checkout without guessing a price', () {
     final price = IapPrice.forProduct(product(eligible: null));
-    expect(price.displayPrice, '¥1.00 / ¥6.00');
-    expect(price.explanation, contains('符合首购优惠条件'));
-    expect(price.explanation, contains('不符合条件按¥6.00开通'));
+    expect(price.canPurchase, isFalse);
+    expect(price.displayPrice, '价格待确认');
   });
   test('reviewed annual offer states first year and subsequent annual charge', () {
     final price = IapPrice.forProduct(annualProduct());
     expect(price.displayPrice, '¥36.00');
     expect(price.explanation, '首年优惠¥36.00，第二年起每年自动续费¥72.00');
   });
-  test('missing annual fields disclose reviewed offer without promising eligibility', () {
+  test('missing annual fields never manufacture a first year offer', () {
     for (final raw in ['{}', '{invalid']) {
       final price = IapPrice.forProduct(annualProduct(raw: raw));
-      expect(price.explanation, contains('符合首年优惠条件：首年¥36'));
-      expect(price.explanation, contains('不符合条件按¥72.00开通'));
+      expect(price.canPurchase, isFalse);
+      expect(price.displayPrice, '价格待确认');
+      expect(price.explanation, isNot(contains('36')));
     }
     expect(IapPrice.forProduct(annualProduct(eligible: false)).displayPrice, '¥72.00');
   });
   test('live store price overrides the reviewed fallback', () {
     expect(IapPrice.forProduct(annualProduct(offerPrice: '¥40.00', offerAmount: 40000000)).displayPrice, '¥40.00');
-    expect(IapPrice.forProduct(annualProduct(raw: '{}', regularAmount: 80000000)).explanation, isNull);
+    expect(IapPrice.forProduct(annualProduct(raw: '{}', regularAmount: 80000000)).canPurchase, isFalse);
   });
   test('SDK original JSON retains live offer information', () {
     final native = annualProduct(offerPrice: '¥40.00', offerAmount: 40000000).skProduct.jsonRepresentation;
@@ -63,9 +63,9 @@ void main() {
   test('up-front offer is labelled as total price', () {
     expect(IapPrice.forProduct(product(mode: 3)).explanation, contains('合计¥1.00'));
   });
-  test('malformed or unsupported offer falls back to regular price', () {
+  test('malformed or unsupported offer blocks checkout', () {
     for (final item in [product(raw: '{invalid'), product(mode: 99), product(amount: -1)]) {
-      expect(IapPrice.forProduct(item).displayPrice, '¥6.00');
+      expect(IapPrice.forProduct(item).canPurchase, isFalse);
     }
   });
 }

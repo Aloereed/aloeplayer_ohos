@@ -148,11 +148,11 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
             if (price.explanation != null) Text(price.explanation!, style: theme.textTheme.bodySmall),
           ],
           const SizedBox(height: 6),
-          Text(product == null ? '价格加载后可购买' : '每${product.id == 'premium_1year' ? '年' : '月'}自动续费 ${product.price}，可在“管理订阅”取消。', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+          Text(product == null || price?.canPurchase != true ? '价格确认后可购买' : '每${product.id == 'premium_1year' ? '年' : '月'}自动续费 ${product.price}，可在“管理订阅”取消。', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
           ]))),
           const SizedBox(height: 10),
           FilledButton(
-            onPressed: _iap.busy || product == null || !_iap.serverReady || _iap.pendingVerification ? null : () async {
+            onPressed: _iap.busy || product == null || price?.canPurchase != true || !_iap.serverReady || _iap.pendingVerification ? null : () async {
               final id = product.id;
               await _iap.load();
               if (!mounted || !_iap.serverReady || _iap.pendingVerification) return;
@@ -160,6 +160,7 @@ class _MembershipDetailsDialogState extends State<MembershipDetailsDialog> {
               final selected = _iap.product;
               if (selected == null || selected.id != id) return;
               final quote = IapPrice.forProduct(selected);
+              if (!quote.canPurchase) return;
               final summary = '${_planName(selected.id)}：${quote.explanation ?? '开通时 ${quote.displayPrice}，后续每${selected.id == 'premium_1year' ? '年' : '月'}自动续费 ${selected.price}。'}';
               if (!await confirmSubscription(context, summary) || !mounted) return;
               if (_iap.product != selected || _iap.busy) return;
