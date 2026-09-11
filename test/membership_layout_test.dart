@@ -49,7 +49,7 @@ void main() {
       expect(button.hitTestable(), findsOneWidget);
       if (product is AppGalleryProductDetails && product.skProduct.jsonRepresentation == '{}') {
         expect(tester.widget<FilledButton>(button).onPressed, isNull);
-        expect(find.textContaining('华为商品价格或优惠资格信息不完整'), findsOneWidget);
+        expect(find.textContaining('华为商品价格或优惠信息不完整'), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

@@ -19,7 +19,7 @@ class IapPrice {
   static IapPrice forProduct(ProductDetails product) {
     if (product is! AppGalleryProductDetails) return IapPrice(product.price);
     const unavailable = IapPrice('价格待确认', canPurchase: false,
-        explanation: '华为商品价格或优惠资格信息不完整，请点击“重新加载”后再购买。');
+        explanation: '华为商品价格或优惠信息不完整，请点击“重新加载”后再购买。');
     final native = product.skProduct;
     if (product.price.trim().isEmpty || !product.rawPrice.isFinite || product.rawPrice <= 0) return unavailable;
     final original = native.originalMicroPrice > native.microPrice && native.originalLocalPrice.isNotEmpty
@@ -27,13 +27,22 @@ class IapPrice {
     final regular = IapPrice(product.price, originalPrice: original);
     try {
       var data = jsonDecode(native.jsonRepresentation ?? '{}');
-      // Some SDK responses expose optional fields only in their original JSON.
-      for (var depth = 0; depth < 2 && data is Map && data['subscriptionInfo'] == null; depth++) {
+      Map? info;
+      // Optional offers may be exposed only in the SDK's original JSON, even
+      // when the outer response already has a partial subscriptionInfo.
+      for (var depth = 0; depth < 3 && data is Map; depth++) {
+        final candidate = data['subscriptionInfo'];
+        if (candidate is Map) {
+          info ??= candidate;
+          if (candidate['introductoryOffer'] != null) {
+            info = candidate;
+            break;
+          }
+        }
         final nested = data['jsonRepresentation'];
         if (nested is! String || nested.isEmpty) break;
         data = jsonDecode(nested);
       }
-      final info = data is Map ? data['subscriptionInfo'] : null;
       if (info is! Map) return unavailable;
       if (_period(info['periodUnit'], info['periodCount']) == null) return unavailable;
       // Both fields are optional when the store has no introductory offer.
@@ -41,9 +50,6 @@ class IapPrice {
       // incomplete offer must still be checked below.
       final offer = info['introductoryOffer'];
       if (offer == null) return regular;
-      if (info['hasEligibilityForIntroOffer'] == false) return regular;
-      final eligible = info['hasEligibilityForIntroOffer'] == true;
-      if (!eligible) return unavailable;
       if (offer is! Map) return unavailable;
       final duration = _period(offer['periodUnit'], offer['periodCount']);
       final renewal = _period(info['periodUnit'], info['periodCount']);
@@ -53,8 +59,9 @@ class IapPrice {
       if (duration == null || renewal == null || amount is! num || amount < 0 ||
           !const [1, 2, 3].contains(mode)) return unavailable;
       final afterwards = '之后每$renewal续费${product.price}';
-      if (mode == 1 && amount == 0 && eligible) {
-        return IapPrice('免费试用', explanation: '免费试用$duration，$afterwards');
+      if (mode == 1 && amount == 0) {
+        return IapPrice('免费试用（符合条件）', explanation:
+            '符合优惠条件：免费试用$duration，$afterwards；不符合条件按常规价${product.price}开通。优惠是否适用请在华为收银台确认。');
       }
       if (mode == 1 || formatted is! String || formatted.trim().isEmpty) return unavailable;
       final firstYear = info['periodUnit'] == 3 && info['periodCount'] == 1 &&
@@ -62,7 +69,10 @@ class IapPrice {
       final details = firstYear ? '首年优惠$formatted，第二年起每年自动续费${product.price}' : mode == 3
           ? '前$duration合计$formatted，$afterwards'
           : '优惠期$duration，每期$formatted，$afterwards';
-      return IapPrice(formatted, explanation: details);
+      // Do not treat the optional eligibility flag as a checkout quote. Huawei
+      // determines eligibility in checkout; disclose the offer for every account.
+      return IapPrice('优惠价$formatted', explanation:
+          '符合优惠条件：$details；不符合条件按常规价${product.price}开通。优惠是否适用请在华为收银台确认。');
     } catch (_) {
       return unavailable;
     }
