@@ -58,8 +58,14 @@ class IapPrice {
       final formatted = offer['localPrice'];
       if (duration == null || renewal == null || amount is! num || amount < 0 ||
           !const [1, 2, 3].contains(mode)) return unavailable;
+      // Experimental interpretation requested for account/checkout comparison:
+      // true = already used the introductory offer, false = not used yet.
+      final usedIntroOffer = info['hasEligibilityForIntroOffer'];
+      if (usedIntroOffer == true) return regular;
+      final unusedIntroOffer = usedIntroOffer == false;
       final afterwards = '之后每$renewal续费${product.price}';
       if (mode == 1 && amount == 0) {
+        if (unusedIntroOffer) return IapPrice('免费试用', explanation: '免费试用$duration，$afterwards');
         return IapPrice('免费试用（符合条件）', explanation:
             '符合优惠条件：免费试用$duration，$afterwards；不符合条件按常规价${product.price}开通。优惠是否适用请在华为收银台确认。');
       }
@@ -69,8 +75,8 @@ class IapPrice {
       final details = firstYear ? '首年优惠$formatted，第二年起每年自动续费${product.price}' : mode == 3
           ? '前$duration合计$formatted，$afterwards'
           : '优惠期$duration，每期$formatted，$afterwards';
-      // Do not treat the optional eligibility flag as a checkout quote. Huawei
-      // determines eligibility in checkout; disclose the offer for every account.
+      if (unusedIntroOffer) return IapPrice(formatted, explanation: details);
+      // Missing flag: retain conditional disclosure without claiming eligibility.
       return IapPrice('优惠价$formatted', explanation:
           '符合优惠条件：$details；不符合条件按常规价${product.price}开通。优惠是否适用请在华为收银台确认。');
     } catch (_) {
