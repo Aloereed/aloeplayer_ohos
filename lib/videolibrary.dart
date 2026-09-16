@@ -26,7 +26,6 @@ import 'package:path/path.dart' as path;
 import 'package:video_thumbnail_ohos/video_thumbnail_ohos.dart';
 import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'package:media_info/media_info.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'settings.dart';
 import 'package:aloeplayer/chewie-1.8.5/lib/src/ffmpegview.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
@@ -336,6 +335,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   String _searchQuery = ''; // 搜索框的内容
   bool _isGridView = true; // 默认显示Grid视图
   bool _isLoading = false;
+  bool _isAddingShortcuts = false;
   List _allItems = []; // 存储所有项目，用于筛选
   late SortType _currentSortType = SortType.none;
   late SortOrder _currentSortOrder = SortOrder.ascending;
@@ -815,30 +815,53 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   Future<void> _pickVideoWithPersist() async {
-    await _ensureVideoDirectoryExists();
-    _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
-    _thumbnailLoader = null;
-    // 创建实例
-    final _platform = const MethodChannel('samples.flutter.dev/downloadplugin');
-    // 调用方法 persistPermission
-    String uriString = await _platform.invokeMethod<String>(
+    if (_isAddingShortcuts) return;
+    final destinationDirectory = _currentPath;
+    setState(() => _isAddingShortcuts = true);
+    try {
+      await _ensureVideoDirectoryExists();
+      _diskThumbnails = DiskThumbnailCache(Directory(_thumbnailPath));
+      _thumbnailLoader = null;
+      if (!mounted) return;
+      const platform = MethodChannel('samples.flutter.dev/downloadplugin');
+      final uriString = await platform.invokeMethod<String>(
             'persistPermission', {
-          "exts": '视频文件|.mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,.rmvb,.wmv,.ts'
-        }) ??
-        '';
+          'exts': '视频文件|.mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,.rmvb,.wmv,.ts'
+        }) ?? '';
+      if (!mounted) return;
 
-    // 检查是否选择了文件
-    if (uriString.isNotEmpty) {
-      // 分割多个URI
-      List<String> uris = uriString.split('|||');
-
-      // 处理每个URI
-      for (String uri in uris) {
-        await _createLinkFile(uri);
+      var added = 0, skipped = 0, failed = 0;
+      for (final uri in uriString.split('|||').where((uri) => uri.trim().isNotEmpty)) {
+        try {
+          if (await _createLinkFile(uri, destinationDirectory)) {
+            added++;
+          } else {
+            skipped++;
+          }
+        } catch (error) {
+          failed++;
+          debugPrint('快捷方式创建失败: $error');
+        }
       }
-    } else {
-      // 用户取消了选择
-      print('用户取消了文件选择');
+
+      if (!mounted || added + skipped + failed == 0) return;
+      // Refresh and report once per selection, never once per file.
+      if (added > 0) await _loadItems();
+      if (!mounted) return;
+      final summary = [
+        if (added > 0) '已添加 $added 个快捷方式',
+        if (skipped > 0) '跳过 $skipped 个同名文件',
+        if (failed > 0) '添加失败 $failed 个',
+      ].join('，');
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(
+          content: Text(summary),
+          duration: const Duration(seconds: 2),
+          showCloseIcon: true,
+        ));
+    } finally {
+      if (mounted) setState(() => _isAddingShortcuts = false);
     }
   }
 
@@ -870,48 +893,27 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('打开文件管理器'))],
     )) ?? false;
 
-  Future<void> _createLinkFile(String uri) async {
+  Future<bool> _createLinkFile(String uri, String destinationDirectory) async {
     final parsed = Uri.tryParse(uri);
-    final displayName = parsed?.hasScheme == true ? parsed!.pathSegments.last : path.basename(uri);
+    final displayName = parsed?.hasScheme == true ? parsed!.pathSegments.lastOrNull : path.basename(uri);
+    if (displayName == null || displayName.isEmpty || displayName == '.' || displayName == '..') {
+      throw const FormatException('无法读取文件名');
+    }
     final fileName = '${path.basename(displayName)}.lnk';
-    final destinationPath = path.join(_currentPath, fileName);
+    final destinationPath = path.join(destinationDirectory, fileName);
     final destinationFile = File(destinationPath);
-    bool deleteIfError = true;
+    bool deleteIfError = false;
 
     try {
-      // 检查destinationPath是否已存在
-      if (await destinationFile.exists()) {
-        deleteIfError = false;
-        throw FileSystemException(
-          "文件已存在",
-          destinationPath,
-        );
-      }
-      // 向destinationFile写入uri
+      if (await destinationFile.exists()) return false;
+      deleteIfError = true;
       await destinationFile.writeAsString(uri);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('快捷方式已添加，视频未复制，原文件请保留在当前位置')));
-    } catch (e) {
-      print("链接文件文件创建失败: $e");
-
-      // 显示复制失败的Toast
-      Fluttertoast.showToast(
-        msg: "链接文件文件创建失败: $e",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        timeInSecForIosWeb: 1,
-        backgroundColor: Colors.red,
-        textColor: Colors.white,
-        fontSize: 16.0,
-      );
-
-      // 如果复制失败，删除可能已创建的目标文件
+      return true;
+    } catch (_) {
       if (deleteIfError && await destinationFile.exists()) {
         await destinationFile.delete();
       }
       rethrow;
-    } finally {
-      _loadItems();
     }
   }
 
@@ -1334,7 +1336,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         actions: [IconButton(tooltip: '播放历史', onPressed: _openHistory, icon: const Icon(Icons.history_rounded)),
           IconButton(tooltip: '刷新视频库', onPressed: _loadItems, icon: const Icon(Icons.refresh_rounded)),
           if (desktop) Padding(padding: const EdgeInsets.only(right: 20), child: FilledButton.icon(
-            onPressed: () => _showAddOptionsDialog(context), icon: const Icon(Icons.add), label: const Text('添加视频')))],
+            onPressed: _isAddingShortcuts ? null : () => _showAddOptionsDialog(context), icon: const Icon(Icons.add),
+            label: Text(_isAddingShortcuts ? '正在添加…' : '添加视频')))],
       ),
       body: Column(children: [
         if (desktop) Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 4), child: TextField(
@@ -1396,6 +1399,7 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   Future<void> _showAddOptionsDialog(BuildContext context) async {
+    if (_isAddingShortcuts) return;
     final destination = _currentPath.replaceFirst('/storage/Users/currentUser/Download/', 'Downloads/');
     final action = await showLocalImportSheet(context, destination: destination);
     if (!mounted || action == null) return;
@@ -1424,8 +1428,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
         textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
       const SizedBox(height: 24), FilledButton.icon(onPressed: filtered ? () {
         _searchTextController.clear(); setState(() { _searchQuery = ''; _showOnlyFavorites = false; _applyFavoritesFilter(); });
-      } : () => _showAddOptionsDialog(context), icon: Icon(filtered ? Icons.filter_alt_off_outlined : Icons.add),
-        label: Text(filtered ? '清除筛选' : '添加视频')),
+      } : (_isAddingShortcuts ? null : () => _showAddOptionsDialog(context)), icon: Icon(filtered ? Icons.filter_alt_off_outlined : Icons.add),
+        label: Text(filtered ? '清除筛选' : (_isAddingShortcuts ? '正在添加…' : '添加视频'))),
     ]));
   }
 
@@ -2996,8 +3000,8 @@ class _VideoLibraryTabState extends State<VideoLibraryTab>
   }
 
   Widget _buildSpeedDial() => FloatingActionButton.extended(
-    onPressed: () => _showAddOptionsDialog(context),
-    icon: const Icon(Icons.add_rounded), label: const Text('添加视频'),
+    onPressed: _isAddingShortcuts ? null : () => _showAddOptionsDialog(context),
+    icon: const Icon(Icons.add_rounded), label: Text(_isAddingShortcuts ? '正在添加…' : '添加视频'),
   );
   Future<void> _showUrlDialog(BuildContext context) async {
     final url = await showMediaUrlDialog(context);
