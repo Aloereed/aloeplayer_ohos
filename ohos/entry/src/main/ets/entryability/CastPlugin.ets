@@ -40,7 +40,7 @@ import media from "@ohos.multimedia.media"
 import fs from "@ohos.file.fs"
 import libAddon from 'libentry.so'
 // import testNapi from 'libentry.so';
-import { FFMpegUtils, FFmpegCommandOptions } from './FFmpegUtils';
+import { FFMpegUtils, FFmpegCommandOptions } from './FfmpegUtils';
 
 
 const TAG = "CastPluginTag";

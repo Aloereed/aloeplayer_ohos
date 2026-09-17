@@ -85,5 +85,7 @@
         "csetjmp": "cpp",
         "csignal": "cpp",
         "config.h": "c"
-    }
+    },
+    "search.useIgnoreFiles": false,
+    "cmake.sourceDirectory": "${workspaceFolder}/libsmb2"
 }

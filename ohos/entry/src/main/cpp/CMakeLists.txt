@@ -10,8 +10,11 @@ if(DEFINED PACKAGE_FIND_FILE)
 endif()
 set(AKI_ROOT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../../oh_modules/@ohos/aki) # 设置AKI根路径
 
-set(CMAKE_MODULE_PATH ${AKI_ROOT_PATH})
-find_package(AKI REQUIRED)
+# OHPM ships FindAki.cmake; Linux filenames are case-sensitive.
+include("${AKI_ROOT_PATH}/FindAki.cmake")
+if(NOT AKI_FOUND)
+    message(FATAL_ERROR "AKI headers and libraries were not found in ${AKI_ROOT_PATH}")
+endif()
 include_directories(${NATIVERENDER_ROOT_PATH}
                     ${NATIVERENDER_ROOT_PATH}/include
                     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/taglib/arm64-v8a/include)
