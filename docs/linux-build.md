@@ -92,3 +92,5 @@ python tool/lan_transfer.py get C:/path/download.tar.gz http://192.168.124.26:18
 ## Windows / Linux Git 同步
 
 两机共同维护 `f341` 并跟踪 `origin/f341`，设置 `pull.ff=only`。换机开发前，先在当前机器提交并推送，再在另一台执行 `git pull --ff-only`。同一批改动只创建一组提交；保留未提交修改后再处理分叉，不使用 force push 覆盖另一台历史。
+
+`fluttertpc_screen/ohos/oh-package-lock.json5` 仅解析本机 Flutter HAR 路径，由构建工具生成并保留在本地；它不再参与 Git 同步，避免两机目录层级差异造成锁文件反复修改。

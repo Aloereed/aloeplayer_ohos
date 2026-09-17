@@ -53,3 +53,6 @@ lib/env/env.g.dart
 # Linux signing material and retained build outputs
 /.signing/
 /output/
+
+# Generated OHOS plugin lock contains machine-specific Flutter cache paths
+/fluttertpc_screen/ohos/oh-package-lock.json5
